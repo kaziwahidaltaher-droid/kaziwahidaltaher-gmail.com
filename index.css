@@ -59,7 +59,7 @@ label {
   display: block;
 }
 
-textarea, select {
+textarea, select, input[type="text"] {
   width: 100%;
   padding: 10px;
   font-family: inherit;
@@ -70,7 +70,7 @@ textarea, select {
   box-sizing: border-box;
 }
 
-textarea:focus, select:focus {
+textarea:focus, select:focus, input[type="text"]:focus {
   outline: none;
   border-color: var(--primary-color);
   box-shadow: 0 0 0 2px rgba(255, 111, 97, 0.2);
@@ -95,6 +95,31 @@ button:disabled {
 
 button:not(:disabled):hover {
   background-color: #e65a4c;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+#generate-button {
+    flex-grow: 1;
+}
+
+.secondary-button {
+    background-color: #e9ecef;
+    color: var(--secondary-color);
+    border: 1px solid #ced4da;
+    flex-shrink: 0;
+}
+
+.secondary-button:not(:disabled):hover {
+    background-color: #dee2e6;
+}
+
+#download-certificate-button {
+    display: none;
 }
 
 #quota-error {
@@ -169,7 +194,7 @@ button:not(:disabled):hover {
     align-items: flex-end;
 }
 
-.upload-section, .market-select-section {
+.upload-section, .market-select-section, .grounding-select-section {
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -252,10 +277,6 @@ button:not(:disabled):hover {
     line-height: 1.5;
 }
 
-.prompt-guide strong {
-    color: var(--secondary-color);
-}
-
 .analysis-section {
     display: none; /* Hidden by default */
     margin-top: 15px;
@@ -329,6 +350,210 @@ button:not(:disabled):hover {
     display: block;
     margin-bottom: 2px;
 }
+
+.full-width-card {
+    grid-column: 1 / -1;
+}
+
+#market-trends-sources {
+    margin-top: 15px;
+    font-size: 0.85rem;
+}
+
+#market-trends-sources h4 {
+    margin: 0 0 5px 0;
+    color: var(--secondary-color);
+    font-size: 0.9rem;
+}
+
+#market-trends-sources ul {
+    list-style: disc;
+    padding-left: 20px;
+    margin: 0;
+}
+
+#market-trends-sources li {
+    margin-bottom: 5px;
+}
+
+#market-trends-sources a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+#market-trends-sources a:hover {
+    text-decoration: underline;
+}
+
+/* History Section */
+#history-card {
+    display: none; /* Initially hidden */
+}
+
+#history-card h2 {
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+#history-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.history-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border: 1px solid #eee;
+    border-radius: var(--border-radius);
+}
+
+.history-item.is-child {
+    margin-left: 20px;
+    padding-left: 10px;
+    border-left: 2px solid #dee2e6; /* A neutral border color */
+}
+
+.history-item.is-rejected {
+    opacity: 0.6;
+    background-color: #f8f9fa;
+}
+
+
+.history-thumbnail {
+    width: 80px;
+    height: 45px; /* 16:9 aspect ratio */
+    object-fit: cover;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.history-info {
+    flex-grow: 1;
+    min-width: 0; /* Prevents text overflow issues in flexbox */
+}
+
+.history-summary {
+    margin: 0 0 5px 0;
+    font-size: 0.95rem;
+    font-weight: bold;
+    color: var(--secondary-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.history-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.history-timestamp {
+    font-size: 0.8rem;
+    color: #666;
+}
+
+.history-status {
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: white;
+    text-transform: capitalize;
+}
+
+.status-proposed { background-color: #ffc107; color: #333; }
+.status-approved { background-color: #28a745; }
+.status-rejected { background-color: #6c757d; }
+
+
+.view-history-button, .review-button {
+    flex-shrink: 0;
+    /* Uses .secondary-button styles */
+}
+
+/* Design Details Section */
+.design-details {
+    text-align: left;
+    background-color: #f0f8ff;
+    border: 1px solid #cce5ff;
+    border-radius: var(--border-radius);
+    padding: 15px;
+    margin-top: 20px;
+}
+
+.design-details h3 {
+    margin: 0 0 10px 0;
+    font-size: 1.1rem;
+    color: var(--secondary-color);
+}
+
+.design-details p {
+    margin: 0 0 5px 0;
+    font-size: 0.95rem;
+}
+
+#design-details-notes, #design-details-review {
+    white-space: pre-wrap;
+    background-color: #ffffff;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid #eee;
+}
+
+#design-details-review-wrapper {
+    margin-top: 10px;
+}
+
+/* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    width: 90%;
+    max-width: 500px;
+}
+
+#review-modal #reject-button {
+    background-color: #dc3545;
+}
+#review-modal #reject-button:hover {
+    background-color: #c82333;
+}
+
+.review-proposal-details {
+    background-color: #f9f9f9;
+    padding: 10px;
+    border-radius: var(--border-radius);
+    margin-bottom: 15px;
+    border: 1px solid #eee;
+}
+.review-proposal-details p {
+    margin: 0;
+    font-size: 0.9rem;
+}
+.review-proposal-details p + p {
+    margin-top: 5px;
+}
+
+
 
 @media (max-width: 600px) {
     .input-row {

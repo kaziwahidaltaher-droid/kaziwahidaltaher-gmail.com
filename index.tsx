@@ -11,6 +11,11 @@ const GEMINI_API_KEY = process.env.API_KEY;
 // Global state for the uploaded logo
 let uploadedLogo: { base64: string; mimeType: string } | null = null;
 
+// Global state for design history, the currently active design, and review state
+let designHistory: DesignRecord[] = [];
+let activeDesign: DesignRecord | null = null;
+let reviewingDesignId: string | null = null;
+
 const initialPrompt = `Create a high‑resolution, realistic showroom image of a men’s European‑fit, short‑sleeve T‑shirt, shown in multiple solid colors. The shirt should have a tailored, body‑hugging silhouette with a double‑stitched crew neck collar and neatly hemmed sleeves. The fabric should be a premium combed cotton texture (200–220 gsm) with a visible weave detail. Display both front and back views within the same landscape frame, against a neutral studio background. On the front of the shirt, place a bold emblem of the 'LOOMINARY' logo on the left chest. On the back, center the text 'CREATE • INSPIRE • SHINE' in a clean, bold, uppercase sans-serif font. The lighting should be soft and even to highlight the fabric's texture and the shirt's fit, including product specifications.`;
 
 interface ProductSpecification {
@@ -35,6 +40,35 @@ interface MarketAnalysisResult {
     estimatedCost: string;
   };
   marketingAngles: string[];
+}
+
+interface GroundingChunk {
+  web: {
+    uri: string;
+    title: string;
+  };
+}
+
+interface MarketTrendsResult {
+  trends: string;
+  sources: GroundingChunk[];
+}
+
+interface DesignRecord {
+  id: string;
+  timestamp: Date;
+  imageDataUrl: string;
+  finalPrompt: string;
+  specs: ProductSpecification;
+  analysis: MarketAnalysisResult;
+  trends?: MarketTrendsResult;
+  market: string;
+  logo: string | null;
+  parentId: string | null;
+  changeSummary?: string;
+  designNotes?: string;
+  status: 'Proposed' | 'Approved' | 'Rejected';
+  reviewComments?: string;
 }
 
 async function getImageDescription(logo: {
@@ -207,6 +241,39 @@ async function getGlobalMarketAnalysis(
   return analysis as MarketAnalysisResult;
 }
 
+async function getMarketTrends(
+  specs: ProductSpecification,
+  market: string,
+): Promise<MarketTrendsResult> {
+  const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+  const analysisPrompt = `
+    Based on real-time web data, analyze the latest fashion and e-commerce trends for a T-shirt in the **${market}** market with the following specifications. Provide a concise summary.
+
+    **Product Specifications:**
+    - Fabric Type: ${specs.fabricType}
+    - Fabric Weight: ${specs.fabricWeightGsm} GSM
+    - Stitching Details: ${specs.stitchingDetails}
+    - Printing Method: ${specs.printingMethod}
+    - Logo Complexity: ${specs.logoComplexity}
+  `;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: analysisPrompt,
+    config: {
+      tools: [{ googleSearch: {} }],
+    },
+  });
+
+  const sources =
+    response.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+
+  return {
+    trends: response.text,
+    sources: sources as GroundingChunk[],
+  };
+}
+
 const container = document.querySelector('#main-container') as HTMLElement;
 const promptEl = document.querySelector('#prompt-input') as HTMLTextAreaElement;
 promptEl.value = initialPrompt;
@@ -218,6 +285,9 @@ const quotaErrorEl = document.querySelector('#quota-error') as HTMLDivElement;
 const openKeyEl = document.querySelector('#open-key') as HTMLButtonElement;
 const marketSelectEl = document.querySelector(
   '#market-select',
+) as HTMLSelectElement;
+const groundingSelectEl = document.querySelector(
+  '#grounding-select',
 ) as HTMLSelectElement;
 
 // Analysis Elements
@@ -236,6 +306,15 @@ const logisticsContentEl = document.querySelector(
 const marketingAnglesListEl = document.querySelector(
   '#marketing-angles-list',
 ) as HTMLUListElement;
+const marketTrendsContainerEl = document.querySelector(
+  '#market-trends-container',
+) as HTMLDivElement;
+const marketTrendsContentEl = document.querySelector(
+  '#market-trends-content',
+) as HTMLParagraphElement;
+const marketTrendsSourcesEl = document.querySelector(
+  '#market-trends-sources',
+) as HTMLDivElement;
 
 // Specs Elements
 const specsContainer = document.querySelector(
@@ -256,6 +335,36 @@ const removeLogoButton = document.querySelector(
   '#remove-logo-button',
 ) as HTMLButtonElement;
 
+// History Elements
+const historyCardEl = document.querySelector('#history-card') as HTMLDivElement;
+const historyListEl = document.querySelector('#history-list') as HTMLUListElement;
+
+// Proposal Modal Elements
+const proposalModalEl = document.querySelector('#proposal-modal') as HTMLDivElement;
+const changeSummaryInput = document.querySelector('#change-summary') as HTMLInputElement;
+const designNotesInput = document.querySelector('#design-notes') as HTMLTextAreaElement;
+const proposeButton = document.querySelector('#propose-button') as HTMLButtonElement;
+const cancelProposalButton = document.querySelector('#cancel-proposal-button') as HTMLButtonElement;
+
+// Review Modal Elements
+const reviewModalEl = document.querySelector('#review-modal') as HTMLDivElement;
+const reviewSummaryEl = document.querySelector('#review-summary') as HTMLSpanElement;
+const reviewNotesEl = document.querySelector('#review-notes') as HTMLSpanElement;
+const reviewCommentsInput = document.querySelector('#review-comments') as HTMLTextAreaElement;
+const approveButton = document.querySelector('#approve-button') as HTMLButtonElement;
+const rejectButton = document.querySelector('#reject-button') as HTMLButtonElement;
+const cancelReviewButton = document.querySelector('#cancel-review-button') as HTMLButtonElement;
+
+// Design Details display elements
+const designDetailsContainerEl = document.querySelector('#design-details-container') as HTMLDivElement;
+const designDetailsIdEl = document.querySelector('#design-details-id') as HTMLSpanElement;
+const designDetailsSummaryEl = document.querySelector('#design-details-summary') as HTMLSpanElement;
+const designDetailsNotesEl = document.querySelector('#design-details-notes') as HTMLParagraphElement;
+const designDetailsNotesWrapperEl = document.querySelector('#design-details-notes-wrapper') as HTMLDivElement;
+const designDetailsReviewEl = document.querySelector('#design-details-review') as HTMLParagraphElement;
+const designDetailsReviewWrapperEl = document.querySelector('#design-details-review-wrapper') as HTMLDivElement;
+
+
 openKeyEl.addEventListener('click', async (e) => {
   await window.aistudio?.openSelectKey();
 });
@@ -263,8 +372,81 @@ openKeyEl.addEventListener('click', async (e) => {
 const generateButton = document.querySelector(
   '#generate-button',
 ) as HTMLButtonElement;
+const downloadCertificateButton = document.querySelector(
+  '#download-certificate-button',
+) as HTMLButtonElement;
+
 generateButton.addEventListener('click', () => {
-  generate();
+  if (activeDesign?.status === 'Approved') {
+    // Open the modal for iteration
+    changeSummaryInput.value = '';
+    designNotesInput.value = '';
+    proposalModalEl.style.display = 'flex';
+    changeSummaryInput.focus();
+  } else {
+    // Regular generation for a new design
+    generate();
+  }
+});
+
+cancelProposalButton.addEventListener('click', () => {
+    proposalModalEl.style.display = 'none';
+});
+
+proposeButton.addEventListener('click', () => {
+    const summary = changeSummaryInput.value;
+    if (!summary) {
+        alert('Please provide a Change Summary.');
+        changeSummaryInput.focus();
+        return;
+    }
+    proposalModalEl.style.display = 'none';
+    generate(summary, designNotesInput.value);
+});
+
+downloadCertificateButton.addEventListener('click', () => {
+  if (!activeDesign) return;
+
+  const { id, finalPrompt, specs, analysis, market, logo } = activeDesign;
+  const timestamp = activeDesign.timestamp.toISOString();
+
+  const certificateJson = {
+    _type: 'https://in-toto.io/Statement/v1',
+    subject: [
+      {
+        name: 'ai-design',
+        digest: {
+          generationId: id,
+        },
+      },
+    ],
+    predicateType: 'https://loomiary.ai/design-provenance/v1',
+    predicate: {
+      generator: 'Loominary AI',
+      timestamp: timestamp,
+      inputs: {
+        prompt: finalPrompt,
+        logo: logo, // This is already `logoFilename.textContent` or null
+        market: market,
+      },
+      outputs: {
+        specifications: specs,
+        marketAnalysis: analysis,
+      },
+    },
+  };
+
+  const blob = new Blob([JSON.stringify(certificateJson, null, 2)], {
+    type: 'application/json',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `loomiary_certificate_${id}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 });
 
 // Event listener for file upload
@@ -299,7 +481,7 @@ removeLogoButton.addEventListener('click', () => {
   logoFilename.textContent = '';
 });
 
-async function generate() {
+async function generate(changeSummary?: string, designNotes?: string) {
   let prompt = promptEl.value;
   if (!prompt) {
     statusEl.innerText = 'Error: Prompt cannot be empty.';
@@ -313,16 +495,25 @@ async function generate() {
     return;
   }
 
+  const parentId = activeDesign ? activeDesign.id : null;
+  // An iteration is Proposed, a new design is Approved by default.
+  const status = parentId ? 'Proposed' : 'Approved';
+
   statusEl.innerText = 'Starting process...';
   imageEl.style.display = 'none';
   specsContainer.style.display = 'none';
   analysisContainer.style.display = 'none';
+  marketTrendsContainerEl.style.display = 'none';
+  designDetailsContainerEl.style.display = 'none';
   loaderEl.style.display = 'block';
   generateButton.disabled = true;
+  downloadCertificateButton.style.display = 'none';
+  downloadCertificateButton.disabled = true;
   promptEl.disabled = true;
   logoUploadInput.disabled = true;
   removeLogoButton.disabled = true;
   marketSelectEl.disabled = true;
+  groundingSelectEl.disabled = true;
   quotaErrorEl.style.display = 'none';
   container.setAttribute('aria-busy', 'true');
 
@@ -340,42 +531,46 @@ async function generate() {
 
     statusEl.innerText = 'Analyzing product specifications...';
     const specs = await getProductSpecifications(finalPrompt);
-    specsListEl.innerHTML = `
-        <li><strong>Fabric Type:</strong> ${specs.fabricType}</li>
-        <li><strong>Fabric Weight:</strong> ${specs.fabricWeightGsm} GSM</li>
-        <li><strong>Stitching:</strong> ${specs.stitchingDetails}</li>
-        <li><strong>Printing:</strong> ${specs.printingMethod}</li>
-        <li><strong>Logo:</strong> ${specs.logoComplexity}</li>
-    `;
+    renderSpecs(specs);
     specsContainer.style.display = 'block';
 
     statusEl.innerText = `Analyzing ${marketSelectEl.value} market...`;
     const analysis = await getGlobalMarketAnalysis(specs, marketSelectEl.value);
-
-    marketSnapshotContentEl.innerHTML = `
-        <strong>Target Demographic:</strong> ${analysis.marketSnapshot.targetDemographic}
-        <br><br>
-        <strong>Competitor Insights:</strong> ${analysis.marketSnapshot.competitorInsights}
-    `;
-
-    pricingStrategyContentEl.innerHTML = `
-        ${analysis.pricingStrategy.analysis}
-        <br><br>
-        <strong>${analysis.pricingStrategy.estimatedPrice}</strong>
-    `;
-
-    logisticsContentEl.innerHTML = `
-        ${analysis.logistics.analysis}
-        <br><br>
-        <strong>${analysis.logistics.estimatedCost}</strong>
-    `;
-
-    marketingAnglesListEl.innerHTML = analysis.marketingAngles
-      .map((slogan) => `<li>${slogan}</li>`)
-      .join('');
-
+    renderAnalysis(analysis);
     analysisContainer.style.display = 'grid';
+
+    let trendsResult: MarketTrendsResult | undefined;
+    if (groundingSelectEl.value === 'enabled') {
+      statusEl.innerText = 'Researching market trends with Google Search...';
+      trendsResult = await getMarketTrends(specs, marketSelectEl.value);
+      renderTrends(trendsResult);
+      marketTrendsContainerEl.style.display = 'block';
+    }
+
+    const newDesign: DesignRecord = {
+      id: `LOOM-${Date.now()}`,
+      timestamp: new Date(),
+      imageDataUrl: imageEl.src,
+      finalPrompt,
+      specs,
+      analysis,
+      trends: trendsResult,
+      market: marketSelectEl.value,
+      logo: uploadedLogo ? logoFilename.textContent : null,
+      parentId,
+      changeSummary,
+      designNotes,
+      status,
+    };
+
+    activeDesign = newDesign;
+    designHistory.unshift(activeDesign);
+    renderHistory();
+
     statusEl.innerText = 'Done!';
+    downloadCertificateButton.style.display = 'inline-block';
+    // After a successful generation, show its details
+    viewHistoryItem(activeDesign.id);
   } catch (e) {
     try {
       const err = JSON.parse(e.message);
@@ -395,7 +590,278 @@ async function generate() {
     logoUploadInput.disabled = false;
     removeLogoButton.disabled = false;
     marketSelectEl.disabled = false;
+    groundingSelectEl.disabled = false;
+    downloadCertificateButton.disabled = !activeDesign;
     loaderEl.style.display = 'none';
     container.setAttribute('aria-busy', 'false');
+    updateGenerateButtonState();
   }
 }
+
+function renderSpecs(specs: ProductSpecification) {
+  specsListEl.innerHTML = `
+      <li><strong>Fabric Type:</strong> ${specs.fabricType}</li>
+      <li><strong>Fabric Weight:</strong> ${specs.fabricWeightGsm} GSM</li>
+      <li><strong>Stitching:</strong> ${specs.stitchingDetails}</li>
+      <li><strong>Printing:</strong> ${specs.printingMethod}</li>
+      <li><strong>Logo:</strong> ${specs.logoComplexity}</li>
+  `;
+}
+
+function renderAnalysis(analysis: MarketAnalysisResult) {
+  marketSnapshotContentEl.innerHTML = `
+      <strong>Target Demographic:</strong> ${analysis.marketSnapshot.targetDemographic}
+      <br><br>
+      <strong>Competitor Insights:</strong> ${analysis.marketSnapshot.competitorInsights}
+  `;
+
+  pricingStrategyContentEl.innerHTML = `
+      ${analysis.pricingStrategy.analysis}
+      <br><br>
+      <strong>${analysis.pricingStrategy.estimatedPrice}</strong>
+  `;
+
+  logisticsContentEl.innerHTML = `
+      ${analysis.logistics.analysis}
+      <br><br>
+      <strong>${analysis.logistics.estimatedCost}</strong>
+  `;
+
+  marketingAnglesListEl.innerHTML = analysis.marketingAngles
+    .map((slogan) => `<li>${slogan}</li>`)
+    .join('');
+}
+
+function renderTrends(trendsResult: MarketTrendsResult) {
+  marketTrendsContentEl.textContent = trendsResult.trends;
+  if (trendsResult.sources.length > 0) {
+    marketTrendsSourcesEl.innerHTML = `
+            <h4>Sources:</h4>
+            <ul>
+                ${trendsResult.sources
+                  .map(
+                    (source) =>
+                      `<li><a href="${source.web.uri}" target="_blank" rel="noopener noreferrer">${source.web.title}</a></li>`,
+                  )
+                  .join('')}
+            </ul>
+        `;
+  } else {
+    marketTrendsSourcesEl.innerHTML = '';
+  }
+}
+
+function renderHistory() {
+  if (designHistory.length === 0) {
+    historyCardEl.style.display = 'none';
+    return;
+  }
+
+  historyCardEl.style.display = 'block';
+  historyListEl.innerHTML = ''; // Clear previous content
+
+  const recordsById = new Map<string, DesignRecord>();
+  designHistory.forEach((r) => recordsById.set(r.id, r));
+
+  const childrenByParentId = new Map<string, DesignRecord[]>();
+  const rootRecords: DesignRecord[] = [];
+
+  // Group children and identify root nodes
+  for (const record of designHistory) {
+    if (record.parentId && recordsById.has(record.parentId)) {
+      if (!childrenByParentId.has(record.parentId)) {
+        childrenByParentId.set(record.parentId, []);
+      }
+      childrenByParentId.get(record.parentId)!.push(record);
+    } else {
+      rootRecords.push(record);
+    }
+  }
+
+  // Sort children by timestamp (newest first)
+  childrenByParentId.forEach((children) => {
+    children.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  });
+
+  // Sort root records by timestamp (newest first)
+  rootRecords.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+  const renderRecord = (record: DesignRecord, isChild: boolean) => {
+    const li = document.createElement('li');
+    li.className = 'history-item';
+    if (isChild) {
+      li.classList.add('is-child');
+    }
+    if (record.status === 'Rejected') {
+      li.classList.add('is-rejected');
+    }
+
+    const statusBadge = `<span class="history-status status-${record.status.toLowerCase()}">${record.status}</span>`;
+    let actionButtonHtml = '';
+    if (record.status === 'Proposed') {
+        actionButtonHtml = `<button class="secondary-button review-button" data-id="${record.id}">Review</button>`;
+    } else {
+        actionButtonHtml = `<button class="secondary-button view-history-button" data-id="${record.id}">View</button>`;
+    }
+
+    li.innerHTML = `
+      <img src="${record.imageDataUrl}" alt="Design thumbnail" class="history-thumbnail">
+      <div class="history-info">
+        <p class="history-summary">${record.changeSummary || 'Initial Design'}</p>
+        <div class="history-meta">
+          ${statusBadge}
+          <span class="history-timestamp">${record.timestamp.toLocaleTimeString()}</span>
+        </div>
+      </div>
+      ${actionButtonHtml}
+    `;
+    historyListEl.appendChild(li);
+
+    // Render children
+    const children = childrenByParentId.get(record.id);
+    if (children) {
+      for (const child of children) {
+        renderRecord(child, true);
+      }
+    }
+  };
+
+  for (const record of rootRecords) {
+    renderRecord(record, false);
+  }
+}
+
+historyListEl.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement;
+  const viewButton = target.closest('.view-history-button');
+  const reviewButton = target.closest('.review-button');
+
+  if (viewButton) {
+    const id = viewButton.getAttribute('data-id');
+    if (id) {
+      viewHistoryItem(id);
+    }
+  } else if (reviewButton) {
+      const id = reviewButton.getAttribute('data-id');
+      if (id) {
+          openReviewModal(id);
+      }
+  }
+});
+
+function viewHistoryItem(id: string) {
+  const record = designHistory.find((r) => r.id === id);
+  if (!record) return;
+
+  activeDesign = record;
+
+  // 1. Update main image and prompt
+  imageEl.src = record.imageDataUrl;
+  imageEl.style.display = 'block';
+  promptEl.value = record.finalPrompt;
+
+  // 2. Update specs, analysis, and trends
+  renderSpecs(record.specs);
+  specsContainer.style.display = 'block';
+
+  renderAnalysis(record.analysis);
+  analysisContainer.style.display = 'grid';
+
+  if (record.trends) {
+    renderTrends(record.trends);
+    marketTrendsContainerEl.style.display = 'block';
+  } else {
+    marketTrendsContainerEl.style.display = 'none';
+  }
+
+  // 3. Display design and review details if they exist
+  if (record.changeSummary) {
+    designDetailsIdEl.textContent = record.id;
+    designDetailsSummaryEl.textContent = record.changeSummary;
+    designDetailsNotesEl.textContent = record.designNotes || 'No details provided.';
+    designDetailsNotesWrapperEl.style.display = record.designNotes ? 'block' : 'none';
+    designDetailsContainerEl.style.display = 'block';
+  } else {
+    designDetailsContainerEl.style.display = 'none';
+  }
+
+  if (record.reviewComments) {
+      designDetailsReviewEl.textContent = record.reviewComments;
+      designDetailsReviewWrapperEl.style.display = 'block';
+  } else {
+      designDetailsReviewWrapperEl.style.display = 'none';
+  }
+
+
+  // 4. Ensure download button is active & update generate button
+  downloadCertificateButton.style.display = 'inline-block';
+  downloadCertificateButton.disabled = false;
+  updateGenerateButtonState();
+
+  // 5. Update status and scroll into view
+  statusEl.innerText = `Viewing design from ${record.timestamp.toLocaleTimeString()}.`;
+  const resultCard = document.querySelector('.result-card');
+  resultCard?.scrollIntoView({ behavior: 'smooth' });
+}
+
+function updateGenerateButtonState() {
+    if (!activeDesign) {
+        generateButton.textContent = 'Generate & Analyze';
+        generateButton.disabled = false;
+    } else if (activeDesign.status === 'Approved') {
+        generateButton.textContent = 'Propose Change';
+        generateButton.disabled = false;
+    } else {
+        generateButton.textContent = `Change is ${activeDesign.status}`;
+        generateButton.disabled = true;
+    }
+}
+
+function openReviewModal(id: string) {
+    const record = designHistory.find((r) => r.id === id);
+    if (!record || record.status !== 'Proposed') return;
+
+    reviewingDesignId = id;
+    reviewSummaryEl.textContent = record.changeSummary || '';
+    reviewNotesEl.textContent = record.designNotes || 'No details provided.';
+    reviewCommentsInput.value = '';
+    reviewModalEl.style.display = 'flex';
+    reviewCommentsInput.focus();
+}
+
+function closeReviewModal() {
+    reviewingDesignId = null;
+    reviewModalEl.style.display = 'none';
+}
+
+approveButton.addEventListener('click', () => {
+    if (!reviewingDesignId) return;
+    const record = designHistory.find((r) => r.id === reviewingDesignId);
+    if (record) {
+        record.status = 'Approved';
+        record.reviewComments = reviewCommentsInput.value;
+        statusEl.innerText = `Proposal ${record.id} approved.`;
+        renderHistory();
+        if (activeDesign?.id === record.id) {
+            viewHistoryItem(record.id); // Refresh view
+        }
+    }
+    closeReviewModal();
+});
+
+rejectButton.addEventListener('click', () => {
+    if (!reviewingDesignId) return;
+    const record = designHistory.find((r) => r.id === reviewingDesignId);
+    if (record) {
+        record.status = 'Rejected';
+        record.reviewComments = reviewCommentsInput.value;
+        statusEl.innerText = `Proposal ${record.id} rejected.`;
+        renderHistory();
+        if (activeDesign?.id === record.id) {
+            viewHistoryItem(record.id); // Refresh view
+        }
+    }
+    closeReviewModal();
+});
+
+cancelReviewButton.addEventListener('click', closeReviewModal);

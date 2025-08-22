@@ -52,9 +52,19 @@
                         <option value="Nigeria">Nigeria</option>
                     </select>
                 </div>
+                <div class="grounding-select-section">
+                    <label for="grounding-select">Google Search Grounding</label>
+                    <select id="grounding-select">
+                        <option value="disabled" selected>Disabled</option>
+                        <option value="enabled">Enabled</option>
+                    </select>
+                </div>
             </div>
 
-            <button id="generate-button">Generate & Analyze</button>
+            <div class="button-group">
+                <button id="generate-button">Generate & Analyze</button>
+                <button id="download-certificate-button" class="secondary-button">Download Certificate (JSON)</button>
+            </div>
 
             <div id="quota-error">
                 <p>You are out of quota. Please <button id="open-key">get a new API key</button> to continue.</p>
@@ -67,6 +77,19 @@
             <div class="image-container">
                 <img id="generated-image" alt="Generated image">
                 <div class="loader" id="loader"></div>
+            </div>
+
+            <div id="design-details-container" class="design-details" style="display: none;">
+                <h3>Design Notes for <span id="design-details-id"></span></h3>
+                <p><strong>Summary:</strong> <span id="design-details-summary"></span></p>
+                <div id="design-details-notes-wrapper" style="display: none;">
+                    <p><strong>Details:</strong></p>
+                    <p id="design-details-notes"></p>
+                </div>
+                 <div id="design-details-review-wrapper" style="display: none;">
+                    <p><strong>Review Feedback:</strong></p>
+                    <p id="design-details-review"></p>
+                </div>
             </div>
 
             <div class="specs-section" id="specs-container">
@@ -91,9 +114,54 @@
                     <h3>Marketing Angles</h3>
                     <ul id="marketing-angles-list"></ul>
                 </div>
+                <div class="sub-card full-width-card" id="market-trends-container">
+                    <h3>Market Trends (via Google Search)</h3>
+                    <p id="market-trends-content"></p>
+                    <div id="market-trends-sources"></div>
+                </div>
             </div>
         </div>
+
+        <div class="card" id="history-card">
+            <h2>Design History</h2>
+            <ul id="history-list"></ul>
+        </div>
     </main>
+
+    <div id="proposal-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content card">
+            <h2>Propose a Design Change</h2>
+            <p>Describe the changes you're making to this design, similar to a commit message.</p>
+            <label for="change-summary">Change Summary (Title)</label>
+            <input type="text" id="change-summary" placeholder="e.g., 'Feat: Add a more vibrant color scheme'">
+            <label for="design-notes">Design Notes (Optional)</label>
+            <textarea id="design-notes" rows="4" placeholder="Explain the problem this change is solving and why you are making it."></textarea>
+            <div class="button-group">
+                <button id="propose-button">Generate & Propose</button>
+                <button id="cancel-proposal-button" class="secondary-button">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="review-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content card">
+            <h2>Review Design Change</h2>
+            <p>Review the proposed changes and provide feedback before approving or rejecting.</p>
+            <div class="review-proposal-details">
+                <p><strong>Summary:</strong> <span id="review-summary"></span></p>
+                <p><strong>Notes:</strong> <span id="review-notes"></span></p>
+            </div>
+            <label for="review-comments">Review Comments (Optional)</label>
+            <textarea id="review-comments" rows="4" placeholder="e.g., 'LGTM! Great improvement.'"></textarea>
+            <div class="button-group">
+                <button id="approve-button">Approve</button>
+                <button id="reject-button">Reject</button>
+                <button id="cancel-review-button" class="secondary-button">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+
     <script type="module" src="index.tsx"></script>
 </body>
 </html>
