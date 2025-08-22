@@ -14,6 +14,7 @@ let uploadedLogo: { base64: string; mimeType: string } | null = null;
 
 // Global state for design history, the currently active design, and review state
 let designHistory: DesignRecord[] = [];
+let publishedDesigns: DesignRecord[] = [];
 let activeDesign: DesignRecord | null = null;
 let reviewingDesignId: string | null = null;
 
@@ -68,7 +69,7 @@ interface DesignRecord {
   parentId: string | null;
   changeSummary?: string;
   designNotes?: string;
-  status: 'Proposed' | 'Approved' | 'Rejected';
+  status: 'Proposed' | 'Approved' | 'Rejected' | 'Published';
   reviewComments?: string;
 }
 
@@ -340,6 +341,10 @@ const removeLogoButton = document.querySelector(
 const historyCardEl = document.querySelector('#history-card') as HTMLDivElement;
 const historyListEl = document.querySelector('#history-list') as HTMLUListElement;
 
+// Store Elements
+const storeCardEl = document.querySelector('#store-card') as HTMLDivElement;
+const storeGridEl = document.querySelector('#store-grid') as HTMLDivElement;
+
 // Proposal Modal Elements
 const proposalModalEl = document.querySelector('#proposal-modal') as HTMLDivElement;
 const changeSummaryInput = document.querySelector('#change-summary') as HTMLInputElement;
@@ -561,12 +566,13 @@ async function generate(changeSummary?: string, designNotes?: string) {
       parentId,
       changeSummary,
       designNotes,
-      status,
+      status: status as 'Proposed' | 'Approved',
     };
 
     activeDesign = newDesign;
     designHistory.unshift(activeDesign);
     renderHistory();
+    renderStore();
 
     statusEl.innerText = 'Done!';
     downloadCertificateButton.style.display = 'inline-block';
@@ -705,9 +711,10 @@ function renderHistory() {
       actionButtonHtml = `
         <button class="secondary-button view-history-button" data-id="${record.id}">View</button>
         <button class="secondary-button download-package-button" data-id="${record.id}">Package</button>
+        <button class="secondary-button publish-button" data-id="${record.id}">Publish</button>
       `;
     } else {
-      // Rejected or other states
+      // Rejected or Published states
       actionButtonHtml = `<button class="secondary-button view-history-button" data-id="${record.id}">View</button>`;
     }
 
@@ -740,27 +747,41 @@ function renderHistory() {
   }
 }
 
+function renderStore() {
+    if (publishedDesigns.length === 0) {
+        storeCardEl.style.display = 'none';
+        return;
+    }
+
+    storeCardEl.style.display = 'block';
+    storeGridEl.innerHTML = publishedDesigns.map(record => `
+        <div class="store-item">
+            <img src="${record.imageDataUrl}" alt="Published design" class="store-item-img">
+            <p class="store-item-title">${record.changeSummary || 'Initial Design'}</p>
+            <p class="store-item-price">${record.analysis.pricingStrategy.estimatedPrice}</p>
+        </div>
+    `).join('');
+}
+
 historyListEl.addEventListener('click', (e) => {
   const target = e.target as HTMLElement;
   const viewButton = target.closest('.view-history-button');
   const reviewButton = target.closest('.review-button');
   const packageButton = target.closest('.download-package-button');
+  const publishButton = target.closest('.publish-button');
 
   if (viewButton) {
     const id = viewButton.getAttribute('data-id');
-    if (id) {
-      viewHistoryItem(id);
-    }
+    if (id) viewHistoryItem(id);
   } else if (reviewButton) {
     const id = reviewButton.getAttribute('data-id');
-    if (id) {
-      openReviewModal(id);
-    }
+    if (id) openReviewModal(id);
   } else if (packageButton) {
     const id = packageButton.getAttribute('data-id');
-    if (id) {
-      generateAndDownloadPackage(id);
-    }
+    if (id) generateAndDownloadPackage(id);
+  } else if (publishButton) {
+    const id = publishButton.getAttribute('data-id');
+    if (id) publishDesign(id);
   }
 });
 
@@ -855,7 +876,7 @@ approveButton.addEventListener('click', () => {
     if (record) {
         record.status = 'Approved';
         record.reviewComments = reviewCommentsInput.value;
-        statusEl.innerText = `Proposal ${record.id} approved. A production package is now available.`;
+        statusEl.innerText = `Proposal ${record.id} approved. You can now publish it to the store.`;
         renderHistory();
         if (activeDesign?.id === record.id) {
             viewHistoryItem(record.id); // Refresh view
@@ -880,6 +901,23 @@ rejectButton.addEventListener('click', () => {
 });
 
 cancelReviewButton.addEventListener('click', closeReviewModal);
+
+function publishDesign(id: string) {
+    const record = designHistory.find((r) => r.id === id);
+    if (!record || record.status !== 'Approved') {
+        statusEl.innerText = 'Error: Only approved designs can be published.';
+        return;
+    }
+
+    record.status = 'Published';
+    publishedDesigns.unshift(record);
+
+    renderHistory();
+    renderStore();
+
+    statusEl.innerText = `Design ${id} has been published to your store!`;
+    storeCardEl.scrollIntoView({ behavior: 'smooth' });
+}
 
 // Helper function to convert data URL to blob for zipping
 function dataURLtoBlob(dataurl: string): Blob {
@@ -964,3 +1002,7 @@ ${record.analysis.marketingAngles.map((a) => `- ${a}`).join('\n')}
     console.error('Package generation error:', e);
   }
 }
+
+// Initial renders on page load
+renderHistory();
+renderStore();

@@ -472,6 +472,7 @@ button:not(:disabled):hover {
 .status-proposed { background-color: #ffc107; color: #333; }
 .status-approved { background-color: #28a745; }
 .status-rejected { background-color: #6c757d; }
+.status-published { background-color: #007bff; }
 
 
 .history-actions {
@@ -560,6 +561,46 @@ button:not(:disabled):hover {
     margin-top: 5px;
 }
 
+/* Store Section */
+#store-card {
+    display: none; /* Initially hidden */
+}
+#store-card h2 {
+    margin-top: 0;
+}
+#store-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 15px;
+}
+.store-item {
+    border: 1px solid #eee;
+    border-radius: var(--border-radius);
+    padding: 10px;
+    text-align: center;
+    background-color: #f9f9f9;
+}
+.store-item-img {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+.store-item-title {
+    font-size: 0.9rem;
+    font-weight: bold;
+    margin: 0 0 5px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.store-item-price {
+    font-size: 0.85rem;
+    color: var(--primary-color);
+    font-weight: bold;
+}
 
 
 @media (max-width: 600px) {

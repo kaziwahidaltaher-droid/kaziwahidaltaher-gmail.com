@@ -15,6 +15,7 @@ This application allows you to generate high-quality, realistic images from text
     -   **Review & Approve:** Each proposal can be reviewed, commented on, and then either "Approved" to become the new baseline or "Rejected".
     -   **Versioned Status:** The design history clearly shows the status of each iteration (`Proposed`, `Approved`, `Rejected`), providing a clear audit trail of the creative process. You can only propose changes to designs that have been approved.
 -   **Automated Design Handoff:** Inspired by CI/CD workflows, approving a design automatically generates a "production package." This downloadable `.zip` file contains the final design image, its provenance certificate, and a detailed summary, preparing it for the next stage of your pipeline.
+-   **Publish to Store:** Complete the development lifecycle by "publishing" your approved designs. This moves them from the active design history into a "My Store" gallery, simulating a final deployment to a production environment.
 
 ## API Keys and Secrets Management (`API_KEY`)
 
