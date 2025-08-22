@@ -474,10 +474,17 @@ button:not(:disabled):hover {
 .status-rejected { background-color: #6c757d; }
 
 
-.view-history-button, .review-button {
+.history-actions {
+    display: flex;
+    gap: 5px;
     flex-shrink: 0;
-    /* Uses .secondary-button styles */
 }
+
+.history-actions .secondary-button {
+    padding: 5px 10px;
+    font-size: 0.85rem;
+}
+
 
 /* Design Details Section */
 .design-details {

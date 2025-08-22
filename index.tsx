@@ -5,6 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { GenerateImagesParameters, GoogleGenAI, Type } from '@google/genai';
+import JSZip from 'jszip';
 
 const GEMINI_API_KEY = process.env.API_KEY;
 
@@ -404,13 +405,9 @@ proposeButton.addEventListener('click', () => {
     generate(summary, designNotesInput.value);
 });
 
-downloadCertificateButton.addEventListener('click', () => {
-  if (!activeDesign) return;
-
-  const { id, finalPrompt, specs, analysis, market, logo } = activeDesign;
-  const timestamp = activeDesign.timestamp.toISOString();
-
-  const certificateJson = {
+function createCertificateJson(record: DesignRecord) {
+  const { id, finalPrompt, specs, analysis, market, logo, timestamp } = record;
+  return {
     _type: 'https://in-toto.io/Statement/v1',
     subject: [
       {
@@ -423,10 +420,10 @@ downloadCertificateButton.addEventListener('click', () => {
     predicateType: 'https://loomiary.ai/design-provenance/v1',
     predicate: {
       generator: 'Loominary AI',
-      timestamp: timestamp,
+      timestamp: timestamp.toISOString(),
       inputs: {
         prompt: finalPrompt,
-        logo: logo, // This is already `logoFilename.textContent` or null
+        logo: logo,
         market: market,
       },
       outputs: {
@@ -435,14 +432,18 @@ downloadCertificateButton.addEventListener('click', () => {
       },
     },
   };
+}
 
+downloadCertificateButton.addEventListener('click', () => {
+  if (!activeDesign) return;
+  const certificateJson = createCertificateJson(activeDesign);
   const blob = new Blob([JSON.stringify(certificateJson, null, 2)], {
     type: 'application/json',
   });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `loomiary_certificate_${id}.json`;
+  a.download = `loomiary_certificate_${activeDesign.id}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -699,9 +700,15 @@ function renderHistory() {
     const statusBadge = `<span class="history-status status-${record.status.toLowerCase()}">${record.status}</span>`;
     let actionButtonHtml = '';
     if (record.status === 'Proposed') {
-        actionButtonHtml = `<button class="secondary-button review-button" data-id="${record.id}">Review</button>`;
+      actionButtonHtml = `<button class="secondary-button review-button" data-id="${record.id}">Review</button>`;
+    } else if (record.status === 'Approved') {
+      actionButtonHtml = `
+        <button class="secondary-button view-history-button" data-id="${record.id}">View</button>
+        <button class="secondary-button download-package-button" data-id="${record.id}">Package</button>
+      `;
     } else {
-        actionButtonHtml = `<button class="secondary-button view-history-button" data-id="${record.id}">View</button>`;
+      // Rejected or other states
+      actionButtonHtml = `<button class="secondary-button view-history-button" data-id="${record.id}">View</button>`;
     }
 
     li.innerHTML = `
@@ -713,7 +720,9 @@ function renderHistory() {
           <span class="history-timestamp">${record.timestamp.toLocaleTimeString()}</span>
         </div>
       </div>
-      ${actionButtonHtml}
+      <div class="history-actions">
+        ${actionButtonHtml}
+      </div>
     `;
     historyListEl.appendChild(li);
 
@@ -735,6 +744,7 @@ historyListEl.addEventListener('click', (e) => {
   const target = e.target as HTMLElement;
   const viewButton = target.closest('.view-history-button');
   const reviewButton = target.closest('.review-button');
+  const packageButton = target.closest('.download-package-button');
 
   if (viewButton) {
     const id = viewButton.getAttribute('data-id');
@@ -742,10 +752,15 @@ historyListEl.addEventListener('click', (e) => {
       viewHistoryItem(id);
     }
   } else if (reviewButton) {
-      const id = reviewButton.getAttribute('data-id');
-      if (id) {
-          openReviewModal(id);
-      }
+    const id = reviewButton.getAttribute('data-id');
+    if (id) {
+      openReviewModal(id);
+    }
+  } else if (packageButton) {
+    const id = packageButton.getAttribute('data-id');
+    if (id) {
+      generateAndDownloadPackage(id);
+    }
   }
 });
 
@@ -840,7 +855,7 @@ approveButton.addEventListener('click', () => {
     if (record) {
         record.status = 'Approved';
         record.reviewComments = reviewCommentsInput.value;
-        statusEl.innerText = `Proposal ${record.id} approved.`;
+        statusEl.innerText = `Proposal ${record.id} approved. A production package is now available.`;
         renderHistory();
         if (activeDesign?.id === record.id) {
             viewHistoryItem(record.id); // Refresh view
@@ -865,3 +880,87 @@ rejectButton.addEventListener('click', () => {
 });
 
 cancelReviewButton.addEventListener('click', closeReviewModal);
+
+// Helper function to convert data URL to blob for zipping
+function dataURLtoBlob(dataurl: string): Blob {
+  const arr = dataurl.split(',');
+  const mime = arr[0].match(/:(.*?);/)?.[1];
+  if (!mime) {
+    throw new Error('Could not determine MIME type from data URL');
+  }
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+}
+
+async function generateAndDownloadPackage(id: string) {
+  const record = designHistory.find((r) => r.id === id);
+  if (!record) {
+    statusEl.innerText = `Error: Could not find design ${id}.`;
+    return;
+  }
+
+  statusEl.innerText = `Generating production package for ${id}...`;
+
+  try {
+    const zip = new JSZip();
+
+    // 1. Add image
+    const imageBlob = dataURLtoBlob(record.imageDataUrl);
+    zip.file('design.jpg', imageBlob);
+
+    // 2. Add certificate
+    const certificateJson = createCertificateJson(record);
+    zip.file('certificate.json', JSON.stringify(certificateJson, null, 2));
+
+    // 3. Add summary text
+    const summaryText = `
+Design Summary - ${record.id}
+=======================================
+Generated on: ${record.timestamp.toISOString()}
+Market: ${record.market}
+Status: ${record.status}
+
+--- PROMPT ---
+${record.finalPrompt}
+
+--- PRODUCT SPECIFICATIONS ---
+Fabric Type: ${record.specs.fabricType}
+Fabric Weight: ${record.specs.fabricWeightGsm} GSM
+Stitching: ${record.specs.stitchingDetails}
+Printing: ${record.specs.printingMethod}
+Logo: ${record.specs.logoComplexity}
+
+--- MARKET ANALYSIS ---
+Target Demographic: ${record.analysis.marketSnapshot.targetDemographic}
+Competitor Insights: ${record.analysis.marketSnapshot.competitorInsights}
+Pricing Analysis: ${record.analysis.pricingStrategy.analysis}
+Estimated Price: ${record.analysis.pricingStrategy.estimatedPrice}
+Logistics Analysis: ${record.analysis.logistics.analysis}
+Estimated Cost: ${record.analysis.logistics.estimatedCost}
+Marketing Angles:
+${record.analysis.marketingAngles.map((a) => `- ${a}`).join('\n')}
+`;
+    zip.file('summary.txt', summaryText.trim());
+
+    const content = await zip.generateAsync({ type: 'blob' });
+
+    const url = URL.createObjectURL(content);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `loomiary_package_${id}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    statusEl.innerText = `Production package for ${id} downloaded.`;
+  } catch (e) {
+    statusEl.innerText = `Error generating package: ${e.message}`;
+    console.error('Package generation error:', e);
+  }
+}

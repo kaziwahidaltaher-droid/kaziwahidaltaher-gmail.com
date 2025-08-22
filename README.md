@@ -14,6 +14,7 @@ This application allows you to generate high-quality, realistic images from text
     -   **Propose Changes:** Submit new design iterations for review with commit-style messages.
     -   **Review & Approve:** Each proposal can be reviewed, commented on, and then either "Approved" to become the new baseline or "Rejected".
     -   **Versioned Status:** The design history clearly shows the status of each iteration (`Proposed`, `Approved`, `Rejected`), providing a clear audit trail of the creative process. You can only propose changes to designs that have been approved.
+-   **Automated Design Handoff:** Inspired by CI/CD workflows, approving a design automatically generates a "production package." This downloadable `.zip` file contains the final design image, its provenance certificate, and a detailed summary, preparing it for the next stage of your pipeline.
 
 ## API Keys and Secrets Management (`API_KEY`)
 
@@ -240,4 +241,82 @@ Alternatively, a core member can squash your commits within Github.
 
 Sigstore adheres to and enforces the [Contributor Covenant](http://contributor-covenant.org/version/1/4/) Code of Conduct.
 Please take a moment to read our [code of conduct](https://github.com/sigstore/.github/blob/main/CODE_OF_CONDUCT.md) document.Checkout with GitHub CLI
-gh pr checkout 385Inspect the proposed changes in the pull request and ensure that you are comfortable running your workflows on the pull request branch. You should be especially alert to any proposed changes in the .github/workflows/ directory that affect workflow files.
+gh pr checkout 385Inspect the proposed changes in the pull request and ensure that you are comfortable running your workflows on the pull request branch. You should be especially alert to any proposed changes in the .github/workflows/ directory that affect workflow files.n your repository on GitHub, create a workflow file called github-actions-demo.yml in the .
+kaziwahidaltaher-droid/kaziwahidaltaher-gmail.com on main
+/workflows directory. To do this:
+
+If the .github/workflows directory already exists, navigate to that directory on GitHub, click Add file, then click Create new file, and name the file github-actions-demo.yml.
+
+If your repository doesn't have a .github/workflows directory, go to the main page of the repository on GitHub, click Add file, then click Create new file, and name the file .github/workflows/github-actions-demo.yml. This creates the .github and workflows directories and the github-actions-demo.yml file in a single step.
+
+Note
+
+For GitHub to discover any GitHub Actions workflows in your repository, you must save the workflow files in a directory called .github/workflows.
+
+You can give the workflow file any name you like, but you must use .yml or .yaml as the file name extension. YAML is a markup language that's commonly used for configuration files.
+
+Copy the following YAML contents into the github-actions-demo.yml file:
+
+YAML
+name: GitHub Actions Demo
+run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+on: [push]
+jobs:
+  Explore-GitHub-Actions:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
+      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
+      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
+      - run: echo "🖥️ The workflow is now ready to test your code on the runner."
+      - name: List files in the repository
+        run: |
+          ls ${{ github.workspace }}
+      - run: echo "🍏 This job's status is ${{ job.status }}."
+At this stage you don't need to understand the details of this workflow. For now, you can just copy and paste the contents into the file. After completing this quickstart guide, you can learn about the syntax of workflow files in Workflows, and for an explanation of GitHub Actions contexts, such as ${{ github.actor }} and ${{ github.event_name }}, see Contexts reference.
+
+Click Commit changes.
+
+In the "Propose changes" dialog, select either the option to commit to the default branch or the option to create a new branch and start a pull request. Then click Commit changes or Propose changes.
+
+Screenshot of the "Propose changes" dialog with the areas mentioned highlighted with an orange outline.
+Committing the workflow file to a branch in your repository triggers the push event and runs your workflow.
+
+If you chose to start a pull request, you can continue and create the pull request, but this is not necessary for the purposes of this quickstart because the commit has still been made to a branch and will trigger the new workflow.
+
+Viewing your workflow results
+On GitHub, navigate to the main page of the repository.
+
+Under your repository name, click  Actions.
+
+Screenshot of the tabs for the "github/docs" repository. The "Actions" tab is highlighted with an orange outline.
+In the left sidebar, click the workflow you want to display, in this example "GitHub Actions Demo."
+
+Screenshot of the "Actions" page. The name of the example workflow, "GitHub Actions Demo", is highlighted by a dark orange outline.
+From the list of workflow runs, click the name of the run you want to see, in this example "USERNAME is testing out GitHub Actions."
+
+In the left sidebar of the workflow run page, under Jobs, click the Explore-GitHub-Actions job.
+
+Screenshot of the "Workflow run" page. In the left sidebar, the "Explore-GitHub-Actions" job is highlighted with a dark orange outline.
+The log shows you how each of the steps was processed. Expand any of the steps to view its details.
+
+Screenshot of steps run by the workflow.
+For example, you can see the list of files in your repository:
+
+Screenshot of the "List files in the repository" step expanded to show the log output. The output for the step is highlighted with an orange outline.
+The example workflow you just added is triggered each time code is pushed to the branch, and shows you how GitHub Actions can work with the contents of your repository. For an in-depth tutorial, see Understanding GitHub Actions.
+
+Next steps
+GitHub Actions can help you automate nearly every aspect of your application development processes. Ready to get started? Here are some helpful resources for taking your next steps with GitHub Actions:
+
+To create a GitHub Actions workflow, see Using workflow templates.
+For continuous integration (CI) workflows, see Building and testing your code.
+For building and publishing packages, see Publishing packages.
+For deploying projects, see Deploying to third-party platforms.
+For automating tasks and processes on GitHub, see Managing your work with GitHub Actions.
+For examples that demonstrate more complex features of GitHub Actions, see Managing your work with GitHub Actions. These detailed examples explain how to test your code on a runner, access the GitHub CLI, and use advanced features such as concurrency and test matrices.
+To certify your proficiency in automating workflows and accelerating development with GitHub Actions, earn a GitHub Actions certificate with GitHub Certifications. For more information, see About GitHub Certifications.
+Help and support
