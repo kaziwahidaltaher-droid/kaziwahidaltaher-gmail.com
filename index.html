@@ -95,6 +95,7 @@
                     <button class="tab-button active" data-tab="dna">Product DNA</button>
                     <button class="tab-button" data-tab="branding">Branding & Identity</button>
                     <button class="tab-button" data-tab="seo">Region-Aware SEO & SEM</button>
+                    <button class="tab-button" data-tab="buzz">Social Buzz</button>
                 </nav>
 
                 <div id="tab-dna" class="tab-content studio-grid" style="display: grid;">
@@ -157,6 +158,30 @@
                         <ul id="seo-social-prompts"></ul>
                     </div>
                 </div>
+
+                <div id="tab-buzz" class="tab-content" style="display: none;">
+                   <div class="buzz-grid">
+                        <div class="sentiment-display">
+                           <span id="buzz-sentiment" class="sentiment-badge"></span>
+                           <p id="buzz-sentiment-analysis"></p>
+                        </div>
+                        <div class="info-block">
+                            <h3>Key Influencers / Archetypes</h3>
+                            <div id="buzz-influencers"></div>
+                        </div>
+                   </div>
+                   <br>
+                    <div class="info-block">
+                        <h3>Viral Content Ideas</h3>
+                        <ul id="buzz-content-ideas"></ul>
+                    </div>
+                    <br>
+                    <div class="info-block">
+                        <h3>Relevant Hashtags</h3>
+                        <div id="buzz-hashtags" class="keyword-list"></div>
+                    </div>
+                </div>
+
                 <div id="studio-sources"></div>
             </div>
         </div>

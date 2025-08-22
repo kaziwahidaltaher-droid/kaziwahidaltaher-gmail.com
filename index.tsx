@@ -70,7 +70,7 @@ let allDesigns: DesignRecord[] = [];
 let activeDesign: DesignRecord | null = null;
 let reviewingDesignId: string | null = null;
 
-const initialPrompt = `Create a high‑resolution, realistic showroom image of a men’s European‑fit, short‑sleeve T‑shirt, shown in multiple solid colors. The shirt should have a tailored, body‑hugging silhouette with a double‑stitched crew neck collar and neatly hemmed sleeves. The fabric should be a premium combed cotton texture (200–220 gsm) with a visible weave detail. Display both front and back views within the same landscape frame, against a neutral studio background. On the front of the shirt, place a bold emblem of the 'LOOMINAR' logo on the left chest. On the back, center the text 'CREATE • INSPIRE • SHINE' in a clean, bold, uppercase sans-serif font. The lighting should be soft and even to highlight the fabric's texture and the shirt's fit, including product specifications.`;
+const initialPrompt = '';
 
 interface ProductSpecification {
   fabricType: string;
@@ -120,12 +120,22 @@ interface StudioAnalysis {
   sources: GroundingChunk[];
 }
 
+interface SocialBuzzAnalysis {
+  overallSentiment: 'Positive' | 'Neutral' | 'Negative' | 'Mixed';
+  sentimentAnalysis: string;
+  keyInfluencers: Array<{ name: string; platform: string; reason: string }>;
+  viralContentIdeas: string[];
+  relevantHashtags: string[];
+  sources: GroundingChunk[];
+}
+
 interface DesignRecord {
   id: string;
   timestamp: Date;
   imageDataUrl: string;
   finalPrompt: string;
   studioAnalysis: StudioAnalysis;
+  socialBuzzAnalysis: SocialBuzzAnalysis;
   market: string;
   logo: string | null;
   parentId: string | null;
@@ -296,6 +306,67 @@ async function getStudioAnalysis(
   return { ...analysis, sources: sources as GroundingChunk[] };
 }
 
+async function getSocialBuzzAnalysis(
+  prompt: string,
+  market: string,
+): Promise<SocialBuzzAnalysis> {
+  const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+  const analysisPrompt = `
+    You are a social media trend analyst. Based on the following product description for the **${market}** market, perform a real-time analysis of social media buzz using Google Search.
+
+    **Product Description:**
+    "${prompt}"
+
+    **Your Task:**
+    Provide a complete social media analysis in the specified JSON format.
+
+    1.  **Sentiment:** What is the current public sentiment towards similar products or styles? Provide an overall sentiment and a brief analysis.
+    2.  **Influencers:** Identify 2-3 key influencers or content creator archetypes in the ${market} market who would be a good fit for this brand. Explain why.
+    3.  **Content Ideas:** Suggest 3 viral content ideas (e.g., TikTok challenge, Instagram Reel trend) that could be used to promote this product.
+    4.  **Hashtags:** Provide a list of 5-7 relevant and trending hashtags.
+  `;
+
+  const response = await ai.models.generateContent({
+    model: GEMINI_MODEL,
+    contents: analysisPrompt,
+    config: {
+      tools: [{ googleSearch: {} }],
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          overallSentiment: { type: Type.STRING },
+          sentimentAnalysis: { type: Type.STRING },
+          keyInfluencers: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                platform: { type: Type.STRING },
+                reason: { type: Type.STRING },
+              },
+            },
+          },
+          viralContentIdeas: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+          },
+          relevantHashtags: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+          },
+        },
+      },
+    },
+  });
+
+  const analysis = JSON.parse(response.text);
+  const sources =
+    response.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+  return { ...analysis, sources: sources as GroundingChunk[] };
+}
+
 const mainContainer = document.querySelector('#main-container') as HTMLElement;
 const initialLoaderEl = document.querySelector(
   '#initial-loader',
@@ -336,6 +407,14 @@ const semAdHeadlineEl = document.querySelector('#sem-ad-headline') as HTMLElemen
 const semAdDescriptionEl = document.querySelector('#sem-ad-description') as HTMLElement;
 const seoMetaDescriptionEl = document.querySelector('#seo-meta-description') as HTMLElement;
 const seoSocialPromptsEl = document.querySelector('#seo-social-prompts') as HTMLUListElement;
+
+// Social Buzz Tab
+const buzzSentimentEl = document.querySelector('#buzz-sentiment') as HTMLSpanElement;
+const buzzSentimentAnalysisEl = document.querySelector('#buzz-sentiment-analysis') as HTMLParagraphElement;
+const buzzInfluencersEl = document.querySelector('#buzz-influencers') as HTMLDivElement;
+const buzzContentIdeasEl = document.querySelector('#buzz-content-ideas') as HTMLUListElement;
+const buzzHashtagsEl = document.querySelector('#buzz-hashtags') as HTMLDivElement;
+
 const studioSourcesEl = document.querySelector('#studio-sources') as HTMLDivElement;
 
 // File upload DOM Elements
@@ -390,7 +469,9 @@ const reviewCommentsInput = document.querySelector(
 const approveButton = document.querySelector(
   '#approve-button',
 ) as HTMLButtonElement;
-const rejectButton = document.querySelector('#reject-button') as HTMLButtonElement;
+const rejectButton = document.querySelector(
+  '#reject-button',
+) as HTMLButtonElement;
 const cancelReviewButton = document.querySelector(
   '#cancel-review-button',
 ) as HTMLButtonElement;
@@ -535,13 +616,15 @@ async function generate(changeSummary?: string, designNotes?: string) {
     }
     await generateImage(finalPrompt);
 
-    statusEl.innerText = 'Running Studio Analysis...';
-    const analysis = await getStudioAnalysis(
-      finalPrompt,
-      marketSelectEl.value,
-      !!uploadedLogo,
-    );
-    renderStudioAnalysis(analysis);
+    statusEl.innerText = 'Running Studio & Social Analysis...';
+    const market = marketSelectEl.value;
+    const [studioAnalysis, socialBuzzAnalysis] = await Promise.all([
+      getStudioAnalysis(finalPrompt, market, !!uploadedLogo),
+      getSocialBuzzAnalysis(finalPrompt, market),
+    ]);
+
+    renderStudioAnalysis(studioAnalysis);
+    renderSocialBuzzAnalysis(socialBuzzAnalysis);
     studioContainerEl.style.display = 'block';
 
     const newDesign: DesignRecord = {
@@ -549,7 +632,8 @@ async function generate(changeSummary?: string, designNotes?: string) {
       timestamp: new Date(),
       imageDataUrl: imageEl.src,
       finalPrompt,
-      studioAnalysis: analysis,
+      studioAnalysis,
+      socialBuzzAnalysis,
       market: marketSelectEl.value,
       logo: uploadedLogo ? logoFilename.textContent : null,
       parentId,
@@ -648,28 +732,89 @@ function renderStudioAnalysis(analysis: StudioAnalysis) {
   }
 
   // Set default tab
-  studioTabs.forEach(t => t.classList.remove('active'));
-  document.querySelector('.tab-button[data-tab="dna"]')?.classList.add('active');
-  document.querySelectorAll('.tab-content').forEach(c => (c as HTMLElement).style.display = 'none');
+  studioTabs.forEach((t) => t.classList.remove('active'));
+  document
+    .querySelector('.tab-button[data-tab="dna"]')
+    ?.classList.add('active');
+  document
+    .querySelectorAll('.tab-content')
+    .forEach((c) => ((c as HTMLElement).style.display = 'none'));
   document.querySelector('#tab-dna')!.setAttribute('style', 'display: grid');
-
 }
 
-studioTabs.forEach((tab) => {
-    tab.addEventListener('click', () => {
-        const tabName = tab.getAttribute('data-tab');
-        studioTabs.forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
+function renderSocialBuzzAnalysis(analysis: SocialBuzzAnalysis) {
+  const sentimentClass = analysis.overallSentiment.toLowerCase();
+  buzzSentimentEl.className = `sentiment-badge sentiment-${sentimentClass}`;
+  buzzSentimentEl.textContent = analysis.overallSentiment;
+  buzzSentimentAnalysisEl.textContent = analysis.sentimentAnalysis;
 
-        document.querySelectorAll('.tab-content').forEach(content => {
-            const contentEl = content as HTMLElement;
-            if (content.id === `tab-${tabName}`) {
-                contentEl.style.display = contentEl.id === 'tab-dna' ? 'grid' : 'block';
-            } else {
-                contentEl.style.display = 'none';
-            }
-        });
+  buzzInfluencersEl.innerHTML = analysis.keyInfluencers
+    .map(
+      (inf) => `
+    <div class="influencer-card">
+      <strong class="influencer-name">${inf.name}</strong>
+      <span class="influencer-platform">${inf.platform}</span>
+      <p class="influencer-reason">${inf.reason}</p>
+    </div>
+  `,
+    )
+    .join('');
+
+  buzzContentIdeasEl.innerHTML = analysis.viralContentIdeas
+    .map((idea) => `<li>${idea}</li>`)
+    .join('');
+
+  buzzHashtagsEl.innerHTML = analysis.relevantHashtags
+    .map((tag) => `<span class="keyword-pill hashtag">${tag}</span>`)
+    .join('');
+}
+
+
+studioTabs.forEach((tab) => {
+  tab.addEventListener('click', () => {
+    const tabName = tab.getAttribute('data-tab');
+    studioTabs.forEach((t) => t.classList.remove('active'));
+    tab.classList.add('active');
+
+    let allSources: GroundingChunk[] = [];
+    if (activeDesign) {
+      allSources = [
+        ...(activeDesign.studioAnalysis.sources || []),
+        ...(activeDesign.socialBuzzAnalysis.sources || []),
+      ];
+    }
+    
+    // De-duplicate sources
+    const uniqueSources = Array.from(new Map(allSources.map(item => [item.web.uri, item])).values());
+
+
+    if (uniqueSources.length > 0) {
+      studioSourcesEl.innerHTML = `
+              <h4>Sources (via Google Search):</h4>
+              <ul>
+                  ${uniqueSources
+                    .map(
+                      (source) =>
+                        `<li><a href="${source.web.uri}" target="_blank" rel="noopener noreferrer">${source.web.title}</a></li>`,
+                    )
+                    .join('')}
+              </ul>
+          `;
+    } else {
+      studioSourcesEl.innerHTML = '';
+    }
+
+
+    document.querySelectorAll('.tab-content').forEach((content) => {
+      const contentEl = content as HTMLElement;
+      if (content.id === `tab-${tabName}`) {
+        contentEl.style.display =
+          contentEl.id === 'tab-dna' ? 'grid' : 'block';
+      } else {
+        contentEl.style.display = 'none';
+      }
     });
+  });
 });
 
 function refreshAllViews() {
@@ -819,6 +964,7 @@ function viewHistoryItem(id: string) {
   promptEl.value = record.finalPrompt;
 
   renderStudioAnalysis(record.studioAnalysis);
+  renderSocialBuzzAnalysis(record.socialBuzzAnalysis);
   studioContainerEl.style.display = 'block';
 
   if (record.changeSummary) {

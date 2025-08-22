@@ -26,7 +26,10 @@ This application allows you to generate high-quality, realistic images from text
         -   **Search Engine Optimization (SEO) Rate:** A key metric that scores your product's SEO potential out of 100 for your target market.
         -   **Targeted Keywords:** High-impact keywords for SEO & SEM.
         -   **Ad Copy & Meta Descriptions:** Ready-to-use copy for your campaigns and product pages.
-        -   **Social Media Prompts:** Engaging, region-specific prompts to kickstart your social campaigns.
+    -   **Social Media Buzz:** A real-time analysis of the social media landscape for your product.
+        -   **Live Sentiment Analysis:** Assesses the current public mood towards similar products.
+        -   **Key Influencer Identification:** Finds relevant influencers and content creators for your brand.
+        -   **Viral Content Ideas:** Suggests actionable social media campaign ideas and relevant hashtags.
 -   **Design Review & Approval Workflow:** Manage design iterations with a workflow inspired by code reviews.
     -   **Iterate on Designs:** Submit new design variations for review with descriptive summaries.
     -   **Review & Approve:** Each proposal can be reviewed, commented on, and then either "Approved" to become the new baseline or "Rejected".
