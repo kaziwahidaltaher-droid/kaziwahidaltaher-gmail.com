@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOOMINARY - তোর বন্ধু তানিমের অ্যাপ</title>
+    <link rel="stylesheet" href="index.css">
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/genai": "https://esm.sh/@google/genai@^1.4.0"
+        }
+      }
+    </script>
+</head>
+<body>
+    <main class="container" id="main-container">
+        <header class="header">
+            <h1>LOOMINARY</h1>
+            <h2>তোর বন্ধু তানিমের অ্যাপ</h2>
+            <p>Bring your ideas to life with AI-generated images.</p>
+        </header>
+
+        <div class="card">
+            <label for="prompt-input">Prompt</label>
+            <textarea id="prompt-input" rows="10" placeholder="Describe the image you want to create..." spellcheck="true"></textarea>
+            <div class="prompt-guide">
+                <strong>Pro Tip:</strong> For best results, be descriptive! Include details like style (e.g., photorealistic, cartoon), colors, lighting, and composition.
+            </div>
+            
+            <div class="input-row">
+                <div class="upload-section">
+                    <label for="logo-upload-input">Upload Image (Optional)</label>
+                    <div class="upload-controls">
+                        <label for="logo-upload-input" class="button-like-label">Choose File</label>
+                        <input type="file" id="logo-upload-input" accept="image/png, image/jpeg" hidden>
+                        <div id="logo-preview-container">
+                            <img id="logo-preview" src="" alt="Logo preview"/>
+                            <span id="logo-filename"></span>
+                            <button id="remove-logo-button" aria-label="Remove logo">&times;</button>
+                        </div>
+                    </div>
+                    <p class="upload-note">Use `[LOGO]` in your prompt to place the logo.</p>
+                </div>
+                <div class="market-select-section">
+                    <label for="market-select">Target Market</label>
+                    <select id="market-select">
+                        <option value="Bangladesh">Bangladesh</option>
+                        <option value="USA">USA</option>
+                        <option value="UK">UK</option>
+                        <option value="India">India</option>
+                        <option value="Nigeria">Nigeria</option>
+                    </select>
+                </div>
+            </div>
+
+            <button id="generate-button">Generate & Analyze</button>
+
+            <div id="quota-error">
+                <p>You are out of quota. Please <button id="open-key">get a new API key</button> to continue.</p>
+            </div>
+        </div>
+        
+        <div class="card result-card">
+            <h2>AI-Powered Design & Analysis</h2>
+            <div id="status"></div>
+            <div class="image-container">
+                <img id="generated-image" alt="Generated image">
+                <div class="loader" id="loader"></div>
+            </div>
+
+            <div class="specs-section" id="specs-container">
+                <h3>Product Specifications</h3>
+                <ul id="specs-list"></ul>
+            </div>
+
+            <div class="analysis-section" id="analysis-container">
+                 <div class="sub-card" id="market-snapshot-container">
+                    <h3>Market Snapshot</h3>
+                    <p id="market-snapshot-content"></p>
+                </div>
+                <div class="sub-card" id="pricing-strategy-container">
+                    <h3>Pricing Strategy</h3>
+                    <p id="pricing-strategy-content"></p>
+                </div>
+                <div class="sub-card" id="logistics-container">
+                    <h3>Logistics Overview</h3>
+                    <p id="logistics-content"></p>
+                </div>
+                <div class="sub-card" id="marketing-angles-container">
+                    <h3>Marketing Angles</h3>
+                    <ul id="marketing-angles-list"></ul>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script type="module" src="index.tsx"></script>
+</body>
+</html>
