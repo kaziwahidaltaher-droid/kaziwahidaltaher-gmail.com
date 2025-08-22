@@ -9,58 +9,36 @@ import { GenerateImagesParameters, GoogleGenAI, Type } from '@google/genai';
 const GEMINI_API_KEY = process.env.API_KEY;
 const GEMINI_MODEL = 'gemini-2.5-flash';
 const IMAGEN_MODEL = 'imagen-3.0-generate-002';
+const DB_KEY = 'LOOMINAR_DESIGNS_DB';
 
-// --- MOCK DATABASE & API LAYER ---
-// This simulates a backend database. In a real application, these functions
-// would make `fetch` calls to a server-side API.
-const MOCK_DB = {
-  designs: [] as DesignRecord[],
-};
-
-// Simulate network latency
+// --- LOCAL STORAGE DATABASE & API LAYER ---
+// This simulates a backend database using the browser's localStorage.
 const FAKE_LATENCY = 300;
 
 async function fetchDesignsFromDB(): Promise<DesignRecord[]> {
-  console.log('API: Fetching all designs...');
   return new Promise((resolve) => {
     setTimeout(() => {
-      // Deserialize dates which would be strings from a real API
-      const designs = MOCK_DB.designs.map((d) => ({
+      const dbString = localStorage.getItem(DB_KEY);
+      const designs = dbString ? JSON.parse(dbString) : [];
+      // Deserialize dates which are strings from storage
+      const parsedDesigns = designs.map((d: any) => ({
         ...d,
         timestamp: new Date(d.timestamp),
       }));
-      resolve(designs);
+      resolve(parsedDesigns);
     }, FAKE_LATENCY);
   });
 }
 
-async function saveDesignInDB(design: DesignRecord): Promise<DesignRecord> {
-  console.log('API: Saving new design...', design.id);
+async function saveDesignsToDB(designs: DesignRecord[]): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(() => {
-      MOCK_DB.designs.unshift(design);
-      resolve(design);
+      localStorage.setItem(DB_KEY, JSON.stringify(designs));
+      resolve();
     }, FAKE_LATENCY);
   });
 }
-
-async function updateDesignInDB(
-  id: string,
-  updates: Partial<DesignRecord>,
-): Promise<DesignRecord> {
-  console.log('API: Updating design...', id, updates);
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      const index = MOCK_DB.designs.findIndex((d) => d.id === id);
-      if (index === -1) {
-        return reject(new Error(`Design with id ${id} not found`));
-      }
-      MOCK_DB.designs[index] = { ...MOCK_DB.designs[index], ...updates };
-      resolve(MOCK_DB.designs[index]);
-    }, FAKE_LATENCY);
-  });
-}
-// --- END MOCK DATABASE & API LAYER ---
+// --- END DATABASE LAYER ---
 
 // Global state for the uploaded logo
 let uploadedLogo: { base64: string; mimeType: string } | null = null;
@@ -117,6 +95,24 @@ interface StudioAnalysis {
     metaDescription: string;
     socialPrompts: string[];
   };
+  ecommerce: {
+    productTitle: string;
+    productDescription: string;
+    sku: string;
+    gtinInfo: string;
+    googleProductCategory: string;
+  };
+  manufacturing: {
+    manufacturers: Array<{
+      name: string;
+      specialty: string;
+      location: string;
+      website: string;
+      contact: string;
+    }>;
+    similarProducts: string[];
+    b2bKeywords: string[];
+  };
   sources: GroundingChunk[];
 }
 
@@ -145,6 +141,43 @@ interface DesignRecord {
   reviewComments?: string;
 }
 
+/**
+ * A helper function to safely create and append elements.
+ * Avoids the use of `innerHTML` to prevent XSS vulnerabilities.
+ */
+function createAndAppend(
+  parent: HTMLElement,
+  tag: string,
+  options: {
+    className?: string;
+    textContent?: string;
+    properties?: Record<string, any>;
+    attributes?: Record<string, string>;
+    listeners?: Record<string, (e: Event) => void>;
+  } = {},
+): HTMLElement {
+  const el = document.createElement(tag);
+  if (options.className) el.className = options.className;
+  if (options.textContent) el.textContent = options.textContent;
+  if (options.properties) {
+    for (const key in options.properties) {
+      (el as any)[key] = options.properties[key];
+    }
+  }
+  if (options.attributes) {
+    for (const key in options.attributes) {
+      el.setAttribute(key, options.attributes[key]);
+    }
+  }
+  if (options.listeners) {
+    for (const key in options.listeners) {
+      el.addEventListener(key, options.listeners[key]);
+    }
+  }
+  parent.appendChild(el);
+  return el;
+}
+
 async function getImageDescription(logo: {
   base64: string;
   mimeType: string;
@@ -166,7 +199,7 @@ async function getImageDescription(logo: {
   return response.text.trim();
 }
 
-async function generateImage(prompt: string) {
+async function generateImage(prompt: string): Promise<string> {
   const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
   const config: GenerateImagesParameters = {
@@ -186,10 +219,7 @@ async function generateImage(prompt: string) {
   }
 
   const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
-  const imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
-
-  imageEl.src = imageUrl;
-  imageEl.style.display = 'block';
+  return `data:image/jpeg;base64,${base64ImageBytes}`;
 }
 
 async function getStudioAnalysis(
@@ -203,7 +233,7 @@ async function getStudioAnalysis(
     : 'No custom logo has been provided. The brand will use a text-based logo or a generic emblem.';
 
   const analysisPrompt = `
-    You are an expert-level Brand Strategist, Marketing Analyst, and SEO/SEM Specialist. Your task is to provide a comprehensive go-to-market analysis for a T-shirt design for the **${market}** market, based on its description. Use real-time Google Search data to inform your analysis.
+    You are an expert-level Brand Strategist, Marketing Analyst, E-commerce Merchandiser, and Sourcing Specialist. Your task is to provide a comprehensive, end-to-end go-to-market analysis for a T-shirt design for the **${market}** market, based on its description. Use real-time Google Search data to inform your analysis.
 
     **Product Description:**
     "${prompt}"
@@ -212,20 +242,42 @@ async function getStudioAnalysis(
     ${logoContext}
 
     **Your Task:**
-    Provide a complete analysis in the specified JSON format.
+    Provide a complete analysis in natural language, covering all the following points:
 
     1.  **Product DNA:** Analyze the product's core specs, and provide pricing and logistics insights for the target market.
     2.  **Branding & Identity:** Define a compelling brand identity. Create a brand archetype and describe the brand voice. Provide logo feedback based on the context.
     3.  **Region-Aware SEO & SEM:** Develop a digital marketing strategy for ${market}.
         *   **SEO Rate:** Provide a "Search Engine Optimization Rate" as a score out of 100, representing the product's potential to rank well in the ${market} market based on your keyword analysis. Briefly justify the score.
         *   Generate targeted SEO keywords, SEM ad copy, a meta description, and social media prompts.
+    4.  **E-commerce Listing:** Generate the essential data fields required to list this product on a platform like Google Merchant Center for the ${market} market.
+    5.  **Manufacturing & Sourcing:** Identify potential manufacturing partners and strategic B2B keywords for the ${market} market.
     `;
 
-  const response = await ai.models.generateContent({
+  // Step 1: Grounding call to gather real-time information
+  const groundingResponse = await ai.models.generateContent({
     model: GEMINI_MODEL,
     contents: analysisPrompt,
     config: {
       tools: [{ googleSearch: {} }],
+    },
+  });
+
+  const groundedText = groundingResponse.text;
+  const sources =
+    groundingResponse.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+
+  // Step 2: Structuring call to format the grounded information into JSON
+  const structuringPrompt = `
+    Based on the following analysis, your task is to structure the information precisely into the specified JSON format. Do not add any new information; only use what is provided in the text below.
+
+    **Provided Analysis:**
+    ${groundedText}
+    `;
+
+  const structuringResponse = await ai.models.generateContent({
+    model: GEMINI_MODEL,
+    contents: structuringPrompt,
+    config: {
       responseMimeType: 'application/json',
       responseSchema: {
         type: Type.OBJECT,
@@ -295,14 +347,48 @@ async function getStudioAnalysis(
               },
             },
           },
+          ecommerce: {
+            type: Type.OBJECT,
+            properties: {
+              productTitle: { type: Type.STRING },
+              productDescription: { type: Type.STRING },
+              sku: { type: Type.STRING },
+              gtinInfo: { type: Type.STRING },
+              googleProductCategory: { type: Type.STRING },
+            },
+          },
+          manufacturing: {
+            type: Type.OBJECT,
+            properties: {
+              manufacturers: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    specialty: { type: Type.STRING },
+                    location: { type: Type.STRING },
+                    website: { type: Type.STRING },
+                    contact: { type: Type.STRING },
+                  },
+                },
+              },
+              similarProducts: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+              b2bKeywords: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+            },
+          },
         },
       },
     },
   });
 
-  const analysis = JSON.parse(response.text);
-  const sources =
-    response.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+  const analysis = JSON.parse(structuringResponse.text);
   return { ...analysis, sources: sources as GroundingChunk[] };
 }
 
@@ -318,7 +404,7 @@ async function getSocialBuzzAnalysis(
     "${prompt}"
 
     **Your Task:**
-    Provide a complete social media analysis in the specified JSON format.
+    Provide a complete social media analysis in natural language, covering all the following points:
 
     1.  **Sentiment:** What is the current public sentiment towards similar products or styles? Provide an overall sentiment and a brief analysis.
     2.  **Influencers:** Identify 2-3 key influencers or content creator archetypes in the ${market} market who would be a good fit for this brand. Explain why.
@@ -326,11 +412,31 @@ async function getSocialBuzzAnalysis(
     4.  **Hashtags:** Provide a list of 5-7 relevant and trending hashtags.
   `;
 
-  const response = await ai.models.generateContent({
+  // Step 1: Grounding call to gather real-time information
+  const groundingResponse = await ai.models.generateContent({
     model: GEMINI_MODEL,
     contents: analysisPrompt,
     config: {
       tools: [{ googleSearch: {} }],
+    },
+  });
+
+  const groundedText = groundingResponse.text;
+  const sources =
+    groundingResponse.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+
+  // Step 2: Structuring call to format the grounded information into JSON
+  const structuringPrompt = `
+    Based on the following social media analysis, your task is to structure the information precisely into the specified JSON format. Only use the information provided below.
+
+    **Provided Analysis:**
+    ${groundedText}
+    `;
+
+  const structuringResponse = await ai.models.generateContent({
+    model: GEMINI_MODEL,
+    contents: structuringPrompt,
+    config: {
       responseMimeType: 'application/json',
       responseSchema: {
         type: Type.OBJECT,
@@ -361,16 +467,17 @@ async function getSocialBuzzAnalysis(
     },
   });
 
-  const analysis = JSON.parse(response.text);
-  const sources =
-    response.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+  const analysis = JSON.parse(structuringResponse.text);
   return { ...analysis, sources: sources as GroundingChunk[] };
 }
 
-const mainContainer = document.querySelector('#main-container') as HTMLElement;
+// --- DOM ELEMENT SELECTORS ---
+const sidebarEl = document.querySelector('.sidebar') as HTMLElement;
+const mainContentEl = document.querySelector('.main-content') as HTMLElement;
 const initialLoaderEl = document.querySelector(
   '#initial-loader',
 ) as HTMLDivElement;
+const appContainer = document.querySelector('.app-container') as HTMLElement;
 const promptEl = document.querySelector('#prompt-input') as HTMLTextAreaElement;
 promptEl.value = initialPrompt;
 
@@ -383,39 +490,106 @@ const marketSelectEl = document.querySelector(
   '#market-select',
 ) as HTMLSelectElement;
 
+// Main Stage Welcome Screen
+const welcomeScreenEl = document.querySelector(
+  '#welcome-screen',
+) as HTMLDivElement;
+const resultDisplayEl = document.querySelector(
+  '#result-display',
+) as HTMLDivElement;
+
 // Studio Elements
 const studioContainerEl = document.querySelector(
   '#studio-container',
 ) as HTMLDivElement;
-const studioTabs = document.querySelectorAll('.tab-button');
+const studioTabsContainer = document.querySelector(
+  '.tab-nav',
+) as HTMLDivElement;
 
 // Product DNA Tab
-const dnaSpecsListEl = document.querySelector('#dna-specs-list') as HTMLUListElement;
-const dnaPricingContentEl = document.querySelector('#dna-pricing-content') as HTMLParagraphElement;
-const dnaLogisticsContentEl = document.querySelector('#dna-logistics-content') as HTMLParagraphElement;
+const dnaSpecsListEl = document.querySelector(
+  '#dna-specs-list',
+) as HTMLUListElement;
+const dnaPricingContentEl = document.querySelector(
+  '#dna-pricing-content',
+) as HTMLDivElement;
+const dnaLogisticsContentEl = document.querySelector(
+  '#dna-logistics-content',
+) as HTMLDivElement;
 
 // Branding Tab
-const brandingArchetypeEl = document.querySelector('#branding-archetype') as HTMLElement;
-const brandingVoiceEl = document.querySelector('#branding-voice') as HTMLElement;
-const brandingLogoFeedbackEl = document.querySelector('#branding-logo-feedback') as HTMLElement;
+const brandingArchetypeEl = document.querySelector(
+  '#branding-archetype',
+) as HTMLElement;
+const brandingVoiceEl = document.querySelector(
+  '#branding-voice',
+) as HTMLElement;
+const brandingLogoFeedbackEl = document.querySelector(
+  '#branding-logo-feedback',
+) as HTMLElement;
 
 // SEO/SEM Tab
-const seoRateScoreEl = document.querySelector('#seo-rate-score') as HTMLSpanElement;
-const seoRateAnalysisEl = document.querySelector('#seo-rate-analysis') as HTMLParagraphElement;
+const seoRateCircle = document.querySelector(
+  '#seo-rate-circle',
+) as SVGCircleElement;
+const seoRateScoreEl = document.querySelector(
+  '#seo-rate-score',
+) as HTMLSpanElement;
+const seoRateAnalysisEl = document.querySelector(
+  '#seo-rate-analysis',
+) as HTMLParagraphElement;
 const seoKeywordsEl = document.querySelector('#seo-keywords') as HTMLDivElement;
-const semAdHeadlineEl = document.querySelector('#sem-ad-headline') as HTMLElement;
-const semAdDescriptionEl = document.querySelector('#sem-ad-description') as HTMLElement;
-const seoMetaDescriptionEl = document.querySelector('#seo-meta-description') as HTMLElement;
-const seoSocialPromptsEl = document.querySelector('#seo-social-prompts') as HTMLUListElement;
+const semAdHeadlineEl = document.querySelector(
+  '#sem-ad-headline',
+) as HTMLElement;
+const semAdDescriptionEl = document.querySelector(
+  '#sem-ad-description',
+) as HTMLElement;
+const seoMetaDescriptionEl = document.querySelector(
+  '#seo-meta-description',
+) as HTMLElement;
+const seoSocialPromptsEl = document.querySelector(
+  '#seo-social-prompts',
+) as HTMLUListElement;
+
+// E-commerce Tab
+const ecomTitleEl = document.querySelector('#ecom-title') as HTMLElement;
+const ecomDescriptionEl = document.querySelector(
+  '#ecom-description',
+) as HTMLElement;
+const ecomSkuEl = document.querySelector('#ecom-sku') as HTMLElement;
+const ecomGtinEl = document.querySelector('#ecom-gtin') as HTMLElement;
+const ecomCategoryEl = document.querySelector('#ecom-category') as HTMLElement;
+
+// Manufacturing Tab
+const manManufacturersEl = document.querySelector(
+  '#man-manufacturers',
+) as HTMLDivElement;
+const manSimilarProductsEl = document.querySelector(
+  '#man-similar-products',
+) as HTMLUListElement;
+const manB2bKeywordsEl = document.querySelector(
+  '#man-b2b-keywords',
+) as HTMLDivElement;
 
 // Social Buzz Tab
-const buzzSentimentEl = document.querySelector('#buzz-sentiment') as HTMLSpanElement;
-const buzzSentimentAnalysisEl = document.querySelector('#buzz-sentiment-analysis') as HTMLParagraphElement;
-const buzzInfluencersEl = document.querySelector('#buzz-influencers') as HTMLDivElement;
-const buzzContentIdeasEl = document.querySelector('#buzz-content-ideas') as HTMLUListElement;
+const buzzSentimentEl = document.querySelector(
+  '#buzz-sentiment',
+) as HTMLSpanElement;
+const buzzSentimentAnalysisEl = document.querySelector(
+  '#buzz-sentiment-analysis',
+) as HTMLParagraphElement;
+const buzzInfluencersEl = document.querySelector(
+  '#buzz-influencers',
+) as HTMLDivElement;
+const buzzContentIdeasEl = document.querySelector(
+  '#buzz-content-ideas',
+) as HTMLUListElement;
 const buzzHashtagsEl = document.querySelector('#buzz-hashtags') as HTMLDivElement;
 
-const studioSourcesEl = document.querySelector('#studio-sources') as HTMLDivElement;
+const studioSourcesEl = document.querySelector(
+  '#studio-sources',
+) as HTMLDivElement;
 
 // File upload DOM Elements
 const logoUploadInput = document.querySelector(
@@ -431,14 +605,18 @@ const removeLogoButton = document.querySelector(
 ) as HTMLButtonElement;
 
 // History Elements
-const historyCardEl = document.querySelector('#history-card') as HTMLDivElement;
 const historyListEl = document.querySelector(
   '#history-list',
 ) as HTMLUListElement;
+const historyEmptyStateEl = document.querySelector(
+  '#history-empty-state',
+) as HTMLDivElement;
 
 // Store Elements
-const storeCardEl = document.querySelector('#store-card') as HTMLDivElement;
 const storeGridEl = document.querySelector('#store-grid') as HTMLDivElement;
+const storeEmptyStateEl = document.querySelector(
+  '#store-empty-state',
+) as HTMLDivElement;
 
 // Proposal Modal Elements
 const proposalModalEl = document.querySelector(
@@ -462,7 +640,9 @@ const reviewModalEl = document.querySelector('#review-modal') as HTMLDivElement;
 const reviewSummaryEl = document.querySelector(
   '#review-summary',
 ) as HTMLSpanElement;
-const reviewNotesEl = document.querySelector('#review-notes') as HTMLSpanElement;
+const reviewNotesEl = document.querySelector(
+  '#review-notes',
+) as HTMLSpanElement;
 const reviewCommentsInput = document.querySelector(
   '#review-comments',
 ) as HTMLTextAreaElement;
@@ -499,6 +679,36 @@ const designDetailsReviewWrapperEl = document.querySelector(
   '#design-details-review-wrapper',
 ) as HTMLDivElement;
 
+// --- MULTIMODAL FEATURE ELEMENTS ---
+// Voice Input
+const micButton = document.querySelector('#mic-button') as HTMLButtonElement;
+
+// Camera
+const cameraButton = document.querySelector(
+  '#camera-button',
+) as HTMLButtonElement;
+const cameraModalEl = document.querySelector(
+  '#camera-modal',
+) as HTMLDivElement;
+const cameraVideoEl = document.querySelector(
+  '#camera-video',
+) as HTMLVideoElement;
+const captureButton = document.querySelector(
+  '#capture-button',
+) as HTMLButtonElement;
+const cancelCameraButton = document.querySelector(
+  '#cancel-camera-button',
+) as HTMLButtonElement;
+const cameraLoaderEl = document.querySelector(
+  '#camera-loader',
+) as HTMLDivElement;
+const paletteContainerEl = document.querySelector(
+  '#palette-container',
+) as HTMLDivElement;
+let cameraStream: MediaStream | null = null;
+
+// --- EVENT LISTENERS ---
+
 openKeyEl.addEventListener('click', async (e) => {
   await window.aistudio?.openSelectKey();
 });
@@ -507,21 +717,20 @@ const generateButton = document.querySelector(
   '#generate-button',
 ) as HTMLButtonElement;
 
-function setLoadingState(isLoading: boolean) {
-  generateButton.disabled = isLoading;
-  promptEl.disabled = isLoading;
-  logoUploadInput.disabled = isLoading;
-  removeLogoButton.disabled = isLoading;
-  marketSelectEl.disabled = isLoading;
+function setUiLock(isLocked: boolean) {
+  generateButton.disabled = isLocked;
+  promptEl.disabled = isLocked;
+  logoUploadInput.disabled = isLocked;
+  removeLogoButton.disabled = isLocked;
+  marketSelectEl.disabled = isLocked;
+  sidebarEl.classList.toggle('is-locked', isLocked);
 
-  if (isLoading) {
+  if (isLocked) {
     generateButton.classList.add('is-loading');
-    loaderEl.style.display = 'block';
-    mainContainer.setAttribute('aria-busy', 'true');
+    appContainer.setAttribute('aria-busy', 'true');
   } else {
     generateButton.classList.remove('is-loading');
-    loaderEl.style.display = 'none';
-    mainContainer.setAttribute('aria-busy', 'false');
+    appContainer.setAttribute('aria-busy', 'false');
   }
 }
 
@@ -581,56 +790,63 @@ removeLogoButton.addEventListener('click', () => {
   logoFilename.textContent = '';
 });
 
+// --- CORE GENERATION LOGIC ---
+
 async function generate(changeSummary?: string, designNotes?: string) {
   let prompt = promptEl.value;
   if (!prompt) {
-    statusEl.innerText = 'Error: Prompt cannot be empty.';
+    updateStatus('Error: Prompt cannot be empty.', 'error');
     return;
   }
 
   if (uploadedLogo && !prompt.includes('[LOGO]')) {
-    statusEl.innerText =
-      'Error: Please use the [LOGO] placeholder in your prompt when uploading an image.';
+    updateStatus(
+      'Error: Please use the [LOGO] placeholder in your prompt when uploading an image.',
+      'error',
+    );
     return;
   }
 
   const parentId = activeDesign ? activeDesign.id : null;
-  const status = parentId ? 'Proposed' : 'Approved';
 
-  statusEl.innerText = 'Starting process...';
+  updateStatus('Starting process...', 'loading');
+  setUiLock(true);
+  welcomeScreenEl.style.display = 'none';
+  resultDisplayEl.style.display = 'block';
   imageEl.style.display = 'none';
+  loaderEl.style.display = 'block';
   studioContainerEl.style.display = 'none';
   designDetailsContainerEl.style.display = 'none';
   quotaErrorEl.style.display = 'none';
-  setLoadingState(true);
 
   try {
     let finalPrompt = prompt;
     if (uploadedLogo && prompt.includes('[LOGO]')) {
-      statusEl.innerText = 'Analyzing uploaded image...';
+      updateStatus('Analyzing uploaded image...', 'loading');
       const logoDescription = await getImageDescription(uploadedLogo);
       finalPrompt = prompt.replace(/\[LOGO\]/g, `(${logoDescription})`);
-      statusEl.innerText = 'Generating image with custom logo...';
-    } else {
-      statusEl.innerText = 'Generating your image...';
     }
-    await generateImage(finalPrompt);
 
-    statusEl.innerText = 'Running Studio & Social Analysis...';
+    updateStatus('Bringing your vision to life... 🎨', 'loading');
+    const imageUrl = await generateImage(finalPrompt);
+    imageEl.src = imageUrl;
+    imageEl.style.display = 'block';
+    loaderEl.style.display = 'none';
+
+    updateStatus(
+      'Running Market & Social Analysis... 📈',
+      'loading',
+    );
     const market = marketSelectEl.value;
     const [studioAnalysis, socialBuzzAnalysis] = await Promise.all([
       getStudioAnalysis(finalPrompt, market, !!uploadedLogo),
       getSocialBuzzAnalysis(finalPrompt, market),
     ]);
 
-    renderStudioAnalysis(studioAnalysis);
-    renderSocialBuzzAnalysis(socialBuzzAnalysis);
-    studioContainerEl.style.display = 'block';
-
     const newDesign: DesignRecord = {
       id: `LMNR-${Date.now()}`,
       timestamp: new Date(),
-      imageDataUrl: imageEl.src,
+      imageDataUrl: imageUrl,
       finalPrompt,
       studioAnalysis,
       socialBuzzAnalysis,
@@ -639,181 +855,298 @@ async function generate(changeSummary?: string, designNotes?: string) {
       parentId,
       changeSummary,
       designNotes,
-      status: status as 'Proposed' | 'Approved',
+      status: parentId ? 'Proposed' : 'Approved',
     };
 
-    statusEl.innerText = 'Saving design...';
-    const savedDesign = await saveDesignInDB(newDesign);
-    allDesigns.unshift(savedDesign); // Update local state
+    updateStatus('Saving design...', 'loading');
+    allDesigns.unshift(newDesign);
+    await saveDesignsToDB(allDesigns);
 
-    activeDesign = savedDesign;
+    activeDesign = newDesign;
     refreshAllViews();
-
-    statusEl.innerText = 'Done!';
     viewHistoryItem(activeDesign.id);
-  } catch (e) {
+    updateStatus('Success! Your new design is ready. 🚀', 'success');
+  } catch (e: any) {
     console.error('An error occurred during generation:', e);
     let errorMessage = `An unexpected error occurred: ${e.message}`;
     // Attempt to parse a more specific Google AI error
     try {
-      const err = JSON.parse(e.message);
-      if (err.error?.message) {
-        errorMessage = `API Error: ${err.error.message}`;
-      }
-      if (err.error?.code === 429) {
-        quotaErrorEl.style.display = 'block';
-        errorMessage = 'You have exceeded your API quota.';
+      if (typeof e.message === 'string' && e.message.startsWith('{')) {
+        const err = JSON.parse(e.message);
+        if (err.error?.message) {
+            errorMessage = `API Error: ${err.error.message}`;
+        }
+        if (err.error?.code === 429) {
+            quotaErrorEl.style.display = 'block';
+            errorMessage = 'You have exceeded your API quota.';
+        }
       }
     } catch (parseError) {
       // Not a JSON error, use the original message
     }
-    statusEl.innerText = errorMessage;
+    updateStatus(errorMessage, 'error');
+    loaderEl.style.display = 'none';
   } finally {
-    setLoadingState(false);
+    setUiLock(false);
     updateGenerateButtonState();
   }
 }
 
+// --- RENDERING FUNCTIONS ---
+
+function updateStatus(
+  message: string,
+  type: 'loading' | 'success' | 'error' | 'info',
+) {
+  statusEl.textContent = message;
+  statusEl.className = `status-message status-${type}`;
+}
+
+function addSpeakListeners(container: HTMLElement) {
+  container.querySelectorAll('.info-block').forEach((block) => {
+    const title = block.querySelector('h3');
+    const content = block.querySelector('p, ul, div, span');
+    if (title && content) {
+      createAndAppend(title, 'button', {
+        className: 'speak-button',
+        attributes: { 'aria-label': 'Read content aloud' },
+        listeners: {
+          click: (e) => {
+            e.stopPropagation();
+            speak(content.textContent || '');
+          },
+        },
+      });
+    }
+  });
+}
+
 function renderStudioAnalysis(analysis: StudioAnalysis) {
-  // Product DNA
-  const specs = analysis.productDNA.specs;
-  dnaSpecsListEl.innerHTML = `
-      <li><strong>Fabric Type:</strong> ${specs.fabricType}</li>
-      <li><strong>Fabric Weight:</strong> ${specs.fabricWeightGsm} GSM</li>
-      <li><strong>Stitching:</strong> ${specs.stitchingDetails}</li>
-      <li><strong>Printing:</strong> ${specs.printingMethod}</li>
-      <li><strong>Logo:</strong> ${specs.logoComplexity}</li>
-  `;
-  dnaPricingContentEl.innerHTML = `
-    ${analysis.productDNA.pricing.analysis}
-    <br><br>
-    <strong>${analysis.productDNA.pricing.estimatedPrice}</strong>
-  `;
-  dnaLogisticsContentEl.innerHTML = `
-    ${analysis.productDNA.logistics.analysis}
-    <br><br>
-    <strong>${analysis.productDNA.logistics.estimatedCost}</strong>
-  `;
+  const { productDNA, branding, seoSem, ecommerce, manufacturing } = analysis;
 
-  // Branding
-  brandingArchetypeEl.textContent = analysis.branding.brandArchetype;
-  brandingVoiceEl.textContent = analysis.branding.brandVoice;
-  brandingLogoFeedbackEl.textContent = analysis.branding.logoFeedback;
+  // --- Clear previous content safely ---
+  const elementsToClear = [
+    dnaSpecsListEl,
+    dnaPricingContentEl,
+    dnaLogisticsContentEl,
+    seoKeywordsEl,
+    seoSocialPromptsEl,
+    ecomDescriptionEl,
+    manManufacturersEl,
+    manSimilarProductsEl,
+    manB2bKeywordsEl,
+  ];
+  elementsToClear.forEach((el) => {
+    while (el.firstChild) el.removeChild(el.firstChild);
+  });
 
-  // SEO/SEM
-  const { seoSem } = analysis;
+  // --- Product DNA ---
+  const specs: Record<string, string | number> = {
+    'Fabric Type': productDNA.specs.fabricType,
+    'Fabric Weight': `${productDNA.specs.fabricWeightGsm} GSM`,
+    Stitching: productDNA.specs.stitchingDetails,
+    Printing: productDNA.specs.printingMethod,
+    Logo: productDNA.specs.logoComplexity,
+  };
+  for (const [key, value] of Object.entries(specs)) {
+    const li = createAndAppend(dnaSpecsListEl, 'li');
+    createAndAppend(li, 'strong', { textContent: `${key}:` });
+    li.append(` ${value}`);
+  }
+  createAndAppend(dnaPricingContentEl, 'p', {
+    textContent: productDNA.pricing.analysis,
+  });
+  createAndAppend(dnaPricingContentEl, 'strong', {
+    textContent: productDNA.pricing.estimatedPrice,
+  });
+  createAndAppend(dnaLogisticsContentEl, 'p', {
+    textContent: productDNA.logistics.analysis,
+  });
+  createAndAppend(dnaLogisticsContentEl, 'strong', {
+    textContent: productDNA.logistics.estimatedCost,
+  });
+
+  // --- Branding ---
+  brandingArchetypeEl.textContent = branding.brandArchetype;
+  brandingVoiceEl.textContent = branding.brandVoice;
+  brandingLogoFeedbackEl.textContent = branding.logoFeedback;
+
+  // --- SEO/SEM ---
   seoRateScoreEl.textContent = seoSem.seoRate.score.toString();
   seoRateAnalysisEl.textContent = seoSem.seoRate.analysis;
+  const circumference = 2 * Math.PI * 45; // r = 45
+  const offset = circumference - (seoSem.seoRate.score / 100) * circumference;
+  seoRateCircle.style.strokeDashoffset = offset.toString();
+  seoRateCircle.style.stroke =
+    seoSem.seoRate.score > 75
+      ? '#28a745'
+      : seoSem.seoRate.score > 40
+      ? '#ffc107'
+      : '#dc3545';
 
-  seoKeywordsEl.innerHTML = seoSem.targetKeywords
-    .map((kw) => `<span class="keyword-pill">${kw}</span>`)
-    .join('');
+  seoSem.targetKeywords.forEach((kw) => {
+    createAndAppend(seoKeywordsEl, 'span', {
+      className: 'keyword-pill',
+      textContent: kw,
+    });
+  });
   semAdHeadlineEl.textContent = seoSem.semAd.headline;
   semAdDescriptionEl.textContent = seoSem.semAd.description;
   seoMetaDescriptionEl.textContent = seoSem.metaDescription;
-  seoSocialPromptsEl.innerHTML = seoSem.socialPrompts
-    .map((p) => `<li>${p}</li>`)
-    .join('');
+  seoSem.socialPrompts.forEach((p) => {
+    createAndAppend(seoSocialPromptsEl, 'li', { textContent: p });
+  });
 
-  if (analysis.sources.length > 0) {
-    studioSourcesEl.innerHTML = `
-              <h4>Sources (via Google Search):</h4>
-              <ul>
-                  ${analysis.sources
-                    .map(
-                      (source) =>
-                        `<li><a href="${source.web.uri}" target="_blank" rel="noopener noreferrer">${source.web.title}</a></li>`,
-                    )
-                    .join('')}
-              </ul>
-          `;
-  } else {
-    studioSourcesEl.innerHTML = '';
-  }
+  // --- E-commerce ---
+  ecomTitleEl.textContent = ecommerce.productTitle;
+  // Use pre-wrap for description
+  ecomDescriptionEl.textContent = ecommerce.productDescription;
+  ecomSkuEl.textContent = ecommerce.sku;
+  ecomGtinEl.textContent = ecommerce.gtinInfo;
+  ecomCategoryEl.textContent = ecommerce.googleProductCategory;
 
-  // Set default tab
-  studioTabs.forEach((t) => t.classList.remove('active'));
-  document
-    .querySelector('.tab-button[data-tab="dna"]')
-    ?.classList.add('active');
-  document
+  // --- Manufacturing ---
+  manufacturing.manufacturers.forEach((m) => {
+    const card = createAndAppend(manManufacturersEl, 'div', {
+      className: 'manufacturer-card',
+    });
+    createAndAppend(card, 'strong', { textContent: m.name });
+    createAndAppend(card, 'span', {
+      className: 'chip',
+      textContent: m.specialty,
+    });
+    createAndAppend(card, 'p', { textContent: m.location });
+    const links = createAndAppend(card, 'div', { className: 'card-links' });
+    createAndAppend(links, 'a', {
+      textContent: 'Website',
+      properties: { href: m.website, target: '_blank' },
+    });
+    createAndAppend(links, 'a', {
+      textContent: 'Contact',
+      properties: { href: `mailto:${m.contact}` },
+    });
+    createAndAppend(links, 'a', {
+      textContent: 'Map',
+      properties: {
+        href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          m.location,
+        )}`,
+        target: '_blank',
+      },
+    });
+  });
+  manufacturing.similarProducts.forEach((p) => {
+    createAndAppend(manSimilarProductsEl, 'li', { textContent: p });
+  });
+  manufacturing.b2bKeywords.forEach((kw) => {
+    createAndAppend(manB2bKeywordsEl, 'span', {
+      className: 'keyword-pill',
+      textContent: kw,
+    });
+  });
+
+  // Add speak listeners after rendering all blocks
+  studioContainerEl
     .querySelectorAll('.tab-content')
-    .forEach((c) => ((c as HTMLElement).style.display = 'none'));
-  document.querySelector('#tab-dna')!.setAttribute('style', 'display: grid');
+    .forEach((tab) => addSpeakListeners(tab as HTMLElement));
+
+  renderSources();
 }
 
 function renderSocialBuzzAnalysis(analysis: SocialBuzzAnalysis) {
+  // --- Clear previous content safely ---
+  const elementsToClear = [
+    buzzInfluencersEl,
+    buzzContentIdeasEl,
+    buzzHashtagsEl,
+  ];
+  elementsToClear.forEach((el) => {
+    while (el.firstChild) el.removeChild(el.firstChild);
+  });
+
   const sentimentClass = analysis.overallSentiment.toLowerCase();
   buzzSentimentEl.className = `sentiment-badge sentiment-${sentimentClass}`;
   buzzSentimentEl.textContent = analysis.overallSentiment;
   buzzSentimentAnalysisEl.textContent = analysis.sentimentAnalysis;
 
-  buzzInfluencersEl.innerHTML = analysis.keyInfluencers
-    .map(
-      (inf) => `
-    <div class="influencer-card">
-      <strong class="influencer-name">${inf.name}</strong>
-      <span class="influencer-platform">${inf.platform}</span>
-      <p class="influencer-reason">${inf.reason}</p>
-    </div>
-  `,
-    )
-    .join('');
+  analysis.keyInfluencers.forEach((inf) => {
+    const card = createAndAppend(buzzInfluencersEl, 'div', {
+      className: 'influencer-card',
+    });
+    createAndAppend(card, 'strong', {
+      className: 'influencer-name',
+      textContent: inf.name,
+    });
+    createAndAppend(card, 'span', {
+      className: 'chip',
+      textContent: inf.platform,
+    });
+    createAndAppend(card, 'p', {
+      className: 'influencer-reason',
+      textContent: inf.reason,
+    });
+  });
 
-  buzzContentIdeasEl.innerHTML = analysis.viralContentIdeas
-    .map((idea) => `<li>${idea}</li>`)
-    .join('');
+  analysis.viralContentIdeas.forEach((idea) => {
+    createAndAppend(buzzContentIdeasEl, 'li', { textContent: idea });
+  });
 
-  buzzHashtagsEl.innerHTML = analysis.relevantHashtags
-    .map((tag) => `<span class="keyword-pill hashtag">${tag}</span>`)
-    .join('');
+  analysis.relevantHashtags.forEach((tag) => {
+    createAndAppend(buzzHashtagsEl, 'span', {
+      className: 'keyword-pill hashtag',
+      textContent: tag,
+    });
+  });
 }
 
+function renderSources() {
+  while (studioSourcesEl.firstChild)
+    studioSourcesEl.removeChild(studioSourcesEl.firstChild);
+  if (!activeDesign) return;
 
-studioTabs.forEach((tab) => {
-  tab.addEventListener('click', () => {
-    const tabName = tab.getAttribute('data-tab');
-    studioTabs.forEach((t) => t.classList.remove('active'));
-    tab.classList.add('active');
+  const allSources = [
+    ...(activeDesign.studioAnalysis.sources || []),
+    ...(activeDesign.socialBuzzAnalysis.sources || []),
+  ];
 
-    let allSources: GroundingChunk[] = [];
-    if (activeDesign) {
-      allSources = [
-        ...(activeDesign.studioAnalysis.sources || []),
-        ...(activeDesign.socialBuzzAnalysis.sources || []),
-      ];
-    }
-    
-    // De-duplicate sources
-    const uniqueSources = Array.from(new Map(allSources.map(item => [item.web.uri, item])).values());
+  // De-duplicate sources based on URI
+  const uniqueSources = Array.from(
+    new Map(allSources.map((item) => [item.web.uri, item])).values(),
+  );
 
-
-    if (uniqueSources.length > 0) {
-      studioSourcesEl.innerHTML = `
-              <h4>Sources (via Google Search):</h4>
-              <ul>
-                  ${uniqueSources
-                    .map(
-                      (source) =>
-                        `<li><a href="${source.web.uri}" target="_blank" rel="noopener noreferrer">${source.web.title}</a></li>`,
-                    )
-                    .join('')}
-              </ul>
-          `;
-    } else {
-      studioSourcesEl.innerHTML = '';
-    }
-
-
-    document.querySelectorAll('.tab-content').forEach((content) => {
-      const contentEl = content as HTMLElement;
-      if (content.id === `tab-${tabName}`) {
-        contentEl.style.display =
-          contentEl.id === 'tab-dna' ? 'grid' : 'block';
-      } else {
-        contentEl.style.display = 'none';
-      }
+  if (uniqueSources.length > 0) {
+    createAndAppend(studioSourcesEl, 'h4', {
+      textContent: 'Sources (via Google Search):',
     });
+    const ul = createAndAppend(studioSourcesEl, 'ul');
+    uniqueSources.forEach((source) => {
+      const li = createAndAppend(ul, 'li');
+      createAndAppend(li, 'a', {
+        textContent: source.web.title,
+        properties: {
+          href: source.web.uri,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+        },
+      });
+    });
+  }
+}
+
+studioTabsContainer.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement;
+  const tabButton = target.closest('.tab-button');
+  if (!tabButton) return;
+
+  const tabName = tabButton.getAttribute('data-tab');
+  studioTabsContainer
+    .querySelectorAll('.tab-button')
+    .forEach((t) => t.classList.remove('active'));
+  tabButton.classList.add('active');
+
+  document.querySelectorAll('.tab-content').forEach((content) => {
+    const contentEl = content as HTMLElement;
+    contentEl.classList.toggle('active', content.id === `tab-${tabName}`);
   });
 });
 
@@ -824,13 +1157,12 @@ function refreshAllViews() {
 
 function renderHistory() {
   const designHistory = allDesigns.filter((d) => d.status !== 'Published');
-  if (designHistory.length === 0) {
-    historyCardEl.style.display = 'none';
-    return;
-  }
+  while (historyListEl.firstChild)
+    historyListEl.removeChild(historyListEl.firstChild);
 
-  historyCardEl.style.display = 'block';
-  historyListEl.innerHTML = '';
+  historyEmptyStateEl.style.display =
+    designHistory.length === 0 ? 'block' : 'none';
+  if (designHistory.length === 0) return;
 
   const recordsById = new Map<string, DesignRecord>();
   designHistory.forEach((r) => recordsById.set(r.id, r));
@@ -852,104 +1184,111 @@ function renderHistory() {
   childrenByParentId.forEach((children) => {
     children.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   });
-
   rootRecords.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-  const renderRecord = (record: DesignRecord, isChild: boolean) => {
-    const li = document.createElement('li');
-    li.className = 'history-item';
-    if (isChild) li.classList.add('is-child');
-    if (record.status === 'Rejected') li.classList.add('is-rejected');
+  const renderRecord = (record: DesignRecord, level: number) => {
+    const li = createAndAppend(historyListEl, 'li', {
+      className: `history-item status-${record.status.toLowerCase()}`,
+      attributes: { 'data-id': record.id, role: 'button', tabindex: '0' },
+    });
+    li.style.setProperty('--level', level.toString());
 
-    const statusBadge = `<span class="history-status status-${record.status.toLowerCase()}">${
-      record.status
-    }</span>`;
-    let actionButtonHtml = '';
+    createAndAppend(li, 'img', {
+      className: 'history-thumbnail',
+      properties: { src: record.imageDataUrl, alt: 'Design thumbnail' },
+    });
+
+    const infoDiv = createAndAppend(li, 'div', { className: 'history-info' });
+    createAndAppend(infoDiv, 'p', {
+      className: 'history-summary',
+      textContent: record.changeSummary || 'Initial Design',
+    });
+    const metaDiv = createAndAppend(infoDiv, 'div', {
+      className: 'history-meta',
+    });
+    createAndAppend(metaDiv, 'span', {
+      className: `history-status`,
+      textContent: record.status,
+    });
+    createAndAppend(metaDiv, 'span', {
+      className: 'history-timestamp',
+      textContent: record.timestamp.toLocaleTimeString(),
+    });
+
+    const actionsDiv = createAndAppend(li, 'div', {
+      className: 'history-actions',
+    });
     if (record.status === 'Proposed') {
-      actionButtonHtml = `<button class="secondary-button review-button" data-id="${record.id}">Review</button>`;
+      const reviewButton = createAndAppend(actionsDiv, 'button', {
+        textContent: 'Review',
+        attributes: { 'data-action': 'review' },
+      });
     } else if (record.status === 'Approved') {
-      actionButtonHtml = `
-        <button class="secondary-button view-history-button" data-id="${record.id}">View</button>
-        <button class="secondary-button publish-button" data-id="${record.id}">Publish</button>
-      `;
-    } else {
-      // Rejected or Published
-      actionButtonHtml = `<button class="secondary-button view-history-button" data-id="${record.id}">View</button>`;
+      const publishButton = createAndAppend(actionsDiv, 'button', {
+        textContent: 'Publish',
+        attributes: { 'data-action': 'publish' },
+      });
     }
-
-    li.innerHTML = `
-      <img src="${record.imageDataUrl}" alt="Design thumbnail" class="history-thumbnail">
-      <div class="history-info">
-        <p class="history-summary">${
-          record.changeSummary || 'Initial Design'
-        }</p>
-        <div class="history-meta">
-          ${statusBadge}
-          <span class="history-timestamp">${record.timestamp.toLocaleTimeString()}</span>
-        </div>
-      </div>
-      <div class="history-actions">
-        ${actionButtonHtml}
-      </div>
-    `;
-    historyListEl.appendChild(li);
 
     const children = childrenByParentId.get(record.id);
     if (children) {
       for (const child of children) {
-        renderRecord(child, true);
+        renderRecord(child, level + 1);
       }
     }
   };
 
   for (const record of rootRecords) {
-    renderRecord(record, false);
+    renderRecord(record, 0);
   }
 }
 
 function renderStore() {
   const publishedDesigns = allDesigns.filter((d) => d.status === 'Published');
-  if (publishedDesigns.length === 0) {
-    storeCardEl.style.display = 'none';
-    return;
-  }
+  while (storeGridEl.firstChild)
+    storeGridEl.removeChild(storeGridEl.firstChild);
 
-  storeCardEl.style.display = 'block';
-  storeGridEl.innerHTML = publishedDesigns
-    .map(
-      (record) => `
-        <div class="store-item">
-            <img src="${
-              record.imageDataUrl
-            }" alt="Published design" class="store-item-img">
-            <p class="store-item-title">${
-              record.changeSummary || 'Initial Design'
-            }</p>
-            <p class="store-item-price">${
-              record.studioAnalysis.productDNA.pricing.estimatedPrice
-            }</p>
-        </div>
-    `,
-    )
-    .join('');
+  storeEmptyStateEl.style.display =
+    publishedDesigns.length === 0 ? 'block' : 'none';
+  if (publishedDesigns.length === 0) return;
+
+  publishedDesigns.forEach((record) => {
+    const storeItem = createAndAppend(storeGridEl, 'div', {
+      className: 'store-item',
+    });
+    createAndAppend(storeItem, 'img', {
+      className: 'store-item-img',
+      properties: { src: record.imageDataUrl, alt: 'Published design' },
+    });
+    const textWrap = createAndAppend(storeItem, 'div');
+    createAndAppend(textWrap, 'p', {
+      className: 'store-item-title',
+      textContent: record.changeSummary || 'Initial Design',
+    });
+    createAndAppend(textWrap, 'p', {
+      className: 'store-item-price',
+      textContent: record.studioAnalysis.productDNA.pricing.estimatedPrice,
+    });
+  });
 }
 
 historyListEl.addEventListener('click', (e) => {
   const target = e.target as HTMLElement;
-  const viewButton = target.closest('.view-history-button');
-  const reviewButton = target.closest('.review-button');
-  const publishButton = target.closest('.publish-button');
+  const item = target.closest('.history-item') as HTMLLIElement;
+  if (!item) return;
 
-  if (viewButton) {
-    const id = viewButton.getAttribute('data-id');
-    if (id) viewHistoryItem(id);
-  } else if (reviewButton) {
-    const id = reviewButton.getAttribute('data-id');
-    if (id) openReviewModal(id);
-  } else if (publishButton) {
-    const id = publishButton.getAttribute('data-id');
-    const buttonEl = publishButton as HTMLButtonElement;
-    if (id) publishDesign(id, buttonEl);
+  const id = item.dataset.id;
+  if (!id) return;
+
+  const actionButton = target.closest('button');
+  const action = actionButton?.dataset.action;
+
+  if (action === 'review') {
+    openReviewModal(id);
+  } else if (action === 'publish') {
+    publishDesign(id, actionButton as HTMLButtonElement);
+  } else {
+    viewHistoryItem(id);
   }
 });
 
@@ -959,6 +1298,19 @@ function viewHistoryItem(id: string) {
 
   activeDesign = record;
 
+  // Highlight active history item
+  document
+    .querySelectorAll('.history-item')
+    .forEach((el) => el.classList.remove('is-active'));
+  document
+    .querySelector(`.history-item[data-id="${id}"]`)
+    ?.classList.add('is-active');
+
+  // Show main content stage
+  welcomeScreenEl.style.display = 'none';
+  resultDisplayEl.style.display = 'block';
+  loaderEl.style.display = 'none';
+
   imageEl.src = record.imageDataUrl;
   imageEl.style.display = 'block';
   promptEl.value = record.finalPrompt;
@@ -966,6 +1318,16 @@ function viewHistoryItem(id: string) {
   renderStudioAnalysis(record.studioAnalysis);
   renderSocialBuzzAnalysis(record.socialBuzzAnalysis);
   studioContainerEl.style.display = 'block';
+
+  // Set default tab to DNA
+  studioTabsContainer
+    .querySelectorAll('.tab-button')
+    .forEach((t) => t.classList.remove('active'));
+  document.querySelector('.tab-button[data-tab="dna"]')?.classList.add('active');
+  document
+    .querySelectorAll('.tab-content')
+    .forEach((c) => (c as HTMLElement).classList.remove('active'));
+  document.querySelector('#tab-dna')?.classList.add('active');
 
   if (record.changeSummary) {
     designDetailsIdEl.textContent = record.id;
@@ -988,10 +1350,10 @@ function viewHistoryItem(id: string) {
   }
 
   updateGenerateButtonState();
-
-  statusEl.innerText = `Viewing design from ${record.timestamp.toLocaleTimeString()}.`;
-  const resultCard = document.querySelector('.result-card');
-  resultCard?.scrollIntoView({ behavior: 'smooth' });
+  updateStatus(
+    `Viewing design from ${record.timestamp.toLocaleTimeString()}.`,
+    'info',
+  );
 }
 
 function updateGenerateButtonState() {
@@ -1031,25 +1393,24 @@ async function handleReview(approve: boolean, button: HTMLButtonElement) {
   button.disabled = true;
 
   try {
-    const updates: Partial<DesignRecord> = {
-      status: approve ? 'Approved' : 'Rejected',
-      reviewComments: reviewCommentsInput.value,
-    };
-    const updatedRecord = await updateDesignInDB(reviewingDesignId, updates);
-
-    // Update local state
     const index = allDesigns.findIndex((r) => r.id === reviewingDesignId);
-    if (index !== -1) allDesigns[index] = updatedRecord;
+    if (index === -1) throw new Error('Design not found');
 
-    statusEl.innerText = `Proposal ${updatedRecord.id} ${
-      approve ? 'approved' : 'rejected'
-    }.`;
+    allDesigns[index].status = approve ? 'Approved' : 'Rejected';
+    allDesigns[index].reviewComments = reviewCommentsInput.value;
+
+    await saveDesignsToDB(allDesigns);
+
+    updateStatus(
+      `Proposal ${reviewingDesignId} ${approve ? 'approved' : 'rejected'}.`,
+      'success',
+    );
     refreshAllViews();
-    if (activeDesign?.id === updatedRecord.id) {
-      viewHistoryItem(updatedRecord.id);
+    if (activeDesign?.id === reviewingDesignId) {
+      viewHistoryItem(reviewingDesignId);
     }
-  } catch (e) {
-    statusEl.innerText = `Error updating design: ${e.message}`;
+  } catch (e: any) {
+    updateStatus(`Error updating design: ${e.message}`, 'error');
   } finally {
     button.classList.remove('is-loading');
     button.disabled = false;
@@ -1068,39 +1429,233 @@ cancelReviewButton.addEventListener('click', closeReviewModal);
 async function publishDesign(id: string, button: HTMLButtonElement) {
   const record = allDesigns.find((r) => r.id === id);
   if (!record || record.status !== 'Approved') {
-    statusEl.innerText = 'Error: Only approved designs can be published.';
+    updateStatus('Error: Only approved designs can be published.', 'error');
     return;
   }
 
   button.classList.add('is-loading');
   button.disabled = true;
-  statusEl.innerText = `Publishing ${id} to your store...`;
+  updateStatus(`Publishing ${id} to your store...`, 'loading');
 
   try {
-    const updatedRecord = await updateDesignInDB(id, { status: 'Published' });
-
     const index = allDesigns.findIndex((r) => r.id === id);
-    if (index !== -1) allDesigns[index] = updatedRecord;
+    if (index === -1) throw new Error('Design not found');
+
+    allDesigns[index].status = 'Published';
+    await saveDesignsToDB(allDesigns);
 
     refreshAllViews();
-    statusEl.innerText = `Design ${id} has been published to your store!`;
-    storeCardEl.scrollIntoView({ behavior: 'smooth' });
-  } catch (e) {
-    statusEl.innerText = `Error publishing design: ${e.message}`;
-  } finally {
-    // Button will disappear on re-render, no need to re-enable
+    updateStatus(`Design ${id} has been published to your store!`, 'success');
+  } catch (e: any) {
+    updateStatus(`Error publishing design: ${e.message}`, 'error');
+    button.classList.remove('is-loading');
+    button.disabled = false;
   }
 }
+
+// --- MULTIMODAL FEATURE IMPLEMENTATIONS ---
+
+// --- Speech Recognition (Voice-to-Text) ---
+const SpeechRecognition =
+  (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+let recognition: any | null = null;
+if (SpeechRecognition) {
+  recognition = new SpeechRecognition();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+
+  recognition.onresult = (event: any) => {
+    let interim_transcript = '';
+    let final_transcript = '';
+
+    for (let i = event.resultIndex; i < event.results.length; ++i) {
+      if (event.results[i].isFinal) {
+        final_transcript += event.results[i][0].transcript;
+      } else {
+        interim_transcript += event.results[i][0].transcript;
+      }
+    }
+    promptEl.value = promptEl.value.replace(/ \.\.\./, '') + final_transcript;
+    // Show interim with ellipsis
+    if (interim_transcript) {
+      promptEl.value = promptEl.value.replace(/ \.\.\./, '') + ' ...';
+    }
+  };
+
+  recognition.onstart = () => {
+    micButton.classList.add('is-listening');
+    updateStatus('Listening... Speak your prompt.', 'info');
+  };
+
+  recognition.onend = () => {
+    micButton.classList.remove('is-listening');
+    updateStatus('Voice input ended.', 'info');
+  };
+}
+
+micButton.addEventListener('click', () => {
+  if (recognition) {
+    if (micButton.classList.contains('is-listening')) {
+      recognition.stop();
+    } else {
+      // Clear ellipsis if present before starting
+      promptEl.value = promptEl.value.replace(/ \.\.\./, '');
+      recognition.start();
+    }
+  } else {
+    updateStatus(
+      'Voice recognition is not supported in your browser.',
+      'error',
+    );
+  }
+});
+
+// --- Speech Synthesis (Text-to-Speech) ---
+function speak(text: string) {
+  if ('speechSynthesis' in window) {
+    speechSynthesis.cancel(); // Stop any previous speech
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    speechSynthesis.speak(utterance);
+  } else {
+    updateStatus('Text-to-speech is not supported in your browser.', 'error');
+  }
+}
+
+// --- Camera Color Palette ---
+async function startCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    cameraVideoEl.srcObject = cameraStream;
+    cameraModalEl.style.display = 'flex';
+  } catch (err) {
+    console.error('Error accessing camera:', err);
+    updateStatus(
+      'Error: Could not access camera. Please check permissions.',
+      'error',
+    );
+  }
+}
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach((track) => track.stop());
+  }
+  cameraStream = null;
+  cameraModalEl.style.display = 'none';
+}
+
+cameraButton.addEventListener('click', startCamera);
+cancelCameraButton.addEventListener('click', stopCamera);
+
+captureButton.addEventListener('click', async () => {
+  if (!cameraStream) return;
+  cameraLoaderEl.style.display = 'block';
+  while (paletteContainerEl.firstChild)
+    paletteContainerEl.removeChild(paletteContainerEl.firstChild);
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = cameraVideoEl.videoWidth;
+    canvas.height = cameraVideoEl.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Could not get canvas context');
+    ctx.drawImage(cameraVideoEl, 0, 0, canvas.width, canvas.height);
+
+    const dataUrl = canvas.toDataURL('image/jpeg');
+    const base64 = dataUrl.split(',')[1];
+    const mimeType = 'image/jpeg';
+    const palette = await getColorPaletteFromImage({ base64, mimeType });
+
+    renderPalette(palette);
+  } catch (e: any) {
+    updateStatus(`Error generating palette: ${e.message}`, 'error');
+  } finally {
+    cameraLoaderEl.style.display = 'none';
+  }
+});
+
+async function getColorPaletteFromImage(image: {
+  base64: string;
+  mimeType: string;
+}): Promise<{ name: string; hex: string }[]> {
+  const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+  const imagePart = {
+    inlineData: {
+      data: image.base64,
+      mimeType: image.mimeType,
+    },
+  };
+  const textPart = {
+    text: 'Analyze this image and extract a harmonious color palette of 5 colors. Provide the most common or descriptive name for each color and its hex code.',
+  };
+  const response = await ai.models.generateContent({
+    model: GEMINI_MODEL,
+    contents: { parts: [imagePart, textPart] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          palette: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                hex: { type: Type.STRING },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  return JSON.parse(response.text).palette;
+}
+
+function renderPalette(palette: { name: string; hex: string }[]) {
+  const allColorNames = palette.map((c) => c.name).join(', ');
+  createAndAppend(paletteContainerEl, 'p', {
+    textContent: `Detected Palette: ${allColorNames}`,
+  });
+  const swatches = createAndAppend(paletteContainerEl, 'div', {
+    className: 'palette-swatches',
+  });
+  palette.forEach((color) => {
+    const swatch = createAndAppend(swatches, 'div', { className: 'swatch' });
+    swatch.style.backgroundColor = color.hex;
+    createAndAppend(swatch, 'span', {
+      className: 'swatch-label',
+      textContent: `${color.name} (${color.hex})`,
+    });
+  });
+
+  const actions = createAndAppend(paletteContainerEl, 'div', {
+    className: 'palette-actions',
+  });
+  createAndAppend(actions, 'button', {
+    textContent: 'Add Colors to Prompt',
+    listeners: {
+      click: () => {
+        promptEl.value = `${promptEl.value} with a color palette of ${allColorNames}.`;
+        stopCamera();
+      },
+    },
+  });
+}
+
+// --- APP INITIALIZATION ---
 
 async function initializeApp() {
   try {
     allDesigns = await fetchDesignsFromDB();
     refreshAllViews();
-  } catch (e) {
-    statusEl.innerText = `Error loading designs: ${e.message}`;
+  } catch (e: any) {
+    updateStatus(`Error loading designs: ${e.message}`, 'error');
   } finally {
     initialLoaderEl.style.display = 'none';
-    mainContainer.style.display = 'grid';
+    appContainer.style.opacity = '1';
   }
 }
 

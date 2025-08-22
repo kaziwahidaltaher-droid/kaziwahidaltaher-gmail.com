@@ -1,6 +1,6 @@
 # LOOMINAR - "তোদের বন্ধু তানিম"
 
-This application allows you to generate high-quality, realistic images from text descriptions and uploaded logos. It has been upgraded into a comprehensive Branding & Go-to-Market Studio, providing a full suite of AI-powered tools to take a design from concept to a full-fledged brand with a ready-to-launch marketing strategy.
+This application is a professional-grade, AI-powered design studio. It allows you to generate high-quality images from text descriptions, and then provides a comprehensive, end-to-end go-to-market strategy for your creation.
 
 <br>
 
@@ -15,33 +15,53 @@ This application allows you to generate high-quality, realistic images from text
 
 <br>
 
-## Features
+## Flagship Features
 
 -   **AI Image Generation:** Create images from detailed text prompts using the Imagen 3 model.
+-   **Voice-Enabled Prompting:** Speak your ideas directly into the application using AI-powered speech-to-text.
+-   **Audible AI Analysis:** Have the AI's strategic analysis read aloud to you for a more immersive experience.
+-   **Live Camera Color Palette Generation:** Use your device's camera to capture inspiration from the world around you and generate a harmonious color palette for your designs.
 -   **Image Upload:** Incorporate your own logo into the generated images using the `[LOGO]` placeholder.
+-   **Dark Mode Studio UI:** A professional two-column interface with a fixed control panel and a main stage for results, optimized for creative work.
+-   **Persistent Data:** All your design history is automatically saved in your browser's local storage, so your work is **never lost** on a page refresh.
 -   **LOOMINAR ⚡ Studio:** A unified, tabbed dashboard that provides a complete go-to-market strategy for your designs.
     -   **Product DNA:** Automatically generates detailed manufacturing specifications, pricing analysis, and logistics overviews for your target market.
     -   **Branding & Identity:** The AI defines a brand archetype, establishes a brand voice, and provides actionable feedback on your uploaded logo.
     -   **Region-Aware SEO & SEM:** Get a localized digital marketing strategy grounded in real-time Google Search data.
-        -   **Search Engine Optimization (SEO) Rate:** A key metric that scores your product's SEO potential out of 100 for your target market.
-        -   **Targeted Keywords:** High-impact keywords for SEO & SEM.
-        -   **Ad Copy & Meta Descriptions:** Ready-to-use copy for your campaigns and product pages.
-    -   **Social Media Buzz:** A real-time analysis of the social media landscape for your product.
-        -   **Live Sentiment Analysis:** Assesses the current public mood towards similar products.
-        -   **Key Influencer Identification:** Finds relevant influencers and content creators for your brand.
-        -   **Viral Content Ideas:** Suggests actionable social media campaign ideas and relevant hashtags.
--   **Design Review & Approval Workflow:** Manage design iterations with a workflow inspired by code reviews.
-    -   **Iterate on Designs:** Submit new design variations for review with descriptive summaries.
-    -   **Review & Approve:** Each proposal can be reviewed, commented on, and then either "Approved" to become the new baseline or "Rejected".
-    -   **Versioned History:** The design history clearly shows the status of each iteration (`Proposed`, `Approved`, `Rejected`), providing a clear audit trail.
--   **Publish to Store:** "Publish" your approved designs to move them from the active design history into a "My Store" gallery, simulating deployment to a production environment.
--   **Persistent Data (Simulated):** The application includes a mock in-memory database to simulate how a real backend would save and retrieve design history.
+        -   **Search Engine Optimization (SEO) Rate:** A key metric, visualized as a dynamic progress bar, that scores your product's SEO potential out of 100 for your target market.
+        -   **Targeted Keywords & Ad Copy:** High-impact keywords for SEO & SEM, plus ready-to-use ad copy.
+    -   **E-commerce Listing:** Generates a platform-ready product title, description, SKU, and Google Product Category for your online store.
+    -   **Manufacturing & Sourcing:** Identifies potential manufacturing partners, suggests similar product ideas, and provides B2B keywords for finding suppliers.
+    -   **Social Media Buzz:** A real-time analysis of the social media landscape, including sentiment analysis and viral content ideas.
+-   **Design Review & Approval Workflow:** Manage design iterations with a workflow inspired by code reviews, complete with versioned history and statuses (`Proposed`, `Approved`, `Rejected`).
+-   **Publish to Store:** "Publish" your approved designs to move them from the active design history into a "My Store" gallery.
 
 ## Backend Architecture
 
-This is a frontend application that simulates communication with a backend API. All data operations (saving, updating, fetching designs) are handled by `async` functions in `index.tsx` that mimic network requests to a mock database.
+This is a frontend-only application that simulates a full-stack experience. All data operations (saving, updating, fetching designs) are handled by `async` functions in `index.tsx` that use the browser's `localStorage` to persist data.
 
-In a real-world deployment, you would replace the functions in the "MOCK DATABASE & API LAYER" section of `index.tsx` with `fetch` calls to your own secure backend API (e.g., a serverless function). This backend API would be responsible for securely connecting to your database and making calls to the Google AI API using secrets stored safely as server-side environment variables.
+In a real-world deployment, you would replace the functions in the "LOCAL STORAGE DATABASE & API LAYER" section of `index.tsx` with `fetch` calls to your own secure backend API (e.g., a serverless function). This backend API would be responsible for securely connecting to your database and making calls to the Google AI API using secrets stored safely as server-side environment variables.
+
+## Security Considerations
+
+This application has been built with security best practices for frontend development in mind.
+
+### Cross-Site Scripting (XSS) Prevention
+
+All dynamic data received from the AI API is rendered using safe DOM manipulation methods (e.g., setting `textContent`). The application strictly avoids the use of `innerHTML` with API-generated content to prevent potential Cross-Site Scripting (XSS) vulnerabilities.
+
+### Cloudflare Deployment Settings
+
+When deploying this application on Cloudflare Pages, it is recommended to configure your zone's security settings for optimal protection.
+
+-   **Security Level:** It is recommended to set the Security Level to **High**. This will challenge visitors with suspicious behavior before they can access your site. You can configure this in your Cloudflare dashboard under `Security > Settings`.
+-   **Bot Fight Mode:** Enable Bot Fight Mode to identify and challenge automated traffic.
+-   **SSL/TLS:** Ensure your SSL/TLS encryption mode is set to **Full (Strict)** to secure traffic.
+
+### API Key Security
+
+As stated previously, your `API_KEY` is a critical secret. **Never expose it in frontend code.** Always use environment variables in your deployment environment as described in the "Deployment" section.
+
 
 ## Local Development
 
@@ -82,13 +102,6 @@ To point the `LOOMINAR.COM` domain to the Cloudflare-hosted application, the fol
 -   `carmelo.ns.cloudflare.com`
 -   `maeve.ns.cloudflare.com`
 
-### Cloudflare Connectivity Details
+### Global Performance & Regional Focus
 
-This information provides a snapshot of the connectivity environment for reference.
-
--   **DNS Resolver:** `1.1.1.1`
--   **DNS Protocol:** HTTPS (DNS over HTTPS)
--   **Colocation Center:** DAC
--   **Public IP:** `103.161.69.22`
--   **Device ID:** `713aa8ec-8ecf-49c8-b793-1c49294a8516`
--   **Cloudflare App Version:** `2025.6.1400.0`
+Using a global Content Delivery Network (CDN) like Cloudflare is a best practice. It ensures that the application assets (HTML, CSS, JS) are cached on servers around the world. This provides a fast and responsive experience for all users, including those in the primary target market of Bangladesh, by serving content from a geographically close data center (like DAC - Dhaka).

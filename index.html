@@ -19,22 +19,26 @@
         <p>Loading Design Studio...</p>
     </div>
 
-    <main class="container" id="main-container" style="display: none;">
-        <header class="header">
-            <h1>LOOMINAR</h1>
-            <h2>"তোদের বন্ধু তানিম"</h2>
-            <p>Bring your ideas to life with AI-generated images.</p>
-        </header>
+    <div class="app-container" style="opacity: 0;">
+        <aside class="sidebar">
+            <header class="sidebar-header">
+                <h1>LOOMINAR</h1>
+                <h2>"তোদের বন্ধু তানিম"</h2>
+            </header>
 
-        <div class="card">
-            <label for="prompt-input">Prompt</label>
-            <textarea id="prompt-input" rows="10" placeholder="Describe the image you want to create..." spellcheck="true"></textarea>
-            <div class="prompt-guide">
-                <strong>Pro Tip:</strong> For best results, be descriptive! Include details like style (e.g., photorealistic, cartoon), colors, lighting, and composition.
-            </div>
-            
-            <div class="input-row">
-                <div class="upload-section">
+            <div class="sidebar-content">
+                <section class="control-section">
+                    <label for="prompt-input">Prompt</label>
+                    <div class="prompt-wrapper">
+                        <textarea id="prompt-input" rows="8" placeholder="Describe or speak your vision..."></textarea>
+                        <button id="mic-button" aria-label="Use voice input">🎤</button>
+                    </div>
+                    <div class="prompt-guide">
+                        <strong>Pro Tip:</strong> Be descriptive! Include style (e.g., photorealistic), colors, lighting, and composition.
+                    </div>
+                </section>
+
+                <section class="control-section">
                     <label for="logo-upload-input">Upload Image (Optional)</label>
                     <div class="upload-controls">
                         <label for="logo-upload-input" class="button-like-label">Choose File</label>
@@ -46,9 +50,14 @@
                         </div>
                     </div>
                     <p class="upload-note">Use `[LOGO]` in your prompt to place the logo.</p>
-                </div>
-                <div class="market-select-section">
-                    <label for="market-select">Target Market</label>
+                </section>
+                
+                 <section class="control-section">
+                    <button id="camera-button" class="secondary-button" style="width: 100%;">📸 Capture Inspiration</button>
+                </section>
+
+                <section class="control-section">
+                     <label for="market-select">Target Market</label>
                     <select id="market-select">
                         <option value="Bangladesh">Bangladesh</option>
                         <option value="USA">USA</option>
@@ -56,148 +65,213 @@
                         <option value="India">India</option>
                         <option value="Nigeria">Nigeria</option>
                     </select>
+                </section>
+
+                <section class="control-section generate-section">
+                     <button id="generate-button">Generate & Analyze</button>
+                </section>
+
+                 <div id="quota-error">
+                    <p>You are out of quota. Please <button id="open-key">get a new API key</button> to continue.</p>
                 </div>
-            </div>
+                
+                <hr class="divider" />
 
-            <div class="button-group">
-                <button id="generate-button">Generate & Analyze</button>
-            </div>
-
-            <div id="quota-error">
-                <p>You are out of quota. Please <button id="open-key">get a new API key</button> to continue.</p>
-            </div>
-        </div>
-        
-        <div class="card result-card">
-            <h2>AI-Powered Design & Analysis</h2>
-            <div id="status" aria-live="polite"></div>
-            <div class="image-container">
-                <img id="generated-image" alt="Generated image">
-                <div class="loader" id="loader"></div>
-            </div>
-
-            <div id="design-details-container" class="design-details" style="display: none;">
-                <h3>Design Notes for <span id="design-details-id"></span></h3>
-                <p><strong>Summary:</strong> <span id="design-details-summary"></span></p>
-                <div id="design-details-notes-wrapper" style="display: none;">
-                    <p><strong>Details:</strong></p>
-                    <p id="design-details-notes"></p>
-                </div>
-                 <div id="design-details-review-wrapper" style="display: none;">
-                    <p><strong>Review Feedback:</strong></p>
-                    <p id="design-details-review"></p>
-                </div>
-            </div>
-
-            <div class="studio-container" id="studio-container">
-                <h3>LOOMINAR ⚡ Studio</h3>
-                <nav class="tab-nav">
-                    <button class="tab-button active" data-tab="dna">Product DNA</button>
-                    <button class="tab-button" data-tab="branding">Branding & Identity</button>
-                    <button class="tab-button" data-tab="seo">Region-Aware SEO & SEM</button>
-                    <button class="tab-button" data-tab="buzz">Social Buzz</button>
-                </nav>
-
-                <div id="tab-dna" class="tab-content studio-grid" style="display: grid;">
-                    <ul id="dna-specs-list"></ul>
-                    <div class="info-block">
-                        <h3>Pricing Strategy</h3>
-                        <p id="dna-pricing-content"></p>
+                <section class="control-section">
+                    <h3>My Store</h3>
+                    <div id="store-grid"></div>
+                    <div id="store-empty-state" class="empty-state">
+                        <p>Published designs will appear here.</p>
                     </div>
-                     <div class="info-block">
-                        <h3>Logistics Overview</h3>
-                        <p id="dna-logistics-content"></p>
+                </section>
+
+                <hr class="divider" />
+
+                <section class="control-section">
+                    <h3>Design History</h3>
+                    <ul id="history-list"></ul>
+                    <div id="history-empty-state" class="empty-state">
+                         <p>Your generated designs will appear here.</p>
                     </div>
+                </section>
+
+            </div>
+        </aside>
+
+        <main class="main-content">
+             <div id="status"></div>
+            <div id="welcome-screen">
+                <h2>Welcome to the Studio</h2>
+                <p>Describe your vision in the prompt panel to get started.</p>
+            </div>
+            <div id="result-display" style="display: none;">
+                <div class="image-container">
+                    <img id="generated-image" alt="Generated image">
+                    <div class="loader" id="loader"></div>
                 </div>
 
-                <div id="tab-branding" class="tab-content" style="display: none;">
-                    <div class="info-block">
-                        <h3>Brand Archetype</h3>
-                        <p><strong id="branding-archetype"></strong></p>
+                <div id="design-details-container" class="design-details">
+                    <h3>Design Notes for <span id="design-details-id"></span></h3>
+                    <p><strong>Summary:</strong> <span id="design-details-summary"></span></p>
+                    <div id="design-details-notes-wrapper">
+                        <p><strong>Details:</strong></p>
+                        <p id="design-details-notes"></p>
                     </div>
-                    <br>
-                    <div class="info-block">
-                        <h3>Brand Voice</h3>
-                        <p id="branding-voice"></p>
-                    </div>
-                    <br>
-                    <div class="info-block">
-                        <h3>AI Logo Feedback</h3>
-                        <p id="branding-logo-feedback"></p>
+                     <div id="design-details-review-wrapper">
+                        <p><strong>Review Feedback:</strong></p>
+                        <p id="design-details-review"></p>
                     </div>
                 </div>
 
-                <div id="tab-seo" class="tab-content" style="display: none;">
-                   <div class="seo-grid">
-                        <div class="seo-rate-display">
-                            <span id="seo-rate-score" class="score"></span>
-                            <span class="score-label">SEO Rate / 100</span>
-                            <p id="seo-rate-analysis"></p>
+                <div class="studio-container" id="studio-container">
+                    <nav class="tab-nav">
+                        <button class="tab-button active" data-tab="dna">Product DNA</button>
+                        <button class="tab-button" data-tab="branding">Branding</button>
+                        <button class="tab-button" data-tab="seo">SEO/SEM</button>
+                        <button class="tab-button" data-tab="ecommerce">E-commerce</button>
+                        <button class="tab-button" data-tab="manufacturing">Manufacturing</button>
+                        <button class="tab-button" data-tab="buzz">Social Buzz</button>
+                    </nav>
+
+                    <div id="tab-dna" class="tab-content active">
+                        <ul id="dna-specs-list" class="studio-grid"></ul>
+                        <div class="studio-grid">
+                            <div class="info-block">
+                                <h3>Pricing Strategy</h3>
+                                <div id="dna-pricing-content"></div>
+                            </div>
+                             <div class="info-block">
+                                <h3>Logistics Overview</h3>
+                                <div id="dna-logistics-content"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tab-branding" class="tab-content">
+                       <div class="studio-grid">
+                            <div class="info-block">
+                                <h3>Brand Archetype</h3>
+                                <p><strong id="branding-archetype"></strong></p>
+                            </div>
+                            <div class="info-block">
+                                <h3>Brand Voice</h3>
+                                <p id="branding-voice"></p>
+                            </div>
+                       </div>
+                        <div class="info-block">
+                            <h3>AI Logo Feedback</h3>
+                            <p id="branding-logo-feedback"></p>
+                        </div>
+                    </div>
+
+                    <div id="tab-seo" class="tab-content">
+                       <div class="seo-grid">
+                            <div class="seo-rate-display">
+                                <svg class="seo-rate-svg" viewBox="0 0 100 100">
+                                  <circle class="seo-rate-bg" cx="50" cy="50" r="45"></circle>
+                                  <circle id="seo-rate-circle" class="seo-rate-fg" cx="50" cy="50" r="45"></circle>
+                                </svg>
+                                <span id="seo-rate-score" class="score"></span>
+                                <span class="score-label">SEO Rate</span>
+                            </div>
+                            <div class="info-block">
+                                <h3>SEO Rate Analysis</h3>
+                                <p id="seo-rate-analysis"></p>
+                            </div>
+                       </div>
+                       <div class="info-block">
+                           <h3>Targeted Keywords</h3>
+                           <div id="seo-keywords" class="keyword-list"></div>
+                       </div>
+                       <div class="studio-grid">
+                            <div class="info-block">
+                                <h3>SEM Ad Copy</h3>
+                                <div class="ad-preview">
+                                    <strong id="sem-ad-headline"></strong>
+                                    <p id="sem-ad-description"></p>
+                                </div>
+                           </div>
+                           <div class="info-block">
+                                <h3>SEO Meta Description</h3>
+                                <p id="seo-meta-description"></p>
+                           </div>
+                       </div>
+                        <div class="info-block">
+                            <h3>Social Media Prompts</h3>
+                            <ul id="seo-social-prompts"></ul>
+                        </div>
+                    </div>
+
+                    <div id="tab-ecommerce" class="tab-content">
+                        <div class="info-block">
+                            <h3>Product Title</h3>
+                            <p><strong id="ecom-title"></strong></p>
                         </div>
                         <div class="info-block">
-                            <h3>Targeted Keywords</h3>
-                            <div id="seo-keywords" class="keyword-list"></div>
+                            <h3>Product Description</h3>
+                            <p id="ecom-description"></p>
                         </div>
-                   </div>
-                   <br>
-                   <div class="info-block">
-                        <h3>SEM Ad Copy</h3>
-                        <div class="ad-preview">
-                            <strong id="sem-ad-headline"></strong>
-                            <p id="sem-ad-description"></p>
-                        </div>
-                   </div>
-                   <br>
-                   <div class="info-block">
-                        <h3>SEO Meta Description</h3>
-                        <p id="seo-meta-description"></p>
-                   </div>
-                   <br>
-                    <div class="info-block">
-                        <h3>Social Media Prompts</h3>
-                        <ul id="seo-social-prompts"></ul>
-                    </div>
-                </div>
-
-                <div id="tab-buzz" class="tab-content" style="display: none;">
-                   <div class="buzz-grid">
-                        <div class="sentiment-display">
-                           <span id="buzz-sentiment" class="sentiment-badge"></span>
-                           <p id="buzz-sentiment-analysis"></p>
+                        <div class="studio-grid">
+                            <div class="info-block">
+                                <h3>SKU (Stock Keeping Unit)</h3>
+                                <code id="ecom-sku"></code>
+                            </div>
+                            <div class="info-block">
+                                <h3>GTIN (Unique Identifier)</h3>
+                                <p id="ecom-gtin"></p>
+                            </div>
                         </div>
                         <div class="info-block">
-                            <h3>Key Influencers / Archetypes</h3>
-                            <div id="buzz-influencers"></div>
+                            <h3>Google Product Category</h3>
+                            <p id="ecom-category"></p>
                         </div>
-                   </div>
-                   <br>
-                    <div class="info-block">
-                        <h3>Viral Content Ideas</h3>
-                        <ul id="buzz-content-ideas"></ul>
                     </div>
-                    <br>
-                    <div class="info-block">
-                        <h3>Relevant Hashtags</h3>
-                        <div id="buzz-hashtags" class="keyword-list"></div>
+                    
+                    <div id="tab-manufacturing" class="tab-content">
+                        <div class="info-block">
+                            <h3>Potential Manufacturers</h3>
+                            <div id="man-manufacturers" class="studio-grid"></div>
+                        </div>
+                        <div class="info-block">
+                            <h3>Similar Product Ideas</h3>
+                            <ul id="man-similar-products"></ul>
+                        </div>
+                        <div class="info-block">
+                            <h3>B2B Search Keywords</h3>
+                            <div id="man-b2b-keywords" class="keyword-list"></div>
+                        </div>
                     </div>
+
+
+                    <div id="tab-buzz" class="tab-content">
+                       <div class="buzz-grid">
+                            <div class="sentiment-display">
+                               <span id="buzz-sentiment" class="sentiment-badge"></span>
+                               <p id="buzz-sentiment-analysis"></p>
+                            </div>
+                            <div class="info-block">
+                                <h3>Key Influencers / Archetypes</h3>
+                                <div id="buzz-influencers"></div>
+                            </div>
+                       </div>
+                        <div class="info-block">
+                            <h3>Viral Content Ideas</h3>
+                            <ul id="buzz-content-ideas"></ul>
+                        </div>
+                        <div class="info-block">
+                            <h3>Relevant Hashtags</h3>
+                            <div id="buzz-hashtags" class="keyword-list"></div>
+                        </div>
+                    </div>
+
+                    <div id="studio-sources"></div>
                 </div>
-
-                <div id="studio-sources"></div>
             </div>
-        </div>
+        </main>
+    </div>
 
-        <div class="card" id="store-card">
-            <h2>My Store</h2>
-            <div id="store-grid"></div>
-        </div>
 
-        <div class="card" id="history-card">
-            <h2>Design History</h2>
-            <ul id="history-list"></ul>
-        </div>
-    </main>
-
-    <div id="proposal-modal" class="modal-overlay" style="display: none;">
+    <div id="proposal-modal" class="modal-overlay">
         <div class="modal-content card">
             <h2>Propose a Design Change</h2>
             <p>Describe the changes you're making to this design, similar to a commit message.</p>
@@ -212,7 +286,7 @@
         </div>
     </div>
 
-    <div id="review-modal" class="modal-overlay" style="display: none;">
+    <div id="review-modal" class="modal-overlay">
         <div class="modal-content card">
             <h2>Review Design Change</h2>
             <p>Review the proposed changes and provide feedback before approving or rejecting.</p>
@@ -226,6 +300,20 @@
                 <button id="approve-button">Approve</button>
                 <button id="reject-button">Reject</button>
                 <button id="cancel-review-button" class="secondary-button">Cancel</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="camera-modal" class="modal-overlay">
+        <div class="modal-content card">
+            <h2>Capture Inspiration</h2>
+            <p>Point your camera at something inspiring to extract a color palette.</p>
+            <video id="camera-video" autoplay playsinline></video>
+            <div id="camera-loader" class="loader"></div>
+            <div id="palette-container"></div>
+            <div class="button-group">
+                <button id="capture-button">Capture & Analyze</button>
+                <button id="cancel-camera-button" class="secondary-button">Close</button>
             </div>
         </div>
     </div>

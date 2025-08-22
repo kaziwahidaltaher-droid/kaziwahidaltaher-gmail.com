@@ -1,5 +1,8 @@
 {
   "name": "LOOMINAR \"তোদের বন্ধু তানিম\"",
   "description": "Your AI-powered studio for product design, branding, and go-to-market strategy.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
 }
