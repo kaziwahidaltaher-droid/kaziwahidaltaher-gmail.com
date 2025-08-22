@@ -3,22 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LOOMINARY - তোর বন্ধু তানিমের অ্যাপ</title>
+    <title>LOOMINAR "তোদের বন্ধু তানিম"</title>
     <link rel="stylesheet" href="index.css">
     <script type="importmap">
       {
         "imports": {
-          "@google/genai": "https://esm.sh/@google/genai@^1.4.0",
-          "jszip": "https://esm.sh/jszip@3.10.1"
+          "@google/genai": "https://esm.sh/@google/genai@^1.4.0"
         }
       }
     </script>
 </head>
 <body>
-    <main class="container" id="main-container">
+    <div id="initial-loader" class="loader-overlay">
+        <div class="loader"></div>
+        <p>Loading Design Studio...</p>
+    </div>
+
+    <main class="container" id="main-container" style="display: none;">
         <header class="header">
-            <h1>LOOMINARY</h1>
-            <h2>তোর বন্ধু তানিমের অ্যাপ</h2>
+            <h1>LOOMINAR</h1>
+            <h2>"তোদের বন্ধু তানিম"</h2>
             <p>Bring your ideas to life with AI-generated images.</p>
         </header>
 
@@ -53,18 +57,10 @@
                         <option value="Nigeria">Nigeria</option>
                     </select>
                 </div>
-                <div class="grounding-select-section">
-                    <label for="grounding-select">Google Search Grounding</label>
-                    <select id="grounding-select">
-                        <option value="disabled" selected>Disabled</option>
-                        <option value="enabled">Enabled</option>
-                    </select>
-                </div>
             </div>
 
             <div class="button-group">
                 <button id="generate-button">Generate & Analyze</button>
-                <button id="download-certificate-button" class="secondary-button">Download Certificate (JSON)</button>
             </div>
 
             <div id="quota-error">
@@ -74,7 +70,7 @@
         
         <div class="card result-card">
             <h2>AI-Powered Design & Analysis</h2>
-            <div id="status"></div>
+            <div id="status" aria-live="polite"></div>
             <div class="image-container">
                 <img id="generated-image" alt="Generated image">
                 <div class="loader" id="loader"></div>
@@ -93,33 +89,75 @@
                 </div>
             </div>
 
-            <div class="specs-section" id="specs-container">
-                <h3>Product Specifications</h3>
-                <ul id="specs-list"></ul>
-            </div>
+            <div class="studio-container" id="studio-container">
+                <h3>LOOMINAR ⚡ Studio</h3>
+                <nav class="tab-nav">
+                    <button class="tab-button active" data-tab="dna">Product DNA</button>
+                    <button class="tab-button" data-tab="branding">Branding & Identity</button>
+                    <button class="tab-button" data-tab="seo">Region-Aware SEO & SEM</button>
+                </nav>
 
-            <div class="analysis-section" id="analysis-container">
-                 <div class="sub-card" id="market-snapshot-container">
-                    <h3>Market Snapshot</h3>
-                    <p id="market-snapshot-content"></p>
+                <div id="tab-dna" class="tab-content studio-grid" style="display: grid;">
+                    <ul id="dna-specs-list"></ul>
+                    <div class="info-block">
+                        <h3>Pricing Strategy</h3>
+                        <p id="dna-pricing-content"></p>
+                    </div>
+                     <div class="info-block">
+                        <h3>Logistics Overview</h3>
+                        <p id="dna-logistics-content"></p>
+                    </div>
                 </div>
-                <div class="sub-card" id="pricing-strategy-container">
-                    <h3>Pricing Strategy</h3>
-                    <p id="pricing-strategy-content"></p>
+
+                <div id="tab-branding" class="tab-content" style="display: none;">
+                    <div class="info-block">
+                        <h3>Brand Archetype</h3>
+                        <p><strong id="branding-archetype"></strong></p>
+                    </div>
+                    <br>
+                    <div class="info-block">
+                        <h3>Brand Voice</h3>
+                        <p id="branding-voice"></p>
+                    </div>
+                    <br>
+                    <div class="info-block">
+                        <h3>AI Logo Feedback</h3>
+                        <p id="branding-logo-feedback"></p>
+                    </div>
                 </div>
-                <div class="sub-card" id="logistics-container">
-                    <h3>Logistics Overview</h3>
-                    <p id="logistics-content"></p>
+
+                <div id="tab-seo" class="tab-content" style="display: none;">
+                   <div class="seo-grid">
+                        <div class="seo-rate-display">
+                            <span id="seo-rate-score" class="score"></span>
+                            <span class="score-label">SEO Rate / 100</span>
+                            <p id="seo-rate-analysis"></p>
+                        </div>
+                        <div class="info-block">
+                            <h3>Targeted Keywords</h3>
+                            <div id="seo-keywords" class="keyword-list"></div>
+                        </div>
+                   </div>
+                   <br>
+                   <div class="info-block">
+                        <h3>SEM Ad Copy</h3>
+                        <div class="ad-preview">
+                            <strong id="sem-ad-headline"></strong>
+                            <p id="sem-ad-description"></p>
+                        </div>
+                   </div>
+                   <br>
+                   <div class="info-block">
+                        <h3>SEO Meta Description</h3>
+                        <p id="seo-meta-description"></p>
+                   </div>
+                   <br>
+                    <div class="info-block">
+                        <h3>Social Media Prompts</h3>
+                        <ul id="seo-social-prompts"></ul>
+                    </div>
                 </div>
-                <div class="sub-card" id="marketing-angles-container">
-                    <h3>Marketing Angles</h3>
-                    <ul id="marketing-angles-list"></ul>
-                </div>
-                <div class="sub-card full-width-card" id="market-trends-container">
-                    <h3>Market Trends (via Google Search)</h3>
-                    <p id="market-trends-content"></p>
-                    <div id="market-trends-sources"></div>
-                </div>
+                <div id="studio-sources"></div>
             </div>
         </div>
 
@@ -143,7 +181,7 @@
             <label for="design-notes">Design Notes (Optional)</label>
             <textarea id="design-notes" rows="4" placeholder="Explain the problem this change is solving and why you are making it."></textarea>
             <div class="button-group">
-                <button id="propose-button">Generate & Propose</button>
+                <button id="propose-button">Generate & Iterate</button>
                 <button id="cancel-proposal-button" class="secondary-button">Cancel</button>
             </div>
         </div>
