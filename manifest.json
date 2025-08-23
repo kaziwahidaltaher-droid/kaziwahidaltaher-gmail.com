@@ -1,0 +1,17 @@
+{
+  "name": "LOOMINAR \" কৃবু বাবা \" AI Sanctuary",
+  "short_name": "Loominar",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#1a1a1a",
+  "description": "Your AI-powered studio for product design, branding, and go-to-market strategy.",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

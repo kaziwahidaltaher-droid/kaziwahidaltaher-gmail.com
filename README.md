@@ -148,6 +148,70 @@ A TWA is a lightweight Android app that launches your PWA in a full-screen brows
     *   **Generate `assetlinks.json`:** Use Android Studio's "App Links Assistant" or an online generator to create this file. It links your domain to the signature of your Android app.
     *   **Host the file:** Upload the generated `assetlinks.json` file to your web server at `https://LOOMINAR.COM/.well-known/assetlinks.json`.
 
+#### Example `AndroidManifest.xml`
+
+It appears you are working on this step. The Android Manifest XML can be complex and must be structured correctly. Below is a complete, working example that you can use as a reference to fix your file.
+
+```xml
+<!-- File: app/src/main/AndroidManifest.xml -->
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.loominar.twa">
+
+    <!-- Required to access the internet. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.LOOMINAR.NoActionBar">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:resizeableActivity="true">
+
+            <!-- This is the main entry point for your app from the home screen. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- 
+              This intent-filter allows the TWA to handle links to your website.
+              The android:autoVerify="true" is what enables the Digital Asset Links
+              verification to remove the browser's URL bar.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                
+                <!-- The URL that your TWA will handle. -->
+                <data
+                    android:scheme="https"
+                    android:host="loominar.com" />
+            </intent-filter>
+        </activity>
+
+        <!-- 
+          You will also need to provide a meta-data tag that points to your
+          Trusted Web Activity implementation and your default URL. This is
+          often configured in the MainActivity class or via a library like
+          'android-browser-helper'. The example below is a simplified version.
+          Refer to the official TWA documentation for the latest implementation.
+        -->
+        <meta-data
+            android:name="android.support.customtabs.trusted.DEFAULT_URL"
+            android:value="https://loominar.com" />
+
+    </application>
+</manifest>
+```
+
 ### Step 3: Publish to the Google Play Store
 
 1.  **Enroll in Google Play Developer Program:** Register for a developer account (a one-time fee is required).
