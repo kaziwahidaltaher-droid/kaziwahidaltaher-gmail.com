@@ -1,12 +1,11 @@
 // A simple service worker for Progressive Web App functionality
-const CACHE_NAME = 'loominar-cache-v1';
+const CACHE_NAME = 'growth-scheme-cache-v1';
 const urlsToCache = [
-  '/',
   'index.html',
   'index.css',
-  'index.tsx', // This will be transpiled to JS, but we cache the source for this environment
-  'icon.svg',
-  'manifest.json'
+  'index.tsx',
+  'manifest.json',
+  'icon.svg'
 ];
 
 /**

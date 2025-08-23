@@ -3,500 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LOOMINAR | কৃবু বাবা AI Studio - Where Your Ideas Become Brands</title>
+    <title>Global AI Business Growth Scheme</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="index.css">
-    <meta name="theme-color" content="#1a1a1a">
+    <meta name="theme-color" content="#f8f9fa">
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="icon.svg">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
     <script type="importmap">
 {
   "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.4.0",
-    "react/": "https://esm.sh/react@^19.1.1/"
+    "@google/genai": "https://esm.sh/@google/genai@^1.4.0"
   }
 }
 </script>
 </head>
-<body>
-    <div id="initial-loader" class="loader-overlay">
-        <div class="loader"></div>
-        <p>Loading Design Studio...</p>
-    </div>
+<body class="is-loading">
 
-    <div id="auth-overlay" class="auth-overlay" style="display: none;">
-        <div class="auth-card">
-            <div class="auth-header">
-                <svg class="sidebar-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="LOOMINAR Logo">
-                    <defs>
-                        <linearGradient id="logoGradientAuth" x1="0%" y1="100%" x2="100%" y2="0%">
-                        <stop offset="0%" stop-color="var(--primary-color)" />
-                        <stop offset="100%" stop-color="var(--primary-hover)" />
-                        </linearGradient>
-                        <filter id="logoGlowAuth" x="-50%" y="-50%" width="200%" height="200%">
-                        <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-                        <feMerge>
-                            <feMergeNode in="coloredBlur"/>
-                            <feMergeNode in="SourceGraphic"/>
-                        </feMerge>
-                        </filter>
-                    </defs>
-                    <path d="M 25 20 L 25 80 L 75 80" stroke="url(#logoGradientAuth)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none" filter="url(#logoGlowAuth)" />
-                </svg>
-                <div>
-                    <h1>LOOMINAR</h1>
-                    <h2>" কৃবু বাবা " AI Sanctuary</h2>
-                </div>
+    <!-- ONBOARDING WIZARD -->
+    <div id="onboarding-container" class="onboarding-container">
+        <header class="onboarding-header">
+            <h1>Launch Your Dream Business</h1>
+            <p>Let's get started. Follow these simple steps and our AI will build your brand foundation in minutes.</p>
+        </header>
+
+        <!-- Stepper -->
+        <div id="stepper" class="stepper">
+            <div class="step active" data-step-index="1">
+                <div class="step-circle">1</div>
+                <div class="step-label">Business Type</div>
             </div>
-
-            <!-- Login View -->
-            <div id="login-view">
-                <h3>Welcome Back</h3>
-                <div class="form-group">
-                    <label for="login-mobile">Mobile Number</label>
-                    <input type="tel" id="login-mobile" placeholder="Enter your mobile number">
-                </div>
-                <div class="form-group">
-                    <button id="login-otp-button" class="secondary-button" style="width: 100%;">Send OTP</button>
-                </div>
-                <div class="form-group">
-                    <label for="login-otp">OTP Code</label>
-                    <input type="text" id="login-otp" placeholder="Enter 6-digit code" disabled>
-                </div>
-                <button id="login-button">Login</button>
-                <div class="separator"><span>OR</span></div>
-                <div class="social-logins">
-                    <button class="social-btn google" data-provider="Gmail">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" fill="currentColor"><path d="M17.64,9.2045c0-.6382-.0573-1.2518-.1682-1.8409H9v3.4818h4.8436c-.2086,1.125-.84,2.0782-1.7777,2.7164v2.2581h2.9087c1.7018-1.5668,2.6836-3.8705,2.6836-6.6154Z"/><path d="M9,18c2.43,0,4.4673-0.8059,5.9564-2.1805l-2.9087-2.2581c-.8059,0.54-1.8409,0.8682-2.9332,0.8682-2.2718,0-4.1873-1.5273-4.8727-3.5864H1.0555v2.3318C2.5336,16.3195,5.5014,18,9,18Z"/><path d="M4.1273,10.71c-.2227-.6709-.3491-1.3859-.3491-2.1332s0.1264-1.4623,0.3491-2.1332V4.1118H1.0555C0.3764,5.4477,0,7.1614,0,9c0,1.8386,0.3764,3.5523,1.0555,4.8882L4.1273,10.71Z"/><path d="M9,3.5795c1.3214,0,2.5077,0.4568,3.4409,1.3468l2.5814-2.5814C13.4636,0.84,11.4259,0,9,0,5.5014,0,2.5336,1.6805,1.0555,4.1118l3.0718,2.3318C4.8127,4.5505,6.7282,3.5795,9,3.5795Z"/></svg>
-                        Continue with Gmail
-                    </button>
-                    <button class="social-btn facebook" data-provider="Facebook">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M14 13.5h2.5l1-4H14v-2c0-1.03 0-2 2-2h1.5V2.14c-.326-.043-1.557-.14-2.857-.14C11.928 2 10 3.657 10 6.7v2.8H7v4h3v9h4v-9z"></path></svg>
-                        Continue with Facebook
-                    </button>
-                    <button class="social-btn linkedin" data-provider="LinkedIn">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M6.94 5.002a2.002 2.002 0 1 1-4.003.002 2.002 2.002 0 0 1 4.003-.002zM7 8.48H3V21h4V8.48zm6.32 0H9.34V21h3.94v-6.57c0-3.66 4.77-4 4.77 0V21H22v-7.93c0-6.17-7.06-5.94-8.72-2.91l.04-1.68z"></path></svg>
-                        Continue with LinkedIn
-                    </button>
-                </div>
-                <p class="auth-switch">Don't have an account? <a href="#" id="show-register">Register</a></p>
+            <div class="step" data-step-index="2">
+                <div class="step-circle">2</div>
+                <div class="step-label">Your Idea</div>
             </div>
-
-            <!-- Register View (hidden by default) -->
-            <div id="register-view" class="hidden">
-                <h3>Create Account</h3>
-                <div class="form-group">
-                    <label for="register-role">I am a...</label>
-                    <select id="register-role">
-                        <option value="Client">Client</option>
-                        <option value="Owner">Owner</option>
-                        <option value="Driver">Driver</option>
-                    </select>
-                </div>
-                 <div class="form-group">
-                    <label for="register-mobile">Mobile Number</label>
-                    <input type="tel" id="register-mobile" placeholder="Enter your mobile number">
-                </div>
-                <div class="form-group">
-                    <button id="register-otp-button" class="secondary-button" style="width: 100%;">Send OTP</button>
-                </div>
-                <div class="form-group">
-                    <label for="register-otp">OTP Code</label>
-                    <input type="text" id="register-otp" placeholder="Enter 6-digit code" disabled>
-                </div>
-                <button id="register-button">Register</button>
-                <div class="separator"><span>OR</span></div>
-                 <div class="social-logins">
-                    <button class="social-btn google" data-provider="Gmail">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" fill="currentColor"><path d="M17.64,9.2045c0-.6382-.0573-1.2518-.1682-1.8409H9v3.4818h4.8436c-.2086,1.125-.84,2.0782-1.7777,2.7164v2.2581h2.9087c1.7018-1.5668,2.6836-3.8705,2.6836-6.6154Z"/><path d="M9,18c2.43,0,4.4673-0.8059,5.9564-2.1805l-2.9087-2.2581c-.8059,0.54-1.8409,0.8682-2.9332,0.8682-2.2718,0-4.1873-1.5273-4.8727-3.5864H1.0555v2.3318C2.5336,16.3195,5.5014,18,9,18Z"/><path d="M4.1273,10.71c-.2227-.6709-.3491-1.3859-.3491-2.1332s0.1264-1.4623,0.3491-2.1332V4.1118H1.0555C0.3764,5.4477,0,7.1614,0,9c0,1.8386,0.3764,3.5523,1.0555,4.8882L4.1273,10.71Z"/><path d="M9,3.5795c1.3214,0,2.5077,0.4568,3.4409,1.3468l2.5814-2.5814C13.4636,0.84,11.4259,0,9,0,5.5014,0,2.5336,1.6805,1.0555,4.1118l3.0718,2.3318C4.8127,4.5505,6.7282,3.5795,9,3.5795Z"/></svg>
-                        Register with Gmail
-                    </button>
-                    <button class="social-btn facebook" data-provider="Facebook">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M14 13.5h2.5l1-4H14v-2c0-1.03 0-2 2-2h1.5V2.14c-.326-.043-1.557-.14-2.857-.14C11.928 2 10 3.657 10 6.7v2.8H7v4h3v9h4v-9z"></path></svg>
-                        Register with Facebook
-                    </button>
-                    <button class="social-btn linkedin" data-provider="LinkedIn">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M6.94 5.002a2.002 2.002 0 1 1-4.003.002 2.002 2.002 0 0 1 4.003-.002zM7 8.48H3V21h4V8.48zm6.32 0H9.34V21h3.94v-6.57c0-3.66 4.77-4 4.77 0V21H22v-7.93c0-6.17-7.06-5.94-8.72-2.91l.04-1.68z"></path></svg>
-                        Register with LinkedIn
-                    </button>
-                </div>
-                <p class="auth-switch">Already have an account? <a href="#" id="show-login">Login</a></p>
+            <div class="step" data-step-index="3">
+                <div class="step-circle">🚀</div>
+                <div class="step-label">AI Magic</div>
             </div>
         </div>
-    </div>
 
-    <div class="app-container" style="opacity: 0; pointer-events: none;">
-        <aside class="sidebar">
-            <header class="sidebar-header">
-                <svg class="sidebar-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="LOOMINAR Logo">
-                    <defs>
-                        <linearGradient id="logoGradient" x1="0%" y1="100%" x2="100%" y2="0%">
-                        <stop offset="0%" stop-color="var(--primary-color)" />
-                        <stop offset="100%" stop-color="var(--primary-hover)" />
-                        </linearGradient>
-                        <filter id="logoGlow" x="-50%" y="-50%" width="200%" height="200%">
-                        <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-                        <feMerge>
-                            <feMergeNode in="coloredBlur"/>
-                            <feMergeNode in="SourceGraphic"/>
-                        </feMerge>
-                        </filter>
-                    </defs>
-                    <path d="M 25 20 L 25 80 L 75 80" stroke="url(#logoGradient)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none" filter="url(#logoGlow)" />
-                </svg>
-                <div>
-                    <h1 id="app-title">LOOMINAR</h1>
-                    <h2>" কৃবু বাবা " AI Sanctuary</h2>
-                </div>
-                <button id="logout-button" class="logout-button" title="Logout">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+        <!-- Step 1: Business Type Selection -->
+        <div id="step-type-selection" class="step-content">
+            <div class="step-header">
+                <h2>First, what kind of business are you starting?</h2>
+                <p>Select a category that best fits your vision.</p>
+            </div>
+            <div id="business-type-grid" class="business-type-grid">
+                <button class="business-type-card" data-type="Fashion & Apparel">
+                    <span class="icon">👕</span>
+                    <span>Fashion & Apparel</span>
                 </button>
-            </header>
-
-            <div class="sidebar-content">
-                <section class="control-section" id="section-design-tools">
-                    <label for="prompt-input">Prompt</label>
-                    <div class="prompt-wrapper">
-                        <textarea id="prompt-input" rows="8" placeholder="Describe or speak your vision..."></textarea>
-                        <button id="mic-button" aria-label="Use voice input">🎤</button>
-                    </div>
-                    <div class="prompt-guide">
-                        <strong>Pro Tip:</strong> Be descriptive! Include style (e.g., photorealistic), colors, lighting, and composition.
-                    </div>
-                </section>
-
-                <section class="control-section" id="section-design-tools">
-                    <label for="logo-upload-input">Upload Image (Optional)</label>
-                    <div class="upload-controls">
-                        <label for="logo-upload-input" class="button-like-label">Choose File</label>
-                        <input type="file" id="logo-upload-input" accept="image/png, image/jpeg" hidden>
-                        <div id="logo-preview-container">
-                            <img id="logo-preview" src="" alt="Logo preview"/>
-                            <span id="logo-filename"></span>
-                            <button id="remove-logo-button" aria-label="Remove logo">&times;</button>
-                        </div>
-                    </div>
-                    <p class="upload-note">Use `[LOGO]` in your prompt to place the logo.</p>
-                </section>
-                
-                 <section class="control-section" id="section-design-tools">
-                    <button id="camera-button" class="secondary-button" style="width: 100%;">📸 Capture Inspiration</button>
-                </section>
-
-                <section class="control-section" id="section-design-tools">
-                     <label for="market-select">Target Market</label>
-                    <select id="market-select">
-                        <option value="Bangladesh">Bangladesh</option>
-                        <option value="USA">USA</option>
-                        <option value="UK">UK</option>
-                        <option value="India">India</option>
-                        <option value="Nigeria">Nigeria</option>
-                    </select>
-                </section>
-
-                <section class="control-section generate-section" id="section-design-tools">
-                     <button id="generate-button">Generate & Analyze</button>
-                </section>
-
-                 <div id="quota-error">
-                    <p>You are out of quota. Please <button id="open-key">get a new API key</button> to continue.</p>
-                </div>
-                
-                <hr class="divider" />
-
-                <section class="control-section" id="section-store">
-                    <h3 id="store-section-title">My Store</h3>
-                    <div id="store-grid"></div>
-                    <div id="store-empty-state" class="empty-state">
-                        <p>Published designs will appear here.</p>
-                    </div>
-                </section>
-
-                <hr class="divider" />
-
-                <section class="control-section" id="section-history">
-                    <h3>Design History</h3>
-                    <ul id="history-list"></ul>
-                    <div id="history-empty-state" class="empty-state">
-                         <p>Your generated designs will appear here.</p>
-                    </div>
-                </section>
-
+                <button class="business-type-card" data-type="Food & Beverage">
+                    <span class="icon">🍔</span>
+                    <span>Food & Beverage</span>
+                </button>
+                <button class="business-type-card" data-type="Digital Services">
+                    <span class="icon">💻</span>
+                    <span>Digital Services</span>
+                </button>
+                <button class="business-type-card" data-type="Coaching & Consulting">
+                    <span class="icon">📈</span>
+                    <span>Coaching & Consulting</span>
+                </button>
+                <button class="business-type-card" data-type="Handmade Goods">
+                    <span class="icon">🎨</span>
+                    <span>Handmade Goods</span>
+                </button>
+                <button class="business-type-card" data-type="Health & Wellness">
+                    <span class="icon">🌿</span>
+                    <span>Health & Wellness</span>
+                </button>
+                 <button class="business-type-card" data-type="Tech Startup">
+                    <span class="icon">💡</span>
+                    <span>Tech Startup</span>
+                </button>
+                 <button class="business-type-card" data-type="Other">
+                    <span class="icon">✨</span>
+                    <span>Other</span>
+                </button>
             </div>
-        </aside>
+        </div>
 
-        <main class="main-content">
-             <div id="status"></div>
-            <div id="welcome-screen">
-                <h2>Welcome to the Studio</h2>
-                <p>Describe your vision in the prompt panel to get started.</p>
+        <!-- Step 2: Idea Input -->
+        <div id="step-idea-input" class="step-content hidden">
+            <div class="step-header">
+                <h2>Great! Now, tell us about your <span id="idea-prompt-type"></span> idea.</h2>
+                <p>Describe your business in a few sentences. What makes it special?</p>
             </div>
-            <div id="result-display" style="display: none;">
-                <div class="image-container">
-                    <img id="generated-image" alt="Generated image">
-                    <div class="loader" id="loader"></div>
-                </div>
-
-                <div id="design-details-container" class="design-details">
-                    <h3>Design Notes for <span id="design-details-id"></span></h3>
-                    <p><strong>Summary:</strong> <span id="design-details-summary"></span></p>
-                    <div id="design-details-notes-wrapper">
-                        <p><strong>Details:</strong></p>
-                        <p id="design-details-notes"></p>
-                    </div>
-                     <div id="design-details-review-wrapper">
-                        <p><strong>Review Feedback:</strong></p>
-                        <p id="design-details-review"></p>
-                    </div>
-                </div>
-
-                <div class="studio-container" id="studio-container">
-                    <nav class="tab-nav" role="tablist" aria-label="Studio analysis sections">
-                        <button role="tab" id="tab-btn-dna" aria-controls="tab-dna" aria-selected="true" class="tab-button active" data-tab="dna">Product DNA</button>
-                        <button role="tab" id="tab-btn-branding" aria-controls="tab-branding" aria-selected="false" class="tab-button" data-tab="branding">Branding</button>
-                        <button role="tab" id="tab-btn-seo" aria-controls="tab-seo" aria-selected="false" class="tab-button" data-tab="seo">SEO/SEM</button>
-                        <button role="tab" id="tab-btn-ecommerce" aria-controls="tab-ecommerce" aria-selected="false" class="tab-button" data-tab="ecommerce">E-commerce</button>
-                        <button role="tab" id="tab-btn-manufacturing" aria-controls="tab-manufacturing" aria-selected="false" class="tab-button" data-tab="manufacturing">Manufacturing</button>
-                        <button role="tab" id="tab-btn-buzz" aria-controls="tab-buzz" aria-selected="false" class="tab-button" data-tab="buzz">Social Buzz</button>
-                        <button role="tab" id="tab-btn-learn" aria-controls="tab-learn" aria-selected="false" class="tab-button" data-tab="learn">Learn With AI</button>
-                    </nav>
-
-                    <div id="tab-dna" role="tabpanel" aria-labelledby="tab-btn-dna" class="tab-content active">
-                        <ul id="dna-specs-list" class="studio-grid"></ul>
-                        <div class="studio-grid">
-                            <div class="info-block">
-                                <h3>Pricing Strategy</h3>
-                                <div id="dna-pricing-content"></div>
-                            </div>
-                             <div class="info-block">
-                                <h3>Logistics Overview</h3>
-                                <div id="dna-logistics-content"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="tab-branding" role="tabpanel" aria-labelledby="tab-btn-branding" class="tab-content">
-                       <div class="studio-grid">
-                            <div class="info-block">
-                                <h3>Brand Archetype</h3>
-                                <p><strong id="branding-archetype"></strong></p>
-                            </div>
-                            <div class="info-block">
-                                <h3>Brand Voice</h3>
-                                <p id="branding-voice"></p>
-                            </div>
-                       </div>
-                        <div class="info-block">
-                            <h3>AI Logo Feedback</h3>
-                            <p id="branding-logo-feedback"></p>
-                        </div>
-                    </div>
-
-                    <div id="tab-seo" role="tabpanel" aria-labelledby="tab-btn-seo" class="tab-content">
-                       <div class="seo-grid">
-                            <div class="seo-rate-display">
-                                <svg class="seo-rate-svg" viewBox="0 0 100 100">
-                                  <circle class="seo-rate-bg" cx="50" cy="50" r="45"></circle>
-                                  <circle id="seo-rate-circle" class="seo-rate-fg" cx="50" cy="50" r="45"></circle>
-                                </svg>
-                                <span id="seo-rate-score" class="score"></span>
-                                <span class="score-label">SEO Rate</span>
-                            </div>
-                            <div class="info-block">
-                                <h3>SEO Rate Analysis</h3>
-                                <p id="seo-rate-analysis"></p>
-                            </div>
-                       </div>
-                       <div class="info-block">
-                           <h3>Targeted Keywords</h3>
-                           <div id="seo-keywords" class="keyword-list"></div>
-                       </div>
-                       <div class="studio-grid">
-                            <div class="info-block">
-                                <h3>SEM Ad Copy</h3>
-                                <div class="ad-preview">
-                                    <strong id="sem-ad-headline"></strong>
-                                    <p id="sem-ad-description"></p>
-                                </div>
-                           </div>
-                           <div class="info-block">
-                                <h3>SEO Meta Description</h3>
-                                <p id="seo-meta-description"></p>
-                           </div>
-                       </div>
-                        <div class="info-block">
-                            <h3>Social Media Prompts</h3>
-                            <ul id="seo-social-prompts"></ul>
-                        </div>
-                    </div>
-
-                    <div id="tab-ecommerce" role="tabpanel" aria-labelledby="tab-btn-ecommerce" class="tab-content">
-                        <div class="info-block">
-                            <h3>Product Title</h3>
-                            <p><strong id="ecom-title"></strong></p>
-                        </div>
-                        <div class="info-block">
-                            <h3>Product Description</h3>
-                            <p id="ecom-description"></p>
-                        </div>
-                        <div class="studio-grid">
-                            <div class="info-block">
-                                <h3>SKU (Stock Keeping Unit)</h3>
-                                <code id="ecom-sku"></code>
-                            </div>
-                            <div class="info-block">
-                                <h3>GTIN (Unique Identifier)</h3>
-                                <p id="ecom-gtin"></p>
-                            </div>
-                        </div>
-                        <div class="info-block">
-                            <h3>Google Product Category</h3>
-                            <p id="ecom-category"></p>
-                        </div>
-                    </div>
-                    
-                    <div id="tab-manufacturing" role="tabpanel" aria-labelledby="tab-btn-manufacturing" class="tab-content">
-                        <div class="info-block">
-                            <h3>Potential Manufacturers</h3>
-                            <div id="man-manufacturers" class="studio-grid"></div>
-                        </div>
-                        <div class="info-block">
-                            <h3>Similar Product Ideas</h3>
-                            <ul id="man-similar-products"></ul>
-                        </div>
-                        <div class="info-block">
-                            <h3>B2B Search Keywords</h3>
-                            <div id="man-b2b-keywords" class="keyword-list"></div>
-                        </div>
-                    </div>
-
-
-                    <div id="tab-buzz" role="tabpanel" aria-labelledby="tab-btn-buzz" class="tab-content">
-                       <div class="buzz-grid">
-                            <div class="sentiment-display">
-                               <span id="buzz-sentiment" class="sentiment-badge"></span>
-                               <p id="buzz-sentiment-analysis"></p>
-                            </div>
-                            <div class="info-block">
-                                <h3>Key Influencers / Archetypes</h3>
-                                <div id="buzz-influencers"></div>
-                            </div>
-                       </div>
-                        <div class="info-block">
-                            <h3>Viral Content Ideas</h3>
-                            <ul id="buzz-content-ideas"></ul>
-                        </div>
-                        <div class="info-block">
-                            <h3>Relevant Hashtags</h3>
-                            <div id="buzz-hashtags" class="keyword-list"></div>
-                        </div>
-                    </div>
-
-                    <div id="tab-learn" role="tabpanel" aria-labelledby="tab-btn-learn" class="tab-content">
-                        <div class="info-block">
-                            <h3>Step-by-Step Production Guide</h3>
-                            <ol id="learn-production-guide"></ol>
-                        </div>
-                        <div class="info-block">
-                            <h3>Supply Chain & Sourcing</h3>
-                            <p>Find raw materials and machinery required for your production.</p>
-                            <div id="learn-sourcing-grid" class="studio-grid">
-                                <div class="info-block">
-                                    <h4>Raw Materials</h4>
-                                    <div id="learn-raw-materials"></div>
-                                </div>
-                                <div class="info-block">
-                                    <h4>Required Machinery</h4>
-                                    <div id="learn-machinery"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="info-block">
-                            <h3>Business Starter Kit</h3>
-                            <h4 id="learn-cost-title"></h4>
-                            <p id="learn-cost-summary"></p>
-                            <ul id="learn-cost-breakdown"></ul>
-                            <strong>Total Estimated Cost: <span id="learn-total-cost"></span></strong>
-                        </div>
-                        <div class="info-block">
-                            <h3>Collaboration Network</h3>
-                            <h4 id="learn-collab-title"></h4>
-                            <p id="learn-collab-summary"></p>
-                            <div id="learn-collab-partners"></div>
-                        </div>
-                    </div>
-
-                    <div id="studio-sources"></div>
-                </div>
+            <textarea id="business-idea" placeholder="e.g., 'An online store selling eco-friendly, handmade t-shirts with unique designs inspired by Bangladeshi folk art.'"></textarea>
+            <div class="step-actions">
+                <button id="back-to-type-button" class="secondary-button">Back</button>
+                <button id="generate-brand-button" class="primary-button">Build My Business Launchpad ✨</button>
             </div>
-        </main>
-    </div>
+        </div>
 
-
-    <div id="proposal-modal" class="modal-overlay">
-        <div class="modal-content card">
-            <h2>Propose a Design Change</h2>
-            <p>Describe the changes you're making to this design, similar to a commit message.</p>
-            <label for="change-summary">Change Summary (Title)</label>
-            <input type="text" id="change-summary" placeholder="e.g., 'Feat: Add a more vibrant color scheme'">
-            <label for="design-notes">Design Notes (Optional)</label>
-            <textarea id="design-notes" rows="4" placeholder="Explain the problem this change is solving and why you are making it."></textarea>
-            <div class="button-group">
-                <button id="propose-button">Generate & Iterate</button>
-                <button id="cancel-proposal-button" class="secondary-button">Cancel</button>
+        <!-- Step 3: Generating -->
+        <div id="step-generating" class="step-content hidden">
+            <div class="generating-content">
+                <div class="loader"></div>
+                <h2>Building Your Business Launchpad</h2>
+                <p>Our AI is crafting your brand, roadmap, and more. This might take a moment...</p>
             </div>
         </div>
     </div>
 
-    <div id="review-modal" class="modal-overlay">
-        <div class="modal-content card">
-            <h2>Review Design Change</h2>
-            <p>Review the proposed changes and provide feedback before approving or rejecting.</p>
-            <div class="review-proposal-details">
-                <p><strong>Summary:</strong> <span id="review-summary"></span></p>
-                <p><strong>Notes:</strong> <span id="review-notes"></span></p>
-            </div>
-            <label for="review-comments">Review Comments (Optional)</label>
-            <textarea id="review-comments" rows="4" placeholder="e.g., 'LGTM! Great improvement.'"></textarea>
-            <div class="button-group">
-                <button id="approve-button">Approve</button>
-                <button id="reject-button">Reject</button>
-                <button id="cancel-review-button" class="secondary-button">Cancel</button>
-            </div>
-        </div>
-    </div>
-    
-    <div id="camera-modal" class="modal-overlay">
-        <div class="modal-content card">
-            <h2>Capture Inspiration</h2>
-            <p>Point your camera at something inspiring to extract a color palette.</p>
-            <video id="camera-video" autoplay playsinline></video>
-            <div id="camera-loader" class="loader"></div>
-            <div id="palette-container"></div>
-            <div class="button-group">
-                <button id="capture-button">Capture & Analyze</button>
-                <button id="cancel-camera-button" class="secondary-button">Close</button>
-            </div>
-        </div>
-    </div>
+    <!-- DASHBOARD -->
+    <div id="dashboard-container" class="dashboard-container hidden">
+        <header class="dashboard-header">
+            <h1 id="dash-business-name">Your Business Name</h1>
+            <p id="dash-tagline">Your new tagline goes here.</p>
+        </header>
 
-    <div id="video-modal" class="modal-overlay">
-        <div class="modal-content card" style="text-align: center;">
-            <h2>Generating Promotional Video</h2>
-            <p>Your AI film crew is on the job! This may take a few minutes.</p>
-            <div class="loader" style="display: block; margin: 20px auto;"></div>
-            <p id="video-status-message" style="color: var(--text-secondary); font-style: italic;"></p>
-        </div>
-    </div>
-
-    <div id="video-player-modal" class="modal-overlay">
-        <div class="modal-content card">
-            <h2>Promotional Video</h2>
-            <video id="promo-video-player" controls style="width: 100%; border-radius: var(--radius); background-color: #000;"></video>
-            <div class="button-group">
-                <button id="close-video-player-button" class="secondary-button">Close</button>
+        <div class="dashboard-grid">
+            <div class="dash-card" id="dash-roadmap-card">
+                 <h3><span class="icon">🗺️</span> Your First Steps</h3>
+                 <ol id="dash-roadmap-list">
+                    <!-- Roadmap steps will be rendered here -->
+                 </ol>
+            </div>
+            <div class="dash-card">
+                <h3><span class="icon">🎨</span> Logo Concept</h3>
+                <p id="dash-logo-concept">A detailed description of your new logo will appear here.</p>
+            </div>
+            <div class="dash-card">
+                <h3><span class="icon">🎨</span> Color Palette</h3>
+                <div id="dash-color-palette">
+                    <!-- Color swatches will be rendered here -->
+                </div>
+            </div>
+             <div class="dash-card">
+                <h3><span class="icon">🗣️</span> Brand Voice</h3>
+                <p id="dash-brand-voice">Your brand's personality will be defined here.</p>
+            </div>
+            <div class="dash-card">
+                <h3><span class="icon">📁</span> Business Type</h3>
+                <p id="dash-business-type">Your chosen business type.</p>
             </div>
         </div>
     </div>

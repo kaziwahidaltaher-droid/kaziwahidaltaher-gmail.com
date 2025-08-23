@@ -1,17 +1,16 @@
 {
-  "name": "LOOMINAR \" কৃবু বাবা \" AI Sanctuary",
-  "short_name": "Loominar",
+  "name": "Global AI Business Growth Scheme",
+  "short_name": "Growth AI",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1a1a1a",
-  "theme_color": "#1a1a1a",
-  "description": "Your AI-powered studio for product design, branding, and go-to-market strategy.",
+  "background_color": "#f8f9fa",
+  "theme_color": "#4f46e5",
+  "description": "Let AI take care of everything. You just create, connect, and grow—from anywhere.",
   "icons": [
     {
       "src": "icon.svg",
-      "sizes": "192x192 512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "sizes": "any",
+      "type": "image/svg+xml"
     }
   ]
 }

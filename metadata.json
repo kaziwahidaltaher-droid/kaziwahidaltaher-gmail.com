@@ -1,8 +1,5 @@
 {
-  "name": "LOOMINAR \" কৃবু বাবা \" AI Sanctuary",
-  "description": "Your AI-powered studio for product design, branding, and go-to-market strategy.",
-  "requestFramePermissions": [
-    "camera",
-    "microphone"
-  ]
+  "name": "Global AI Business Growth Scheme",
+  "description": "Let AI take care of everything. You just create, connect, and grow—from anywhere.",
+  "requestFramePermissions": []
 }
