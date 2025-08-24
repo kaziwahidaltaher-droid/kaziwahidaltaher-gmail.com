@@ -4,39 +4,41 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { GoogleGenAI, Type } from '@google/genai';
 
-const GEMINI_API_KEY = process.env.API_KEY;
-if (!GEMINI_API_KEY) {
-    throw new Error("API_KEY environment variable not set");
-}
-const GEMINI_MODEL = 'gemini-2.5-flash';
 
 // --- TYPE DEFINITIONS ---
-interface BrandIdentity {
-    businessName: string;
-    tagline: string;
-    logoConcept: string;
-    colorPalette: Array<{ colorName: string; hex: string; description: string; }>;
-    brandVoice: string;
+interface DesignAttributes {
+    shape: string;
+    material: string;
+    functionality: string[];
+    colorVariants: Array<{ name: string; description: string; }>;
 }
 
-interface RoadmapStep {
-    stepTitle: string;
-    stepDescription: string;
+interface CreationStep {
+    step: number;
+    module: string;
+    action: string;
 }
 
-interface BusinessLaunchpad {
-    brandIdentity: BrandIdentity;
-    roadmap: RoadmapStep[];
+interface ProductConcept {
+    category: 'Wearable Dashboard' | 'Serenity Token';
+    id: number;
+    productName: string; // e.g., "Stillpoint"
+    purpose: string;
+    designAttributes: DesignAttributes;
+    creationFlow: CreationStep[];
+    icon: string;
+}
+
+interface AurelionLaunchpad {
+    productConcepts: ProductConcept[];
 }
 
 interface BusinessProfile {
     businessType: string;
     businessIdea: string;
-    launchpad: BusinessLaunchpad | null;
+    launchpad: AurelionLaunchpad | null;
 }
-
 
 // --- STATE MANAGEMENT ---
 let currentStep: 'TYPE_SELECTION' | 'IDEA_INPUT' | 'GENERATING' | 'DASHBOARD' = 'TYPE_SELECTION';
@@ -45,6 +47,9 @@ let businessProfile: BusinessProfile = {
     businessIdea: '',
     launchpad: null,
 };
+let isConnected = false;
+let isConnecting = false;
+
 
 // --- DOM ELEMENT SELECTORS ---
 const onboardingContainerEl = document.getElementById('onboarding-container') as HTMLDivElement;
@@ -62,69 +67,75 @@ const businessIdeaTextarea = document.getElementById('business-idea') as HTMLTex
 const generateButton = document.getElementById('generate-brand-button') as HTMLButtonElement;
 const backToTypeButton = document.getElementById('back-to-type-button') as HTMLButtonElement;
 
+// Dashboard Content
+const productConceptsContainerEl = document.getElementById('product-concepts-container') as HTMLDivElement;
 
-// --- AI CORE FUNCTION ---
-async function generateLaunchpad(type: string, idea: string): Promise<BusinessLaunchpad> {
-    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+// Studio Control Elements
+const studioControlCardEl = document.getElementById('studio-control-card');
+const moduleStatusListEl = document.getElementById('module-status-list');
+const connectButton = document.getElementById('connect-button') as HTMLButtonElement;
+const liveStatusIndicatorEl = document.getElementById('live-status-indicator') as HTMLSpanElement;
+const liveStatusTextEl = document.getElementById('live-status-text') as HTMLSpanElement;
+const syncStatusTextEl = document.getElementById('sync-status-text') as HTMLSpanElement;
+const activateRitualButton = document.getElementById('activate-ritual-button') as HTMLButtonElement;
+const ritualStatusEl = document.getElementById('ritual-status') as HTMLParagraphElement;
+const ritualSelectEl = document.getElementById('ritual-select') as HTMLSelectElement;
 
-    const prompt = `
-        You are an expert brand strategist and startup mentor specializing in the Bangladesh market.
-        A user wants to start a new business.
 
-        Business Type: ${type}
-        Business Idea: "${idea}"
-
-        Your task is to generate a complete business launchpad. This includes:
-        1.  A full Brand Identity: A creative, modern, and appealing brand identity that is culturally relevant for Bangladesh. The color palette must have 4 colors. The logo concept should be a detailed description for a designer.
-        2.  A 3-Step Roadmap: A simple, actionable 3-step plan outlining the *very first* things the entrepreneur should do to get started. These steps should be realistic and high-impact for a brand new business in Bangladesh.
-    `;
-
-    const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: prompt,
-        config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    brandIdentity: {
-                        type: Type.OBJECT,
-                        properties: {
-                            businessName: { type: Type.STRING, description: "A creative, unique business name." },
-                            tagline: { type: Type.STRING, description: "A catchy and memorable tagline." },
-                            logoConcept: { type: Type.STRING, description: "A detailed description of a logo concept." },
-                            colorPalette: {
-                                type: Type.ARRAY,
-                                items: {
-                                    type: Type.OBJECT,
-                                    properties: {
-                                        colorName: { type: Type.STRING },
-                                        hex: { type: Type.STRING, description: "The hex code, e.g., #FFFFFF" },
-                                        description: { type: Type.STRING, description: "How this color should be used in the brand." }
-                                    }
-                                }
-                            },
-                            brandVoice: { type: Type.STRING, description: "The tone and personality of the brand's communication (e.g., 'Friendly and Energetic', 'Professional and Trustworthy')." }
-                        }
+// --- AI CORE FUNCTIONS (API Layer) ---
+async function generateLaunchpad(type: string, idea: string): Promise<AurelionLaunchpad> {
+    console.log("Simulating AI Launchpad generation for:", { type, idea });
+    // This is a mock function to simulate the AI generation process.
+    // It prevents the app from hanging on a failed network request
+    // and provides instant feedback for a better user experience.
+    return new Promise(resolve => {
+        setTimeout(() => {
+            resolve({
+                productConcepts: [
+                    {
+                        category: 'Serenity Token',
+                        id: 1,
+                        productName: "Stillpoint",
+                        purpose: "A tactile object that helps the user pause, breathe, and return to emotional equilibrium. It's not a gadget — it's a presence.",
+                        designAttributes: {
+                            shape: "Smooth oval with a subtle spiral indentation — fits naturally in the palm.",
+                            material: "Biolight-infused polymer with soft matte texture. Warm to the touch, responsive to skin temperature.",
+                            functionality: ["Gently pulses when held, syncing with the user's breath", "Stores a single calming phrase or memory", "Can be placed on a surface to emit ambient light"],
+                            colorVariants: [{ name: "Mist Blue", description: "(calm)" }, { name: "Sandstone", description: "(grounding)" }, { name: "Pale Gold", description: "(clarity)" }]
+                        },
+                        creationFlow: [
+                            { step: 1, module: "Matter Shaper", action: "molds the oval form" },
+                            { step: 2, module: "BioWeaver", action: "infuses biolight and temperature-responsive layers" },
+                            { step: 3, module: "Engraver", action: "inscribes a calming phrase (e.g. “You are held.”)" },
+                            { step: 4, module: "Packaging Module", action: "wraps it in a soft, recyclable sleeve with a poetic card" }
+                        ],
+                        icon: "🌿"
                     },
-                    roadmap: {
-                        type: Type.ARRAY,
-                        description: "An actionable 3-step plan to get started.",
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                stepTitle: { type: Type.STRING, description: "A short, clear title for the step." },
-                                stepDescription: { type: Type.STRING, description: "A brief, actionable description of the step." }
-                            }
-                        }
+                    {
+                        category: 'Wearable Dashboard',
+                        id: 1,
+                        productName: "Pulseform",
+                        purpose: "A soft, skin-friendly interface that tracks emotional rhythms, breath cycles, and ambient energy — designed to support calm focus and gentle transitions.",
+                        designAttributes: {
+                            shape: "Curved oblong panel with rounded edges, designed to sit on the chest or wrist.",
+                            material: "Polymer blend with breathable mesh and embedded biolight sensors.",
+                            functionality: ["Displays a heart icon and emotional graph", "Syncs with Serenity Tokens to reflect mood shifts", "Emits gentle pulses to guide breath or focus"],
+                            colorVariants: [{ name: "Soft Graphite", description: "(focus)" }, { name: "Pale Lavender", description: "(calm)" }, { name: "Warm Sand", description: "(balance)" }]
+                        },
+                        creationFlow: [
+                            { step: 1, module: "Matter Shaper", action: "molds the wearable form" },
+                            { step: 2, module: "NanoPrint Engine", action: "embeds biometric sensors and emotional graph display" },
+                            { step: 3, module: "Wellness Module", action: "calibrates pulse feedback and ambient sync" },
+                            { step: 4, module: "Packaging Module", action: "includes a soft wrap and onboarding card" }
+                        ],
+                        icon: "🧠"
                     }
-                }
-            }
-        }
+                ]
+            });
+        }, 2500); // Simulate network and AI generation time
     });
-
-    return JSON.parse(response.text) as BusinessLaunchpad;
 }
+
 
 // --- UI RENDERING & LOGIC ---
 
@@ -132,16 +143,16 @@ async function generateLaunchpad(type: string, idea: string): Promise<BusinessLa
  * Updates the UI to show the correct step in the onboarding process.
  */
 function updateUiForStep() {
-    // Hide all steps first
+    if (!stepTypeEl || !stepIdeaEl || !stepGeneratingEl || !onboardingContainerEl || !dashboardContainerEl || !stepperEl) return;
+
     stepTypeEl.classList.add('hidden');
     stepIdeaEl.classList.add('hidden');
     stepGeneratingEl.classList.add('hidden');
     onboardingContainerEl.classList.add('hidden');
     dashboardContainerEl.classList.add('hidden');
 
-    // Update stepper
     const steps = stepperEl.querySelectorAll('.step');
-    steps.forEach((step, index) => {
+    steps.forEach((step) => {
         step.classList.remove('active', 'completed');
         const stepIndex = step.getAttribute('data-step-index');
         if (stepIndex) {
@@ -163,7 +174,6 @@ function updateUiForStep() {
         case 'IDEA_INPUT':
             onboardingContainerEl.classList.remove('hidden');
             stepIdeaEl.classList.remove('hidden');
-            (document.getElementById('idea-prompt-type') as HTMLElement).textContent = businessProfile.businessType;
             businessIdeaTextarea.focus();
             break;
         case 'GENERATING':
@@ -187,101 +197,201 @@ function getStepIndex(step: typeof currentStep): number {
     }
 }
 
+function updateUiForConnectionState() {
+    if (!studioControlCardEl || !liveStatusIndicatorEl || !liveStatusTextEl || !syncStatusTextEl || !connectButton || !ritualSelectEl || !activateRitualButton) return;
 
-/**
- * Renders the final dashboard with the AI-generated brand identity and roadmap.
- */
+    if (isConnected) {
+        liveStatusIndicatorEl.classList.remove('disconnected');
+        liveStatusIndicatorEl.classList.add('pulse');
+        liveStatusTextEl.textContent = 'EMOTIONAL RHYTHM: STABLE';
+        syncStatusTextEl.textContent = 'SYNC: CONNECTED';
+        connectButton.textContent = 'DISCONNECT';
+        ritualSelectEl.disabled = false;
+        activateRitualButton.disabled = false;
+
+        moduleStatusListEl?.querySelectorAll('li').forEach(li => {
+            li.classList.remove('offline');
+            const statusSpan = li.querySelector('span:last-of-type') as HTMLSpanElement;
+            if (statusSpan) statusSpan.textContent = 'ONLINE';
+        });
+
+    } else {
+        liveStatusIndicatorEl.classList.add('disconnected');
+        liveStatusIndicatorEl.classList.remove('pulse');
+        liveStatusTextEl.textContent = 'EMOTIONAL RHYTHM: OFFLINE';
+        syncStatusTextEl.textContent = 'SYNC: DISCONNECTED';
+        connectButton.textContent = 'CONNECT';
+        ritualSelectEl.disabled = true;
+        activateRitualButton.disabled = true;
+
+        moduleStatusListEl?.querySelectorAll('li').forEach(li => {
+            li.classList.add('offline');
+            const statusSpan = li.querySelector('span:last-of-type') as HTMLSpanElement;
+            if (statusSpan) statusSpan.textContent = 'OFFLINE';
+        });
+    }
+}
+
+
 function renderDashboard() {
-    if (!businessProfile.launchpad) return;
+    if (!businessProfile.launchpad || !productConceptsContainerEl) return;
+    
+    const dashCoreIntentionEl = document.getElementById('dash-core-intention');
+    if (dashCoreIntentionEl) {
+       dashCoreIntentionEl.textContent = `Based on your core intention: "${businessProfile.businessIdea}"`;
+    }
 
-    const { brandIdentity, roadmap } = businessProfile.launchpad;
-    const { businessName, tagline, logoConcept, colorPalette, brandVoice } = brandIdentity;
+    // Render Product Concept Cards
+    productConceptsContainerEl.innerHTML = '';
+    businessProfile.launchpad.productConcepts.forEach(concept => {
+        const card = document.createElement('div');
+        card.className = 'product-concept-card';
 
-    (document.getElementById('dash-business-name') as HTMLElement).textContent = businessName;
-    (document.getElementById('dash-tagline') as HTMLElement).textContent = tagline;
-    (document.getElementById('dash-logo-concept') as HTMLElement).textContent = logoConcept;
-    (document.getElementById('dash-brand-voice') as HTMLElement).textContent = brandVoice;
-    (document.getElementById('dash-business-type') as HTMLElement).textContent = businessProfile.businessType;
+        const designAttributes = concept.designAttributes;
 
-    // Render Color Palette
-    const paletteEl = document.getElementById('dash-color-palette') as HTMLElement;
-    paletteEl.innerHTML = '';
-    colorPalette.forEach(color => {
-        const swatch = document.createElement('div');
-        swatch.className = 'color-swatch-item';
-        swatch.innerHTML = `
-            <div class="swatch" style="background-color: ${color.hex};"></div>
-            <div class="swatch-info">
-                <strong>${color.colorName} (${color.hex})</strong>
-                <p>${color.description}</p>
+        const colorVariantsHtml = designAttributes.colorVariants.map(v => `<li><strong>${v.name}:</strong> ${v.description}</li>`).join('');
+        const functionalityHtml = designAttributes.functionality.map(f => `<li>${f}</li>`).join('');
+        const creationFlowHtml = concept.creationFlow.map(s => `<li><strong>${s.module}</strong> ${s.action}</li>`).join('');
+
+        card.innerHTML = `
+            <h2 class="product-header">
+                <span>${concept.icon}</span> ${concept.category} ${String(concept.id).padStart(2, '0')}: "${concept.productName}"
+            </h2>
+
+            <div class="product-section">
+                <h3><span>🧭</span> Purpose</h3>
+                <p>${concept.purpose}</p>
+            </div>
+
+            <div class="product-section">
+                <h3><span>🧬</span> Design Attributes</h3>
+                <ul>
+                    <li><strong>Shape:</strong> ${designAttributes.shape}</li>
+                    <li><strong>Material:</strong> ${designAttributes.material}</li>
+                </ul>
+                <h4>Functionality:</h4>
+                <ul>${functionalityHtml}</ul>
+                <h4>Color Variants:</h4>
+                <ul>${colorVariantsHtml}</ul>
+            </div>
+
+            <div class="product-section">
+                <h3><span>🛠️</span> AURELION Creation Flow</h3>
+                <ol class="creation-flow-list">${creationFlowHtml}</ol>
             </div>
         `;
-        paletteEl.appendChild(swatch);
+
+        productConceptsContainerEl.appendChild(card);
     });
 
-    // Render Roadmap
-    const roadmapEl = document.getElementById('dash-roadmap-list') as HTMLElement;
-    roadmapEl.innerHTML = '';
-    roadmap.forEach(step => {
-        const stepItem = document.createElement('li');
-        stepItem.innerHTML = `
-            <strong>${step.stepTitle}</strong>
-            <p>${step.stepDescription}</p>
-        `;
-        roadmapEl.appendChild(stepItem);
-    });
+    // Render Studio Control Panel
+    if (studioControlCardEl && moduleStatusListEl) {
+        studioControlCardEl.classList.remove('hidden');
+        
+        moduleStatusListEl.innerHTML = '';
+        businessProfile.launchpad.productConcepts.forEach(concept => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span><span class="status-indicator-dot"></span>${concept.productName.toUpperCase()}</span><span>OFFLINE</span>`;
+            moduleStatusListEl.appendChild(li);
+        });
+
+        // Set initial connection state UI
+        updateUiForConnectionState();
+    }
 }
 
 // --- EVENT LISTENERS ---
 
-/**
- * Handles clicks on the business type selection grid.
- */
-businessTypeGridEl.addEventListener('click', (e) => {
-    const card = (e.target as HTMLElement).closest<HTMLButtonElement>('.business-type-card');
-    if (card) {
-        const type = card.dataset.type;
-        if (type) {
-            businessProfile.businessType = type;
+if (businessTypeGridEl) {
+    businessTypeGridEl.addEventListener('click', (e) => {
+        const card = (e.target as HTMLElement).closest<HTMLButtonElement>('.business-type-card');
+        if (card) {
+            const type = card.dataset.type;
+            if (type) {
+                businessProfile.businessType = type;
+                currentStep = 'IDEA_INPUT';
+                updateUiForStep();
+            }
+        }
+    });
+}
+
+if (generateButton && businessIdeaTextarea) {
+    generateButton.addEventListener('click', async () => {
+        const idea = businessIdeaTextarea.value.trim();
+        if (idea.length < 10) {
+            alert("Please describe your core intention in a little more detail.");
+            return;
+        }
+        businessProfile.businessIdea = idea;
+        currentStep = 'GENERATING';
+        updateUiForStep();
+
+        try {
+            const launchpad = await generateLaunchpad(businessProfile.businessType, businessProfile.businessIdea);
+            businessProfile.launchpad = launchpad;
+            currentStep = 'DASHBOARD';
+            updateUiForStep();
+        } catch (error) {
+            console.error("Error generating launchpad:", error);
+            alert("Sorry, the Creation Engine couldn't generate a product line. Please try again with a different intention.");
             currentStep = 'IDEA_INPUT';
             updateUiForStep();
         }
-    }
-});
+    });
+}
 
-/**
- * Handles the "Generate Brand" button click.
- */
-generateButton.addEventListener('click', async () => {
-    const idea = businessIdeaTextarea.value.trim();
-    if (idea.length < 10) {
-        alert("Please describe your business idea in a little more detail.");
-        return;
-    }
-    businessProfile.businessIdea = idea;
-    currentStep = 'GENERATING';
-    updateUiForStep();
 
-    try {
-        const launchpad = await generateLaunchpad(businessProfile.businessType, businessProfile.businessIdea);
-        businessProfile.launchpad = launchpad;
-        currentStep = 'DASHBOARD';
+if (backToTypeButton) {
+    backToTypeButton.addEventListener('click', () => {
+        currentStep = 'TYPE_SELECTION';
         updateUiForStep();
-    } catch (error) {
-        console.error("Error generating launchpad:", error);
-        alert("Sorry, the AI couldn't generate a business plan. Please try again with a different idea.");
-        currentStep = 'IDEA_INPUT';
-        updateUiForStep();
-    }
-});
+    });
+}
 
-/**
- * Handles the "Back" button click.
- */
-backToTypeButton.addEventListener('click', () => {
-    currentStep = 'TYPE_SELECTION';
-    updateUiForStep();
-});
+
+// Studio Control Listeners
+if (activateRitualButton && ritualStatusEl && ritualSelectEl) {
+    let isActivating = false;
+    activateRitualButton.addEventListener('click', () => {
+        if (isActivating || !isConnected) return;
+        isActivating = true;
+
+        const selectedRitual = ritualSelectEl.value;
+        ritualStatusEl.textContent = `ACTIVATING: ${selectedRitual}...`;
+        
+        setTimeout(() => {
+            ritualStatusEl.textContent = `RITUAL: ${selectedRitual} IS ACTIVE.`;
+            setTimeout(() => {
+                ritualStatusEl.textContent = '';
+                isActivating = false;
+            }, 3000);
+        }, 1500);
+    });
+}
+
+if (connectButton) {
+    connectButton.addEventListener('click', () => {
+        if (isConnecting) return;
+
+        isConnecting = true;
+        
+        if(isConnected) {
+            // Disconnect logic
+            isConnected = false;
+            updateUiForConnectionState();
+            isConnecting = false;
+        } else {
+            // Connect logic
+            connectButton.textContent = 'CONNECTING...';
+            setTimeout(() => {
+                isConnected = true;
+                updateUiForConnectionState();
+                isConnecting = false;
+            }, 1000); // Simulate connection delay
+        }
+    });
+}
 
 // --- INITIALIZATION ---
 function init() {
@@ -295,6 +405,7 @@ function init() {
     }
 
     updateUiForStep();
+    updateUiForConnectionState(); // Set initial UI for disconnected state
     document.body.classList.remove('is-loading');
 }
 

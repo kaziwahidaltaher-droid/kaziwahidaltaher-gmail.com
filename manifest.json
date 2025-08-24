@@ -1,11 +1,11 @@
 {
-  "name": "Global AI Business Growth Scheme",
-  "short_name": "Growth AI",
+  "name": "AURELION | Universal Creation Engine",
+  "short_name": "AURELION",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f8f9fa",
-  "theme_color": "#4f46e5",
-  "description": "Let AI take care of everything. You just create, connect, and grow—from anywhere.",
+  "background_color": "#1a1a1a",
+  "theme_color": "#1a1a1a",
+  "description": "A Universal Creation Engine for mindful technology.",
   "icons": [
     {
       "src": "icon.svg",

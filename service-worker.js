@@ -1,5 +1,5 @@
 // A simple service worker for Progressive Web App functionality
-const CACHE_NAME = 'growth-scheme-cache-v1';
+const CACHE_NAME = 'growth-scheme-cache-v3';
 const urlsToCache = [
   'index.html',
   'index.css',

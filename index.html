@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global AI Business Growth Scheme</title>
+    <title>AURELION | Universal Creation Engine</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="index.css">
-    <meta name="theme-color" content="#f8f9fa">
+    <meta name="theme-color" content="#1a1a1a">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <script type="importmap">
@@ -24,64 +24,36 @@
     <!-- ONBOARDING WIZARD -->
     <div id="onboarding-container" class="onboarding-container">
         <header class="onboarding-header">
-            <h1>Launch Your Dream Business</h1>
-            <p>Let's get started. Follow these simple steps and our AI will build your brand foundation in minutes.</p>
+            <h1>AURELION</h1>
+            <p>A Universal Creation Engine for mindful technology.</p>
         </header>
 
         <!-- Stepper -->
         <div id="stepper" class="stepper">
             <div class="step active" data-step-index="1">
                 <div class="step-circle">1</div>
-                <div class="step-label">Business Type</div>
+                <div class="step-label">Begin</div>
             </div>
             <div class="step" data-step-index="2">
                 <div class="step-circle">2</div>
-                <div class="step-label">Your Idea</div>
+                <div class="step-label">Intention</div>
             </div>
             <div class="step" data-step-index="3">
                 <div class="step-circle">🚀</div>
-                <div class="step-label">AI Magic</div>
+                <div class="step-label">Create</div>
             </div>
         </div>
 
         <!-- Step 1: Business Type Selection -->
         <div id="step-type-selection" class="step-content">
             <div class="step-header">
-                <h2>First, what kind of business are you starting?</h2>
-                <p>Select a category that best fits your vision.</p>
+                <h2>Design a new product line of tangible, mindful-tech objects.</h2>
+                <p>Start with a core intention and the engine will generate a full collection.</p>
             </div>
             <div id="business-type-grid" class="business-type-grid">
-                <button class="business-type-card" data-type="Fashion & Apparel">
-                    <span class="icon">👕</span>
-                    <span>Fashion & Apparel</span>
-                </button>
-                <button class="business-type-card" data-type="Food & Beverage">
-                    <span class="icon">🍔</span>
-                    <span>Food & Beverage</span>
-                </button>
-                <button class="business-type-card" data-type="Digital Services">
-                    <span class="icon">💻</span>
-                    <span>Digital Services</span>
-                </button>
-                <button class="business-type-card" data-type="Coaching & Consulting">
-                    <span class="icon">📈</span>
-                    <span>Coaching & Consulting</span>
-                </button>
-                <button class="business-type-card" data-type="Handmade Goods">
-                    <span class="icon">🎨</span>
-                    <span>Handmade Goods</span>
-                </button>
-                <button class="business-type-card" data-type="Health & Wellness">
-                    <span class="icon">🌿</span>
-                    <span>Health & Wellness</span>
-                </button>
-                 <button class="business-type-card" data-type="Tech Startup">
-                    <span class="icon">💡</span>
-                    <span>Tech Startup</span>
-                </button>
-                 <button class="business-type-card" data-type="Other">
+                <button class="business-type-card" data-type="Mindful Technology">
                     <span class="icon">✨</span>
-                    <span>Other</span>
+                    <span>Start Creation</span>
                 </button>
             </div>
         </div>
@@ -89,13 +61,13 @@
         <!-- Step 2: Idea Input -->
         <div id="step-idea-input" class="step-content hidden">
             <div class="step-header">
-                <h2>Great! Now, tell us about your <span id="idea-prompt-type"></span> idea.</h2>
-                <p>Describe your business in a few sentences. What makes it special?</p>
+                <h2>Describe the core intention for your product line.</h2>
+                <p>What feeling or state do you want to evoke? What purpose should these objects serve?</p>
             </div>
-            <textarea id="business-idea" placeholder="e.g., 'An online store selling eco-friendly, handmade t-shirts with unique designs inspired by Bangladeshi folk art.'"></textarea>
+            <textarea id="business-idea" placeholder="e.g., 'To create a collection of objects that help users find moments of quiet connection in their daily lives.'"></textarea>
             <div class="step-actions">
                 <button id="back-to-type-button" class="secondary-button">Back</button>
-                <button id="generate-brand-button" class="primary-button">Build My Business Launchpad ✨</button>
+                <button id="generate-brand-button" class="primary-button">Engage Engine ✨</button>
             </div>
         </div>
 
@@ -103,48 +75,103 @@
         <div id="step-generating" class="step-content hidden">
             <div class="generating-content">
                 <div class="loader"></div>
-                <h2>Building Your Business Launchpad</h2>
-                <p>Our AI is crafting your brand, roadmap, and more. This might take a moment...</p>
+                <h2>Engaging Creation Engine...</h2>
+                <p>The engine is interpreting your intention and shaping a unique product line for you...</p>
             </div>
         </div>
     </div>
 
     <!-- DASHBOARD -->
     <div id="dashboard-container" class="dashboard-container hidden">
-        <header class="dashboard-header">
-            <h1 id="dash-business-name">Your Business Name</h1>
-            <p id="dash-tagline">Your new tagline goes here.</p>
+         <header class="dashboard-header">
+            <h1>Generated Product Line</h1>
+            <p id="dash-core-intention">Based on your core intention.</p>
         </header>
 
-        <div class="dashboard-grid">
-            <div class="dash-card" id="dash-roadmap-card">
-                 <h3><span class="icon">🗺️</span> Your First Steps</h3>
-                 <ol id="dash-roadmap-list">
-                    <!-- Roadmap steps will be rendered here -->
-                 </ol>
-            </div>
-            <div class="dash-card">
-                <h3><span class="icon">🎨</span> Logo Concept</h3>
-                <p id="dash-logo-concept">A detailed description of your new logo will appear here.</p>
-            </div>
-            <div class="dash-card">
-                <h3><span class="icon">🎨</span> Color Palette</h3>
-                <div id="dash-color-palette">
-                    <!-- Color swatches will be rendered here -->
+        <div class="aurelion-dashboard">
+            <div class="dashboard-sidebar">
+                <div id="creation-engine-card" class="engine-card">
+                    <div class="engine-header">AURELION</div>
+                    <div class="engine-subheader">UNIVERSAL CREATION ENGINE</div>
+                    <div class="engine-task-box">
+                        <span>CREATE 1 WEARABLE DASHBOARD, 3 SERENITY TOKENS, AND 1 POP-UP STUDIO WALL</span>
+                        <button>RUN</button>
+                    </div>
+                    <div class="engine-main-content">
+                        <div class="engine-art">
+                            <!-- Simplified representation of the art -->
+                            <div class="art-robot"></div>
+                            <div class="art-panel"></div>
+                            <div class="art-token">♥<br/>~~<br/><span class="art-token-text">BE STILL</span></div>
+                            <div class="art-wall"></div>
+                        </div>
+                        <div class="engine-sidebar">
+                            <div class="engine-section">
+                                <label>MATERIAL</label>
+                                <div class="engine-box">COTTON</div>
+                            </div>
+                            <div class="engine-section">
+                                <label>STATUS</label>
+                                <div class="engine-box status-active">IN PROGRESS</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="engine-footer">
+                        <div class="engine-tag">ARCHITECTURE</div>
+                        <div class="engine-tag">ELECTRONICS</div>
+                        <div class="engine-tag">FURNITURE</div>
+                    </div>
+                </div>
+
+                <div id="studio-control-card" class="engine-card hidden">
+                    <div class="engine-header">STUDIO CONTROL</div>
+                    <div class="engine-subheader">LIVE INTERFACE</div>
+                    
+                    <div class="control-section">
+                        <label>LIVE STATUS</label>
+                        <div class="status-display">
+                            <span id="live-status-indicator" class="status-indicator-live"></span>
+                            <span id="live-status-text">EMOTIONAL RHYTHM: OFFLINE</span>
+                        </div>
+                    </div>
+                
+                    <div class="control-section">
+                        <label>RITUAL DESIGNER</label>
+                        <div class="ritual-controls">
+                            <select id="ritual-select">
+                                <option>FOCUS</option>
+                                <option>UNWIND</option>
+                                <option>BREATHE</option>
+                            </select>
+                            <button id="activate-ritual-button">ACTIVATE</button>
+                        </div>
+                        <p id="ritual-status" class="ritual-status-text"></p>
+                    </div>
+                
+                    <div class="control-section">
+                        <label>MODULE STATUS</label>
+                        <ul id="module-status-list" class="module-list">
+                            <!-- Dynamically populated -->
+                        </ul>
+                    </div>
+                    
+                    <div class="control-section">
+                        <label>CONNECTIVITY</label>
+                        <div class="status-display">
+                            <span id="sync-status-text">SYNC: DISCONNECTED</span>
+                            <button id="connect-button" class="connect-button">CONNECT</button>
+                        </div>
+                    </div>
                 </div>
             </div>
-             <div class="dash-card">
-                <h3><span class="icon">🗣️</span> Brand Voice</h3>
-                <p id="dash-brand-voice">Your brand's personality will be defined here.</p>
-            </div>
-            <div class="dash-card">
-                <h3><span class="icon">📁</span> Business Type</h3>
-                <p id="dash-business-type">Your chosen business type.</p>
+            <div id="product-concepts-container">
+                <!-- Generated product concepts will be rendered here by index.tsx -->
             </div>
         </div>
     </div>
 
-
-    <script type="module" src="index.tsx"></script>
+    <!-- Scripts -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="text/babel" data-type="module" src="index.tsx"></script>
 </body>
 </html>
