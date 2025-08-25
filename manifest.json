@@ -1,11 +1,12 @@
+
 {
-  "name": "AURELION | Universal Creation Engine",
+  "name": "AURELION Guideform Evolution",
   "short_name": "AURELION",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1a1a1a",
-  "theme_color": "#1a1a1a",
-  "description": "A Universal Creation Engine for mindful technology.",
+  "background_color": "#000000",
+  "theme_color": "#111111",
+  "description": "A guideform that evolves with your breath and voice.",
   "icons": [
     {
       "src": "icon.svg",

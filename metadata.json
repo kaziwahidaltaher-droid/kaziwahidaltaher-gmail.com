@@ -1,5 +1,7 @@
 {
-  "name": "AURELION | Universal Creation Engine",
-  "description": "A Universal Creation Engine for mindful technology.",
-  "requestFramePermissions": []
+  "name": "AURELION Guideform Evolution",
+  "description": "A guideform that evolves with your breath and voice.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }

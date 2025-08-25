@@ -1,19 +1,22 @@
 {
-  "name": "aurelion-|-universal-creation-engine",
+  "name": "aurelion-universal-creation-engine",
+  "version": "1.0.0",
+  "description": "A Universal Creation Engine for mindful technology.",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "babel index.tsx --out-file index.js",
+    "start": "npx http-server -S -C cert.pem -K key.pem"
   },
   "dependencies": {
-    "@google/genai": "^1.4.0"
+    "@google/genai": "^1.15.0",
+    "core-js": "^3.37.1"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "@babel/cli": "^7.24.7",
+    "@babel/core": "^7.24.7",
+    "@babel/preset-env": "^7.24.7",
+    "@babel/preset-react": "^7.24.7",
+    "@babel/preset-typescript": "^7.24.7",
+    "http-server": "^14.1.1"
   }
 }
