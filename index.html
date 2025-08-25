@@ -12,15 +12,22 @@
 {
   "imports": {
     "three": "https://esm.sh/three@^0.167.0",
-    "@google/genai": "https://esm.sh/@google/genai@^1.15.0"
+    "@google/genai": "https://esm.sh/@google/genai@^1.15.0",
+    "three/": "https://esm.sh/three@^0.179.1/",
+    "lit/": "https://esm.sh/lit@^3.3.1/",
+    "lit": "https://esm.sh/lit@^3.3.1",
+    "react/": "https://esm.sh/react@^19.1.1/",
+    "react": "https://esm.sh/react@^19.1.1",
+    "@react-three/fiber": "https://esm.sh/@react-three/fiber@^9.3.0",
+    "classnames": "https://esm.sh/classnames@^2.5.1"
   }
 }
 </script>
 </head>
 <body>
     <div id="controls">
+        <div id="module-selector"></div>
         <button id="mic-toggle" class="active" title="Toggle Microphone">🎤</button>
-        <button id="mood-injector" title="Inject Mood">✨</button>
     </div>
     <!-- Canvas is dynamically added by index.js -->
     <script type="module" src="index.js"></script>

@@ -1,7 +1,8 @@
 {
-  "name": "AURELION Guideform Evolution",
-  "description": "A guideform that evolves with your breath and voice.",
+  "name": "AURELION Live Audio",
+  "description": "Speak, and the interface breathes with you. Real-time voice chat merges with 3D emotional visuals, creating a living dialogue between you and AI.",
   "requestFramePermissions": [
     "microphone"
-  ]
+  ],
+  "prompt": "Begin speaking to awaken the guideform. Your breath shapes the visuals. Your mood becomes the interface."
 }

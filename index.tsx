@@ -1,5 +1,7 @@
+import {createBlob, decode, decodeAudioData, tagMoodFromAudio} from './utils';
 import * as THREE from 'three';
 import { GoogleGenAI } from "@google/genai";
+import { Analyser } from './analyser';
 
 // --- TYPE DEFINITIONS ---
 interface VoiceProfile {
@@ -42,8 +44,7 @@ let camera: THREE.PerspectiveCamera;
 let renderer: THREE.WebGLRenderer;
 let guideform: THREE.Mesh;
 let audioCtx: AudioContext;
-let analyser: AnalyserNode;
-let dataArray: Uint8Array;
+let audioAnalyser: Analyser;
 let isSpeaking = false;
 
 // New State Management
@@ -191,7 +192,7 @@ function initParticles() {
  */
 function initControls() {
     const micButton = document.getElementById('mic-toggle');
-    const injectorButton = document.getElementById('mood-injector');
+    const moduleSelector = document.getElementById('module-selector');
 
     micButton?.addEventListener('click', () => {
         isMicEnabled = !isMicEnabled;
@@ -201,7 +202,16 @@ function initControls() {
         }
     });
 
-    injectorButton?.addEventListener('click', () => activateEmotionModule('sereneBloom'));
+    if (moduleSelector && modulesConfig?.emotionalModules) {
+        modulesConfig.emotionalModules.forEach(module => {
+            const button = document.createElement('button');
+            button.id = `module-btn-${module.id}`;
+            button.textContent = module.label;
+            button.title = `Activate ${module.label}`;
+            button.addEventListener('click', () => activateEmotionModule(module.id));
+            moduleSelector.appendChild(button);
+        });
+    }
 }
 
 /**
@@ -212,10 +222,7 @@ function initMic() {
         .then(stream => {
             audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
             const source = audioCtx.createMediaStreamSource(stream);
-            analyser = audioCtx.createAnalyser();
-            analyser.fftSize = 512;
-            dataArray = new Uint8Array(analyser.frequencyBinCount);
-            source.connect(analyser);
+            audioAnalyser = new Analyser(source);
         })
         .catch(err => {
             console.error("Microphone access was denied.", err);
@@ -323,6 +330,11 @@ function updateVisuals(visuals: VisualsProfile | null) {
 function activateEmotionModule(id: string | null) {
     if (id === activeModule?.id) return;
 
+    // Deactivate previous button
+    if (activeModule) {
+        document.getElementById(`module-btn-${activeModule.id}`)?.classList.remove('active');
+    }
+
     const module = id ? modulesConfig.emotionalModules.find(m => m.id === id) : null;
     if (!id && !activeModule) return; 
     
@@ -331,6 +343,8 @@ function activateEmotionModule(id: string | null) {
     if (module) {
         speak(module.voice);
         sendSyncPacket(module.sync);
+        // Activate new button
+        document.getElementById(`module-btn-${module.id}`)?.classList.add('active');
     }
     
     updateVisuals(module?.visuals ?? null);
@@ -375,15 +389,15 @@ function detectEmotion(pitch: number, energy: number): string {
  * Detects the dominant audio emotion and triggers the corresponding mood.
  */
 function analyzeAudio() {
-    if (!isMicEnabled || !modulesConfig || !analyser || !dataArray) {
+    if (!isMicEnabled || !modulesConfig || !audioAnalyser) {
         if (activeModule) activateEmotionModule(null);
         return;
     }
 
-    analyser.getByteFrequencyData(dataArray);
+    audioAnalyser.update();
 
-    const energy = getEnergy(dataArray);
-    const pitch = getPitch(dataArray, audioCtx.sampleRate, analyser.fftSize);
+    const energy = getEnergy(audioAnalyser.data);
+    const pitch = getPitch(audioAnalyser.data, audioCtx.sampleRate, audioAnalyser.fftSize);
 
     const detectedEmotion = detectEmotion(pitch, energy);
 
@@ -443,12 +457,31 @@ function animateParticles() {
     }
     particleSystem.geometry.attributes.position.needsUpdate = true;
 }
+this.scriptProcessorNode.onaudioprocess = (audioProcessingEvent) => {
+  if (!this.isRecording) return;
+
+  const inputBuffer = audioProcessingEvent.inputBuffer;
+  const pcmData = inputBuffer.getChannelData(0);
+
+  // 🎯 Mood Detection
+  const mood = tagMoodFromAudio(pcmData);
+  this.dispatchEvent(new CustomEvent('mood-detected', {
+    detail: { mood },
+    bubbles: true,
+    composed: true
+  }));
+
+  // 🎙️ Send Audio to Gemini
+  this.session.sendRealtimeInput({ media: createBlob(pcmData) });
+};
+
+
 
 // --- ANIMATION LOOP ---
 function animate() {
     requestAnimationFrame(animate);
 
-    if (analyser && dataArray) {
+    if (audioAnalyser) {
         analyzeAudio();
     }
 
