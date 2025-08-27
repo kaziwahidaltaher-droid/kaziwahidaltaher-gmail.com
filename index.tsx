@@ -1,3 +1,4 @@
+
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -88,7 +89,7 @@ function init() {
     // --- Post-processing ---
     const renderPass = new RenderPass(scene, camera);
     bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.0, 0.1, 0.85);
-    afterimagePass = new AfterimagePass(0.9); // Motion trails
+    afterimagePass = new AfterimagePass(0.96); // Start with minimal trails
     
     composer = new EffectComposer(renderer);
     composer.addPass(renderPass);
@@ -291,6 +292,9 @@ function animate() {
     const delta = clock.getDelta();
     const elapsedTime = clock.getElapsedTime();
 
+    // Calculate camera velocity for motion-based visual effects
+    const velocity = camera.position.distanceTo(lastPosition) / (delta || 1);
+
     // --- Auto-Focus Camera ---
     if (isAutoFocusing) {
         const focusSpeed = 2.0;
@@ -306,28 +310,50 @@ function animate() {
         }
     }
 
-    // --- Audio Reactivity ---
+    // --- Audio Reactivity & Post-Processing ---
+    let normalizedAudio = 0.0;
     if (audioAnalyser) {
         audioAnalyser.update();
         const data = audioAnalyser.data;
         const average = data.reduce((sum, value) => sum + value, 0) / data.length;
-        const normalizedAudio = Math.min(average / 128, 1.0); // Normalize to 0-1 range
+        normalizedAudio = Math.min(average / 128, 1.0); // Normalize to 0-1 range
 
-        // Modulate post-processing effects
+        // Modulate bloom effect
         if (bloomPass) {
             bloomPass.strength = THREE.MathUtils.lerp(bloomPass.strength, 1.0 + normalizedAudio * 1.5, delta * 5.0);
         }
-        if (afterimagePass) {
-            afterimagePass.uniforms.damp.value = THREE.MathUtils.lerp(afterimagePass.uniforms.damp.value, 0.9 - normalizedAudio * 0.15, delta * 5.0);
-        }
         
-        // Update shader uniforms
+        // Update shader uniforms for audio reactivity
         if (sun) {
             (sun.material as THREE.ShaderMaterial).uniforms.audioLevel.value = THREE.MathUtils.lerp((sun.material as THREE.ShaderMaterial).uniforms.audioLevel.value, normalizedAudio, delta * 5.0);
         }
         if (galaxy) {
             (galaxy.material as THREE.ShaderMaterial).uniforms.uAudioLevel.value = THREE.MathUtils.lerp((galaxy.material as THREE.ShaderMaterial).uniforms.uAudioLevel.value, normalizedAudio, delta * 5.0);
         }
+    }
+
+    // --- Dynamic Comet Trails (Afterimage Pass) ---
+    if (afterimagePass) {
+        // Map camera velocity to the 'damp' factor for motion trails.
+        // Higher velocity results in a lower damp factor, creating longer trails.
+        const minVelocity = 20.0;
+        const maxVelocity = 400.0;
+        const minDamp = 0.82; // Long trails for high speed
+        const maxDamp = 0.96; // Short/no trails when still
+
+        // Calculate a factor from 0 to 1 based on current velocity
+        const velocityFactor = THREE.MathUtils.smoothstep(velocity, minVelocity, maxVelocity);
+        
+        // Interpolate damp based on velocity, then apply audio modulation
+        let targetDamp = THREE.MathUtils.lerp(maxDamp, minDamp, velocityFactor);
+        targetDamp -= normalizedAudio * 0.1; // Audio makes trails slightly longer
+
+        // Smoothly approach the target damp value for a fluid effect
+        afterimagePass.uniforms.damp.value = THREE.MathUtils.lerp(
+            afterimagePass.uniforms.damp.value,
+            targetDamp,
+            delta * 4.0 // Responsiveness factor
+        );
     }
 
     // Update controls for damping
@@ -358,6 +384,7 @@ function animate() {
 
     composer.render();
 }
+
 
 /**
  * Handles window resize events
@@ -581,7 +608,7 @@ function updateTelemetry() {
 function updateCCSPanel(delta) {
     if (!ccsMode || !ccsPos || !ccsVel || !lastPosition || !camera || !controls || !ccsTarget) return;
     
-    const velocity = camera.position.distanceTo(lastPosition) / delta;
+    const velocity = camera.position.distanceTo(lastPosition) / (delta || 1);
 
     // Update Mode
     if (isAutoFocusing) {
