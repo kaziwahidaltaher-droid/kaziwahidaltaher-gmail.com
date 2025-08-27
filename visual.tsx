@@ -103,8 +103,8 @@ export class GdmLiveAudioVisuals extends LitElement {
 
   // FIX: The `firstUpdated` method in LitElement is protected, not private.
   protected firstUpdated() {
-    // FIX: Use this.renderRoot to query the component's DOM.
-    this.canvas = this.renderRoot.querySelector('canvas')!;
+    // FIX: Use this.shadowRoot to query the component's DOM.
+    this.canvas = this.shadowRoot!.querySelector('canvas')!;
     this.canvas.width = 400;
     this.canvas.height = 400;
     this.canvasCtx = this.canvas.getContext('2d');

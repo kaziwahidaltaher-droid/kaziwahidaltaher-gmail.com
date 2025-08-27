@@ -26,6 +26,9 @@ let galaxy, sun, starVelocities, starPositions;
 let afterimagePass, bloomPass;
 let raycaster, mouse;
 let lastPosition;
+let isAutoFocusing = false;
+let autoFocusTarget = new THREE.Vector3();
+let autoFocusCameraTarget = new THREE.Vector3();
 
 // --- AI & UI Globals ---
 let ai;
@@ -54,6 +57,7 @@ const ccsMode = document.getElementById('ccs-mode');
 const ccsPos = document.getElementById('ccs-pos');
 const ccsVel = document.getElementById('ccs-vel');
 const ccsTarget = document.getElementById('ccs-target');
+const autoFocusBtn = document.getElementById('auto-focus-btn');
 
 /**
  * Main initialization function
@@ -100,6 +104,9 @@ function init() {
     controls.maxDistance = GALAXY_RADIUS * 2;
     controls.target.set(0, 0, 0); // Start looking at the center
     controls.maxPolarAngle = Math.PI; // Allow full vertical rotation
+    controls.addEventListener('start', () => {
+        isAutoFocusing = false;
+    });
 
 
     // --- Raycasting for Click-to-Focus ---
@@ -130,6 +137,7 @@ function init() {
     window.addEventListener('click', onMouseClick, false);
     promptForm.addEventListener('submit', handlePrompt);
     closeResponseBtn.addEventListener('click', hideResponse);
+    autoFocusBtn.addEventListener('click', startAutoFocus);
 
     // --- Audio Setup ---
     setupAudio();
@@ -283,6 +291,21 @@ function animate() {
     const delta = clock.getDelta();
     const elapsedTime = clock.getElapsedTime();
 
+    // --- Auto-Focus Camera ---
+    if (isAutoFocusing) {
+        const focusSpeed = 2.0;
+        const lerpAlpha = Math.min(focusSpeed * delta, 1.0);
+        
+        controls.target.lerp(autoFocusTarget, lerpAlpha);
+        camera.position.lerp(autoFocusCameraTarget, lerpAlpha);
+
+        // Stop when close enough
+        if (camera.position.distanceTo(autoFocusCameraTarget) < 1 && controls.target.distanceTo(autoFocusTarget) < 1) {
+            isAutoFocusing = false;
+            controls.target.copy(autoFocusTarget); // Snap to final position to prevent overshooting
+        }
+    }
+
     // --- Audio Reactivity ---
     if (audioAnalyser) {
         audioAnalyser.update();
@@ -350,6 +373,7 @@ function onWindowResize() {
  * Handles mouse clicks for raycasting and click-to-focus
  */
 function onMouseClick(event) {
+    isAutoFocusing = false; // User takes control, cancel auto-focus
     if (responseContainer.contains(event.target as Node)) {
         return; // Ignore clicks inside the response panel
     }
@@ -446,6 +470,34 @@ function hideResponse() {
 }
 
 /**
+ * Selects a random star and smoothly transitions the camera to focus on it.
+ */
+function startAutoFocus() {
+    if (isAutoFocusing) return; // Don't interrupt an ongoing focus
+
+    const randomIndex = Math.floor(Math.random() * NUM_STARS);
+    const posAttr = galaxy.geometry.attributes.position;
+    
+    autoFocusTarget.set(
+        posAttr.getX(randomIndex),
+        posAttr.getY(randomIndex),
+        posAttr.getZ(randomIndex)
+    );
+
+    // Calculate a good camera position: offset from the star along its vector from the origin
+    const offsetDistance = 100; // How far from the star to position camera
+    autoFocusCameraTarget
+        .copy(autoFocusTarget)
+        .normalize()
+        .multiplyScalar(autoFocusTarget.length() + offsetDistance);
+    
+    // A small vertical offset for a better viewing angle
+    autoFocusCameraTarget.y += 20;
+
+    isAutoFocusing = true;
+}
+
+/**
  * Updates the telemetry ticker with a new message
  */
 function updateTelemetry() {
@@ -463,7 +515,9 @@ function updateCCSPanel(delta) {
     const velocity = camera.position.distanceTo(lastPosition) / delta;
 
     // Update Mode
-    if (velocity > 1.0) {
+    if (isAutoFocusing) {
+        ccsMode.textContent = 'AUTOPILOT';
+    } else if (velocity > 1.0) {
         ccsMode.textContent = 'MANEUVERING';
     } else {
         ccsMode.textContent = 'IDLE';

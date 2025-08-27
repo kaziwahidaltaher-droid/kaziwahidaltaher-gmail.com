@@ -166,3 +166,23 @@ canvas#bg {
     text-shadow: 0 0 5px #0f0;
     font-weight: bold;
 }
+
+#auto-focus-btn {
+    grid-column: 1 / -1; /* Span all columns */
+    margin-top: 5px;
+    background: transparent;
+    border: 1px solid rgba(0, 255, 0, 0.5);
+    color: #0f0;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 4px;
+    width: 100%;
+    text-align: center;
+    transition: background-color 0.3s;
+    box-sizing: border-box;
+}
+
+#auto-focus-btn:hover {
+    background: rgba(0, 255, 0, 0.2);
+}
