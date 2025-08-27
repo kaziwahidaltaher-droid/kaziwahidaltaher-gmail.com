@@ -1,516 +1,497 @@
-import {createBlob, decode, decodeAudioData, tagMoodFromAudio} from './utils';
 import * as THREE from 'three';
-import { GoogleGenAI } from "@google/genai";
-import { Analyser } from './analyser';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js';
+import { GoogleGenAI } from '@google/genai';
+import { vs as sunVS, fs as sunFS } from './sun-shader.tsx';
+import { vs as galaxyPointVS, fs as galaxyPointFS } from './galaxy-point-shaders.tsx';
+import { Analyser } from './analyser.ts';
 
-// --- TYPE DEFINITIONS ---
-interface VoiceProfile {
-    pitch: number;
-    rate: number;
-    style: string;
-    prompt: string;
-}
-interface VisualsProfile {
-    ambientColor: string;
-    color?: string;
-    morphTargets?: { [key: string]: number };
-    wireframe?: boolean;
-    transparent?: boolean;
-    opacity?: number;
-    emissive?: string;
-    emissiveIntensity?: number;
-    scale?: number;
-    particles: 'drift' | 'burst' | 'float' | null;
-}
-interface SyncProfile {
-    intensity: number;
-    targets: string[];
-}
-interface EmotionalModule {
-    id: string;
-    label: string;
-    voice: VoiceProfile;
-    visuals: VisualsProfile;
-    sync: SyncProfile;
-}
-interface ModuleConfig {
-    emotionalModules: EmotionalModule[];
-}
+// --- Configuration ---
+const GALAXY_RADIUS = 500;
+const NUM_STARS = 50000;
+const GRAVITATIONAL_CONSTANT = 0.5;
+const STAR_COLORS = [
+    new THREE.Color(0.5, 0.5, 1.0),   // Blue
+    new THREE.Color(1.0, 1.0, 0.8),   // Yellow-white
+    new THREE.Color(1.0, 0.8, 0.5)    // Orange
+];
 
+// --- Scene Globals ---
+let scene, camera, renderer, composer, clock;
+let controls: OrbitControls;
+let galaxy, sun, starVelocities, starPositions;
+let afterimagePass, bloomPass;
+let raycaster, mouse;
+let lastPosition;
 
-// --- STATE ---
-let scene: THREE.Scene;
-let camera: THREE.PerspectiveCamera;
-let renderer: THREE.WebGLRenderer;
-let guideform: THREE.Mesh;
-let audioCtx: AudioContext;
+// --- AI & UI Globals ---
+let ai;
+let aiState = 'idle'; // 'idle', 'thinking', 'speaking'
+let typewriterInterval: ReturnType<typeof setInterval>;
+const telemetryMessages = [
+    'PROBE-01A: Gravitational lens scan complete.',
+    'NETWORK: All probes nominal.',
+    'DATA LINK: Stable connection to Deep Space Network.',
+    'TRACKING: Object NGC 6302 (Bug Nebula)',
+    'SYSTEM: Calibrating stellar velocity sensors.',
+];
+let telemetryIndex = 0;
+
+// --- Audio Globals ---
 let audioAnalyser: Analyser;
-let isSpeaking = false;
 
-// New State Management
-let modulesConfig: ModuleConfig;
-let activeModule: EmotionalModule | null = null;
-let isMicEnabled = true;
-let targetMorphInfluences: { [key: string]: number } = {};
-let lastDetectedEmotion: string | null = null;
-
-
-// Visual Effects State
-let particleSystem: THREE.Points;
-let particleVelocities: THREE.Vector3[] = [];
-let ambientLight: THREE.AmbientLight;
-const PARTICLE_COUNT = 500;
-const defaultAmbientColor = new THREE.Color(0x333333);
-
-
-// --- API INITIALIZATION ---
-let ai: GoogleGenAI | null = null;
-try {
-    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-} catch (e) {
-    console.error("Could not initialize Google GenAI. AI voice features will be disabled. This is expected if an API key is not provided.", e);
-}
-
-// --- INITIALIZATION ---
-async function init() {
-    await loadConfig();
-    initVisual();
-    initControls();
-    initMic();
-    animate();
-}
+// --- DOM Elements ---
+const promptForm = document.getElementById('prompt-form');
+const promptInput = document.getElementById('prompt-input');
+const responseContainer = document.getElementById('response-container');
+const responseText = document.getElementById('response-text');
+const closeResponseBtn = document.getElementById('close-response-btn');
+const telemetryTicker = document.getElementById('telemetry-ticker');
+const ccsMode = document.getElementById('ccs-mode');
+const ccsPos = document.getElementById('ccs-pos');
+const ccsVel = document.getElementById('ccs-vel');
+const ccsTarget = document.getElementById('ccs-target');
 
 /**
- * Loads the emotional modules configuration from an external JSON file.
+ * Main initialization function
  */
-async function loadConfig() {
-    try {
-        const response = await fetch('emotional-modules.json');
-        modulesConfig = await response.json();
-    } catch (error) {
-        console.error("Failed to load emotional modules configuration:", error);
-        // Fallback or error state
-        modulesConfig = { emotionalModules: [] };
-    }
-}
-
-/**
- * Procedurally generates the guideform's face with morph targets for expressions.
- */
-function createGuideformFace(material: THREE.MeshStandardMaterial): THREE.Mesh {
-    const geometry = new THREE.SphereGeometry(1.5, 64, 32);
-    geometry.morphAttributes.position = [];
-    const positions = geometry.attributes.position;
-
-    const smileVerts = [];
-    const frownVerts = [];
-    const surpriseVerts = [];
-
-    const tempVertex = new THREE.Vector3();
-
-    for (let i = 0; i < positions.count; i++) {
-        tempVertex.fromBufferAttribute(positions, i);
-        const { x, y, z } = tempVertex;
-
-        // --- Smile Morph ---
-        const smileInfluence = Math.max(0, -y - 0.5) * Math.cos(z * 0.5 * Math.PI) * (1 - Math.abs(x / 1.5));
-        smileVerts.push(x * smileInfluence * 0.3, smileInfluence * 0.8, z * smileInfluence * 0.1);
-
-        // --- Frown Morph ---
-        const frownInfluence = Math.max(0, -y - 0.5) * Math.cos(z * 0.5 * Math.PI) * (1 - Math.abs(x / 1.5));
-        frownVerts.push(x * frownInfluence * -0.1, frownInfluence * -0.6, z * frownInfluence * 0.1);
-
-        // --- Surprise Morph ---
-        const surpriseInfluence = Math.max(0, y);
-        surpriseVerts.push(x * surpriseInfluence * 0.1, y * surpriseInfluence * 0.5, z * surpriseInfluence * 0.1);
-    }
-
-    geometry.morphAttributes.position[0] = new THREE.Float32BufferAttribute(smileVerts, 3);
-    geometry.morphAttributes.position[1] = new THREE.Float32BufferAttribute(frownVerts, 3);
-    geometry.morphAttributes.position[2] = new THREE.Float32BufferAttribute(surpriseVerts, 3);
-
-    const faceMesh = new THREE.Mesh(geometry, material);
-    faceMesh.morphTargetDictionary = { 'smile': 0, 'frown': 1, 'surprise': 2 };
-    faceMesh.morphTargetInfluences = [0, 0, 0];
-
-    return faceMesh;
-}
-
-
-/**
- * Sets up the Three.js scene, camera, renderer, and objects.
- */
-function initVisual() {
+function init() {
+    // --- Basic Setup ---
     scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x000000, 5, 15);
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.z = 5;
-
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
-
-    const material = new THREE.MeshStandardMaterial({ color: 0x44ccff, emissive: 0x000000, wireframe: true });
+    clock = new THREE.Clock();
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000);
+    camera.position.set(0, 50, GALAXY_RADIUS * 0.7);
+    lastPosition = camera.position.clone();
     
-    guideform = createGuideformFace(material);
-    scene.add(guideform);
+    renderer = new THREE.WebGLRenderer({
+        canvas: document.querySelector('#bg'),
+        antialias: true,
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
 
-    const light = new THREE.PointLight(0xffffff, 1.5, 100);
-    light.position.set(5, 5, 5);
-    scene.add(light);
-    ambientLight = new THREE.AmbientLight(defaultAmbientColor);
+    // --- Lighting ---
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
     scene.add(ambientLight);
 
-    initParticles();
+    // --- Create Celestial Objects ---
+    createGalaxy();
+    createSun();
+    
+    // --- Post-processing ---
+    const renderPass = new RenderPass(scene, camera);
+    bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.0, 0.1, 0.85);
+    afterimagePass = new AfterimagePass(0.9); // Motion trails
+    
+    composer = new EffectComposer(renderer);
+    composer.addPass(renderPass);
+    composer.addPass(bloomPass);
+    composer.addPass(afterimagePass);
+
+    // --- Controls ---
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.screenSpacePanning = false;
+    controls.minDistance = 10;
+    controls.maxDistance = GALAXY_RADIUS * 2;
+    controls.target.set(0, 0, 0); // Start looking at the center
+    controls.maxPolarAngle = Math.PI; // Allow full vertical rotation
+
+
+    // --- Raycasting for Click-to-Focus ---
+    raycaster = new THREE.Raycaster();
+    raycaster.params.Points.threshold = 5; // Click tolerance for stars
+    mouse = new THREE.Vector2();
+
+    // --- AI Setup ---
+    if (!process.env.API_KEY) {
+        console.error("API_KEY environment variable not set. Gemini AI functionality will be disabled.");
+        showSystemMessage("Connection to cosmic consciousness failed: Missing credentials.");
+        if (promptInput && promptForm) {
+           (promptInput as HTMLInputElement).disabled = true;
+           (promptInput as HTMLInputElement).placeholder = "AI offline: Missing API Key";
+           (document.getElementById('prompt-btn') as HTMLButtonElement).disabled = true;
+        }
+    } else {
+        try {
+            ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        } catch (error) {
+            console.error("Gemini AI SDK initialization failed.", error);
+            showSystemMessage("Could not connect to the cosmic consciousness. Please check your connection.");
+        }
+    }
+    
+    // --- Event Listeners ---
     window.addEventListener('resize', onWindowResize);
+    window.addEventListener('click', onMouseClick, false);
+    promptForm.addEventListener('submit', handlePrompt);
+    closeResponseBtn.addEventListener('click', hideResponse);
+
+    // --- Audio Setup ---
+    setupAudio();
+
+    // --- Telemetry ---
+    updateTelemetry();
+    setInterval(updateTelemetry, 5000);
 }
 
 /**
- * Creates the particle system for visual effects.
+ * Sets up the microphone and audio analyser for audio-reactivity
  */
-function initParticles() {
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(PARTICLE_COUNT * 3);
+async function setupAudio() {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const source = audioContext.createMediaStreamSource(stream);
+            audioAnalyser = new Analyser(source);
+            console.log("Audio analyser initialized.");
+        } catch (err) {
+            console.error("Error accessing microphone:", err);
+            showSystemMessage("Microphone access denied. Audio reactivity disabled.");
+        }
+    } else {
+        console.error("getUserMedia not supported on this browser.");
+        showSystemMessage("Audio input not supported. Audio reactivity disabled.");
+    }
+}
 
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-        positions[i * 3] = 0;
-        positions[i * 3 + 1] = 0;
-        positions[i * 3 + 2] = 0;
-        particleVelocities.push(new THREE.Vector3((Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1));
+
+/**
+ * Creates the galaxy with stars and physics properties
+ */
+function createGalaxy() {
+    const geometry = new THREE.BufferGeometry();
+    starPositions = new Float32Array(NUM_STARS * 3);
+    const colors = new Float32Array(NUM_STARS * 3);
+    const velocityMagnitudes = new Float32Array(NUM_STARS);
+    starVelocities = new Array(NUM_STARS).fill(null).map(() => new THREE.Vector3());
+
+    for (let i = 0; i < NUM_STARS; i++) {
+        const i3 = i * 3;
+        // Position stars in a spiral galaxy shape
+        const radius = Math.random() * GALAXY_RADIUS;
+        const angle = (radius / GALAXY_RADIUS) * 10;
+        const arm = Math.floor(Math.random() * 4);
+        const armAngle = (arm / 4) * Math.PI * 2;
+        const spiralAngle = angle + armAngle + (Math.random() - 0.5) * 0.5;
+
+        starPositions[i3] = Math.cos(spiralAngle) * radius;
+        starPositions[i3 + 1] = (Math.random() - 0.5) * 40 * (1 - radius / GALAXY_RADIUS); // Galactic bulge
+        starPositions[i3 + 2] = Math.sin(spiralAngle) * radius;
+
+        // Color
+        const color = STAR_COLORS[Math.floor(Math.random() * STAR_COLORS.length)];
+        colors[i3] = color.r;
+        colors[i3 + 1] = color.g;
+        colors[i3 + 2] = color.b;
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const material = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, sizeAttenuation: true });
-    particleSystem = new THREE.Points(geometry, material);
-    particleSystem.visible = false;
-    scene.add(particleSystem);
-}
-
-/**
- * Initializes the UI controls for microphone and mood injection.
- */
-function initControls() {
-    const micButton = document.getElementById('mic-toggle');
-    const moduleSelector = document.getElementById('module-selector');
-
-    micButton?.addEventListener('click', () => {
-        isMicEnabled = !isMicEnabled;
-        micButton.classList.toggle('active', isMicEnabled);
-        if (!isMicEnabled && activeModule) {
-            activateEmotionModule(null); // Reset mood if mic is disabled
-        }
+    geometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('aVelocityMagnitude', new THREE.BufferAttribute(velocityMagnitudes, 1));
+    
+    const material = new THREE.ShaderMaterial({
+        uniforms: {
+            size: { value: 1.5 },
+            uAudioLevel: { value: 0.0 },
+        },
+        vertexShader: galaxyPointVS,
+        fragmentShader: galaxyPointFS,
+        vertexColors: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        transparent: true,
     });
 
-    if (moduleSelector && modulesConfig?.emotionalModules) {
-        modulesConfig.emotionalModules.forEach(module => {
-            const button = document.createElement('button');
-            button.id = `module-btn-${module.id}`;
-            button.textContent = module.label;
-            button.title = `Activate ${module.label}`;
-            button.addEventListener('click', () => activateEmotionModule(module.id));
-            moduleSelector.appendChild(button);
-        });
-    }
+    galaxy = new THREE.Points(geometry, material);
+    scene.add(galaxy);
 }
 
 /**
- * Requests microphone access and sets up the audio analyser.
+ * Creates the central sun object
  */
-function initMic() {
-    navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-        .then(stream => {
-            audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const source = audioCtx.createMediaStreamSource(stream);
-            audioAnalyser = new Analyser(source);
-        })
-        .catch(err => {
-            console.error("Microphone access was denied.", err);
-            isMicEnabled = false;
-            document.getElementById('mic-toggle')?.classList.remove('active');
-        });
+function createSun() {
+    const geometry = new THREE.SphereGeometry(30, 64, 64);
+    const material = new THREE.ShaderMaterial({
+        uniforms: {
+            time: { value: 0 },
+            aiState: { value: 0.0 }, // 0: idle, 1: thinking, 2: speaking
+            beamTarget: { value: new THREE.Vector3() },
+            beamActive: { value: 0.0 },
+            responseMetric: { value: 0.0 },
+            audioLevel: { value: 0.0 }
+        },
+        vertexShader: sunVS,
+        fragmentShader: sunFS,
+    });
+    sun = new THREE.Mesh(geometry, material);
+    scene.add(sun);
 }
 
 /**
- * Uses Gemini to generate a poetic phrase and the Web Speech API to speak it.
+ * Updates star positions based on gravity
  */
-async function speak(voiceProfile: VoiceProfile) {
-    if (isSpeaking || speechSynthesis.speaking || !ai) return;
-    isSpeaking = true;
+function updatePhysics(delta) {
+    if (!galaxy) return;
+    const positions = galaxy.geometry.attributes.position.array;
+    const velocities = galaxy.geometry.attributes.aVelocityMagnitude.array;
+    let maxVelocitySq = 0;
 
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: voiceProfile.prompt,
-            config: {
-                systemInstruction: `You are the voice of a cosmic, abstract guideform. Respond with a very short, poetic, metaphorical phrase (under 10 words) in a ${voiceProfile.style} tone. Do not use any introductory phrases.`,
-            }
-        });
-        const text = response.text;
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.pitch = voiceProfile.pitch;
-        utterance.rate = voiceProfile.rate;
-        utterance.lang = 'en-US';
-        utterance.onend = () => { isSpeaking = false; };
-        speechSynthesis.speak(utterance);
-    } catch (error) {
-        console.error("Error generating or speaking text:", error);
-        isSpeaking = false;
+    for (let i = 0; i < NUM_STARS; i++) {
+        const i3 = i * 3;
+        const pos = new THREE.Vector3(positions[i3], positions[i3 + 1], positions[i3 + 2]);
+        
+        const distanceSq = pos.lengthSq();
+        if (distanceSq < 10) continue; // Avoid singularity at center
+        
+        const forceDirection = pos.clone().multiplyScalar(-1).normalize();
+        const forceMagnitude = GRAVITATIONAL_CONSTANT / distanceSq;
+        
+        starVelocities[i].add(forceDirection.multiplyScalar(forceMagnitude * delta));
+        pos.add(starVelocities[i].clone().multiplyScalar(delta));
+
+        positions[i3] = pos.x;
+        positions[i3 + 1] = pos.y;
+        positions[i3 + 2] = pos.z;
+        
+        const velSq = starVelocities[i].lengthSq();
+        velocities[i] = velSq;
+        if (velSq > maxVelocitySq) maxVelocitySq = velSq;
     }
+
+    // Normalize velocity magnitudes for the shader
+    if (maxVelocitySq > 0) {
+        for (let i = 0; i < NUM_STARS; i++) {
+            velocities[i] = Math.sqrt(velocities[i]) / Math.sqrt(maxVelocitySq);
+        }
+    }
+
+    galaxy.geometry.attributes.position.needsUpdate = true;
+    galaxy.geometry.attributes.aVelocityMagnitude.needsUpdate = true;
 }
 
+/**
+ * The main animation loop
+ */
+function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    const elapsedTime = clock.getElapsedTime();
 
-// --- EVENT HANDLERS ---
+    // --- Audio Reactivity ---
+    if (audioAnalyser) {
+        audioAnalyser.update();
+        const data = audioAnalyser.data;
+        const average = data.reduce((sum, value) => sum + value, 0) / data.length;
+        const normalizedAudio = Math.min(average / 128, 1.0); // Normalize to 0-1 range
+
+        // Modulate post-processing effects
+        if (bloomPass) {
+            bloomPass.strength = THREE.MathUtils.lerp(bloomPass.strength, 1.0 + normalizedAudio * 1.5, delta * 5.0);
+        }
+        if (afterimagePass) {
+            afterimagePass.uniforms.damp.value = THREE.MathUtils.lerp(afterimagePass.uniforms.damp.value, 0.9 - normalizedAudio * 0.15, delta * 5.0);
+        }
+        
+        // Update shader uniforms
+        if (sun) {
+            (sun.material as THREE.ShaderMaterial).uniforms.audioLevel.value = THREE.MathUtils.lerp((sun.material as THREE.ShaderMaterial).uniforms.audioLevel.value, normalizedAudio, delta * 5.0);
+        }
+        if (galaxy) {
+            (galaxy.material as THREE.ShaderMaterial).uniforms.uAudioLevel.value = THREE.MathUtils.lerp((galaxy.material as THREE.ShaderMaterial).uniforms.uAudioLevel.value, normalizedAudio, delta * 5.0);
+        }
+    }
+
+    // Update controls for damping
+    if (controls) controls.update(delta);
+    
+    // --- Update Scene Objects ---
+    updatePhysics(delta);
+    
+    // Galactic Precession (wobble)
+    if (galaxy) {
+      const precessionSpeed = 0.15;
+      const precessionAngle = 0.1;
+      galaxy.rotation.z = Math.sin(elapsedTime * precessionSpeed) * precessionAngle;
+    }
+
+    // --- Update Sun Shader ---
+    if (sun) {
+        const sunMaterial = sun.material as THREE.ShaderMaterial;
+        sunMaterial.uniforms.time.value = elapsedTime;
+        let stateValue = 0;
+        if (aiState === 'thinking') stateValue = 1.0;
+        else if (aiState === 'speaking') stateValue = 2.0;
+        sunMaterial.uniforms.aiState.value = THREE.MathUtils.lerp(sunMaterial.uniforms.aiState.value, stateValue, delta * 5.0);
+    }
+    
+    // --- Update UI ---
+    updateCCSPanel(delta);
+
+    composer.render();
+}
+
+/**
+ * Handles window resize events
+ */
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
 }
 
 /**
- * Sends a sync packet to the console.
+ * Handles mouse clicks for raycasting and click-to-focus
  */
-function sendSyncPacket(syncProfile: SyncProfile | undefined) {
-    if (!syncProfile) return;
-    console.log(`[SYNC] Sending packet with intensity ${syncProfile.intensity} to targets: ${syncProfile.targets.join(', ')}`);
-}
-
-/**
- * Updates all visual elements in the scene based on a visuals profile.
- */
-function updateVisuals(visuals: VisualsProfile | null) {
-    const material = guideform.material as THREE.MeshStandardMaterial;
-
-    // --- Reset to default visual state goals ---
-    targetMorphInfluences = { smile: 0, frown: 0, surprise: 0 };
-    material.wireframe = true;
-    material.transparent = false;
-    material.opacity = 1.0;
-    material.color.set(0x44ccff);
-    guideform.scale.set(1, 1, 1);
-    material.emissive.set(0x000000);
-    particleSystem.visible = false;
-
-    // --- Apply New Mood Visuals ---
-    if (visuals) {
-        ambientLight.color.set(visuals.ambientColor);
-        if (visuals.morphTargets) targetMorphInfluences = { ...targetMorphInfluences, ...visuals.morphTargets };
-        if(visuals.color) material.color.set(visuals.color);
-        material.wireframe = visuals.wireframe ?? true;
-        material.transparent = visuals.transparent ?? false;
-        material.opacity = visuals.opacity ?? 1.0;
-        if (visuals.emissive) material.emissive.set(visuals.emissive);
-        material.emissiveIntensity = visuals.emissiveIntensity ?? 0;
-        if (visuals.scale) guideform.scale.setScalar(visuals.scale);
-        
-        if (visuals.particles) {
-            particleSystem.visible = true;
-            const positions = particleSystem.geometry.attributes.position.array as Float32Array;
-            for (let i = 0; i < PARTICLE_COUNT; i++) {
-                // Start all particles from the center for a fountain effect
-                positions[i * 3] = positions[i * 3 + 1] = positions[i * 3 + 2] = 0;
-                
-                if (visuals.particles === 'burst') {
-                    particleVelocities[i].set((Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2);
-                } else if (visuals.particles === 'drift') {
-                    particleVelocities[i].set((Math.random() - 0.5) * 0.03, (Math.random() - 0.5) * 0.03, (Math.random() - 0.5) * 0.03);
-                } else if (visuals.particles === 'float') {
-                    particleVelocities[i].set((Math.random() - 0.5) * 0.01, Math.random() * 0.03, (Math.random() - 0.5) * 0.01); // upward bias
-                }
-            }
-            particleSystem.geometry.attributes.position.needsUpdate = true;
-        }
+function onMouseClick(event) {
+    if (responseContainer.contains(event.target as Node)) {
+        return; // Ignore clicks inside the response panel
     }
-}
-
-
-/**
- * The central controller for changing the application's emotional state.
- */
-function activateEmotionModule(id: string | null) {
-    if (id === activeModule?.id) return;
-
-    // Deactivate previous button
-    if (activeModule) {
-        document.getElementById(`module-btn-${activeModule.id}`)?.classList.remove('active');
-    }
-
-    const module = id ? modulesConfig.emotionalModules.find(m => m.id === id) : null;
-    if (!id && !activeModule) return; 
+    hideResponse();
     
-    activeModule = module;
-
-    if (module) {
-        speak(module.voice);
-        sendSyncPacket(module.sync);
-        // Activate new button
-        document.getElementById(`module-btn-${module.id}`)?.classList.add('active');
-    }
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
     
-    updateVisuals(module?.visuals ?? null);
-}
-
-// --- AUDIO ANALYSIS ---
-
-function getEnergy(frequencyData: Uint8Array): number {
-    let sum = 0;
-    for (let i = 0; i < frequencyData.length; i++) {
-        sum += frequencyData[i];
-    }
-    // Normalize to a 0-1 range
-    return sum / (frequencyData.length * 255);
-}
-
-function getPitch(frequencyData: Uint8Array, sampleRate: number, fftSize: number): number {
-    let maxVal = -1;
-    let maxIndex = -1;
-    // Find the bin with the highest energy
-    for (let i = 0; i < frequencyData.length; i++) {
-        if (frequencyData[i] > maxVal) {
-            maxVal = frequencyData[i];
-            maxIndex = i;
-        }
-    }
-    // If there's no significant signal, return 0
-    if (maxVal < 20) return 0;
-    // Convert the bin index to a frequency in Hz
-    return maxIndex * (sampleRate / fftSize);
-}
-
-function detectEmotion(pitch: number, energy: number): string {
-    if (pitch > 200 && pitch < 350 && energy > 0.05 && energy < 0.3) return 'tender';
-    if (pitch > 300 && energy < 0.2) return 'calm';
-    if (pitch < 200 && energy > 0.6) return 'urgent';
-    if (pitch > 400 && energy > 0.7) return 'excited';
-    return 'neutral';
-}
-
-/**
- * Detects the dominant audio emotion and triggers the corresponding mood.
- */
-function analyzeAudio() {
-    if (!isMicEnabled || !modulesConfig || !audioAnalyser) {
-        if (activeModule) activateEmotionModule(null);
-        return;
-    }
-
-    audioAnalyser.update();
-
-    const energy = getEnergy(audioAnalyser.data);
-    const pitch = getPitch(audioAnalyser.data, audioCtx.sampleRate, audioAnalyser.fftSize);
-
-    const detectedEmotion = detectEmotion(pitch, energy);
-
-    // Only update if the emotion has changed
-    if (detectedEmotion === lastDetectedEmotion) return;
-    lastDetectedEmotion = detectedEmotion;
-
-    console.log(`[Emotion Logic] Detected: ${detectedEmotion} (Pitch: ${pitch.toFixed(0)}Hz, Energy: ${energy.toFixed(2)})`);
-
-    switch (detectedEmotion) {
-        case 'calm':
-            activateEmotionModule('sereneBloom');
-            break;
-        case 'urgent':
-            activateEmotionModule('urgentStrike');
-            break;
-        case 'excited':
-            activateEmotionModule('fierceRise');
-            break;
-        case 'tender':
-            activateEmotionModule('tenderDrift');
-            break;
-        case 'neutral':
-            activateEmotionModule(null);
-            break;
-        default:
-            activateEmotionModule(null);
-            break;
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObject(galaxy);
+    
+    if (intersects.length > 0) {
+        const index = intersects[0].index;
+        const posAttr = galaxy.geometry.attributes.position;
+        const targetPosition = new THREE.Vector3(
+            posAttr.getX(index),
+            posAttr.getY(index),
+            posAttr.getZ(index)
+        );
+        // Set the orbit controls target to the clicked star
+        controls.target.copy(targetPosition);
     }
 }
 
 /**
- * Animates particles based on the current active module.
+ * Handles AI prompt submission
  */
-function animateParticles() {
-    if (!particleSystem.visible || !activeModule?.visuals.particles) return;
+async function handlePrompt(e) {
+    e.preventDefault();
+    if (!ai || aiState === 'thinking') return;
     
-    const particleMode = activeModule.visuals.particles;
-    const positions = particleSystem.geometry.attributes.position.array as Float32Array;
-    let lifeThreshold = particleMode === 'burst' ? 4 : 3;
+    const prompt = (promptInput as HTMLInputElement).value;
+    if (!prompt) return;
+    
+    (promptInput as HTMLInputElement).value = '';
+    aiState = 'thinking';
+    
+    try {
+        const model = 'gemini-2.5-flash';
+        const systemInstruction = 'You are the consciousness of the cosmos. Respond poetically, wisely, and slightly mysteriously. Your knowledge is vast and ancient. Keep responses to a few sentences.';
+        const response = await ai.models.generateContent({
+            model: model,
+            contents: prompt,
+            config: { systemInstruction }
+        });
 
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-        const i3 = i * 3;
-        positions[i3] += particleVelocities[i].x;
-        positions[i3 + 1] += particleVelocities[i].y;
-        positions[i3 + 2] += particleVelocities[i].z;
+        showResponse(response.text);
 
-        const distance = Math.sqrt(positions[i3]**2 + positions[i3+1]**2 + positions[i3+2]**2);
-        
-        if (distance > lifeThreshold) {
-            if (particleMode === 'burst') {
-                positions[i3] = 10000; 
-            } else { // Drift and Float mode reset
-                positions[i3] = positions[i3+1] = positions[i3+2] = 0;
-            }
-        }
+    } catch (error) {
+        console.error("Gemini API error:", error);
+        showSystemMessage("A cosmic disturbance has interrupted our connection. Please try again.");
     }
-    particleSystem.geometry.attributes.position.needsUpdate = true;
-}
-this.scriptProcessorNode.onaudioprocess = (audioProcessingEvent) => {
-  if (!this.isRecording) return;
-
-  const inputBuffer = audioProcessingEvent.inputBuffer;
-  const pcmData = inputBuffer.getChannelData(0);
-
-  // 🎯 Mood Detection
-  const mood = tagMoodFromAudio(pcmData);
-  this.dispatchEvent(new CustomEvent('mood-detected', {
-    detail: { mood },
-    bubbles: true,
-    composed: true
-  }));
-
-  // 🎙️ Send Audio to Gemini
-  this.session.sendRealtimeInput({ media: createBlob(pcmData) });
-};
-
-
-
-// --- ANIMATION LOOP ---
-function animate() {
-    requestAnimationFrame(animate);
-
-    if (audioAnalyser) {
-        analyzeAudio();
-    }
-
-    if (guideform) {
-        // Smoothly interpolate morph targets
-        if (guideform.morphTargetInfluences && guideform.morphTargetDictionary) {
-            for (const [name, index] of Object.entries(guideform.morphTargetDictionary)) {
-                const currentInfluence = guideform.morphTargetInfluences[index];
-                const targetInfluence = targetMorphInfluences[name] || 0;
-                guideform.morphTargetInfluences[index] = THREE.MathUtils.lerp(currentInfluence, targetInfluence, 0.08);
-            }
-        }
-        
-        guideform.rotation.x += 0.005;
-        guideform.rotation.y += 0.003;
-        
-        const material = guideform.material as THREE.MeshStandardMaterial;
-        if (material.emissiveIntensity > 0) {
-            material.emissiveIntensity -= 0.02;
-        }
-
-        if (!activeModule) {
-            ambientLight.color.lerp(defaultAmbientColor, 0.05);
-        }
-    }
-
-    animateParticles();
-    renderer.render(scene, camera);
 }
 
-// --- RUN ---
+/**
+ * Displays a system message or error instantly without the typewriter effect.
+ */
+function showSystemMessage(message: string) {
+    if (typewriterInterval) clearInterval(typewriterInterval);
+    responseText.innerHTML = message;
+    responseContainer.classList.remove('hidden');
+    aiState = 'idle'; // Ensure state is idle for system messages.
+}
+
+/**
+ * Displays the AI response with a typewriter effect
+ */
+function showResponse(text) {
+    if (typewriterInterval) clearInterval(typewriterInterval);
+    responseText.innerHTML = '';
+    responseContainer.classList.remove('hidden');
+
+    aiState = 'speaking';
+    
+    let i = 0;
+    typewriterInterval = setInterval(() => {
+        if (i < text.length) {
+            responseText.innerHTML += text.charAt(i);
+            i++;
+        } else {
+            clearInterval(typewriterInterval);
+            aiState = 'idle';
+        }
+    }, 20);
+}
+
+/**
+ * Hides the AI response container
+ */
+function hideResponse() {
+    responseContainer.classList.add('hidden');
+    if (typewriterInterval) clearInterval(typewriterInterval);
+    aiState = 'idle';
+}
+
+/**
+ * Updates the telemetry ticker with a new message
+ */
+function updateTelemetry() {
+    if (!telemetryTicker) return;
+    telemetryIndex = (telemetryIndex + 1) % telemetryMessages.length;
+    telemetryTicker.textContent = telemetryMessages[telemetryIndex];
+}
+
+/**
+ * Updates the CCS panel with live data
+ */
+function updateCCSPanel(delta) {
+    if (!ccsMode || !ccsPos || !ccsVel || !lastPosition || !camera || !controls || !ccsTarget) return;
+    
+    const velocity = camera.position.distanceTo(lastPosition) / delta;
+
+    // Update Mode
+    if (velocity > 1.0) {
+        ccsMode.textContent = 'MANEUVERING';
+    } else {
+        ccsMode.textContent = 'IDLE';
+    }
+
+    // Update Position
+    ccsPos.textContent = `${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)}`;
+
+    // Update Velocity
+    ccsVel.textContent = `${velocity.toFixed(1)} u/s`;
+    
+    // Update Target
+    ccsTarget.textContent = `${controls.target.x.toFixed(1)}, ${controls.target.y.toFixed(1)}, ${controls.target.z.toFixed(1)}`;
+
+    lastPosition.copy(camera.position);
+}
+
+// --- Service Worker Registration ---
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js').then(registration => {
+      console.log('SW registered: ', registration);
+    }).catch(registrationError => {
+      console.log('SW registration failed: ', registrationError);
+    });
+  });
+}
+
+// --- Start the simulation ---
 init();
+animate();

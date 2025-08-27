@@ -1,76 +1,168 @@
 body {
   margin: 0;
-  background: radial-gradient(#111, #000);
+  background: #000;
   overflow: hidden;
   font-family: sans-serif;
+  color: #fff;
 }
-canvas {
+
+canvas#bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   display: block;
 }
 
 #controls {
     position: absolute;
     bottom: 20px;
-    right: 20px;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 15px;
     z-index: 10;
+    width: 90%;
+    max-width: 600px;
 }
 
-#controls button {
-    background: rgba(255, 255, 255, 0.1);
+#prompt-form {
+    flex-grow: 1;
+    position: relative;
+    height: 50px;
+}
+
+#prompt-input {
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
     border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 25px;
     color: white;
-    font-size: 1.5rem;
+    font-size: 1rem;
+    padding: 0 55px 0 20px;
+    box-sizing: border-box;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    transition: border-color 0.3s;
+}
+
+#prompt-input:focus {
+    outline: none;
+    border-color: rgba(100, 150, 255, 0.8);
+}
+
+#prompt-btn {
+    position: absolute;
+    right: 0px;
+    top: 0px;
     width: 50px;
     height: 50px;
-    border-radius: 50%;
+    background: transparent;
+    border: none;
     cursor: pointer;
-    transition: background 0.3s, transform 0.2s;
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
 }
 
-#controls button:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: scale(1.1);
-}
-
-#controls button.active {
-    background: rgba(100, 200, 255, 0.3);
-    border-color: rgba(100, 200, 255, 0.5);
-}
-
-#module-selector {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-}
-
-#module-selector button {
+#prompt-btn:hover {
     background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: white;
-    font-size: 0.8rem;
-    font-weight: 500;
-    padding: 8px 16px;
-    border-radius: 25px;
+}
+
+#response-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 500px;
+    padding: 2rem;
+    background: rgba(10, 10, 25, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    color: #e0e0e0;
+    z-index: 20;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+#response-container.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -45%);
+}
+
+#response-text {
+    margin: 0;
+    line-height: 1.6;
+    font-size: 1.0rem;
+}
+
+#close-response-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1.8rem;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: color 0.3s;
+    line-height: 1;
+}
+
+#close-response-btn:hover {
+    color: white;
+}
+
+#telemetry-ticker {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9rem;
+    color: #0f0;
+    text-shadow: 0 0 5px #0f0;
+    z-index: 5;
+    max-width: 400px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#ccs-panel {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(0, 255, 0, 0.3);
+    border-radius: 8px;
+    padding: 10px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9rem;
+    color: #0f0;
+    display: grid;
+    grid-template-columns: 70px 1fr;
+    gap: 5px 10px;
+    width: 280px;
+    z-index: 5;
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
 }
 
-#module-selector button:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateY(-2px);
-    border-color: rgba(255, 255, 255, 0.4);
+#ccs-panel span:first-child {
+    color: rgba(0, 255, 0, 0.6);
+    text-align: right;
+    font-weight: bold;
 }
 
-#module-selector button.active {
-    background: rgba(100, 200, 255, 0.3);
-    border-color: rgba(100, 200, 255, 0.5);
-    transform: translateY(-2px);
-    box-shadow: 0 0 10px rgba(100, 200, 255, 0.3);
+#ccs-panel .nominal {
+    color: #0f0;
+    text-shadow: 0 0 5px #0f0;
+    font-weight: bold;
 }

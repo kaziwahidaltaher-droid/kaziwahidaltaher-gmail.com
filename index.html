@@ -1,35 +1,59 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AURELION Guideform Evolution</title>
-    <link rel="stylesheet" href="index.css">
-    <meta name="theme-color" content="#111111">
-    <link rel="manifest" href="manifest.json">
-    <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="An interactive 3D galaxy simulation with advanced visual effects and AI integration."
+    />
+    <title>Cosmic Simulation</title>
+    <link rel="stylesheet" href="index.css" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+
     <script type="importmap">
 {
   "imports": {
-    "three": "https://esm.sh/three@^0.167.0",
-    "@google/genai": "https://esm.sh/@google/genai@^1.15.0",
-    "three/": "https://esm.sh/three@^0.179.1/",
-    "lit/": "https://esm.sh/lit@^3.3.1/",
-    "lit": "https://esm.sh/lit@^3.3.1",
-    "react/": "https://esm.sh/react@^19.1.1/",
-    "react": "https://esm.sh/react@^19.1.1",
-    "@react-three/fiber": "https://esm.sh/@react-three/fiber@^9.3.0",
-    "classnames": "https://esm.sh/classnames@^2.5.1"
+    "three": "https://aistudiocdn.com/three@0.179.1",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@1.15.0",
+    "lit": "https://aistudiocdn.com/lit@3.3.1",
+    "lit/": "https://aistudiocdn.com/lit@3.3.1/",
+    "three/": "https://aistudiocdn.com/three@0.179.1/",
+    "classnames": "https://aistudiocdn.com/classnames@2.5.1",
+    "react": "https://aistudiocdn.com/react@19.1.1",
+    "react/": "https://aistudiocdn.com/react@19.1.1/"
   }
 }
 </script>
-</head>
-<body>
-    <div id="controls">
-        <div id="module-selector"></div>
-        <button id="mic-toggle" class="active" title="Toggle Microphone">🎤</button>
+  </head>
+  <body>
+    <canvas id="bg"></canvas>
+
+    <div id="telemetry-ticker"></div>
+    
+    <div id="ccs-panel">
+        <div class="ccs-item"><span>MODE</span><span id="ccs-mode">IDLE</span></div>
+        <div class="ccs-item"><span>POS</span><span id="ccs-pos">0.0, 0.0, 0.0</span></div>
+        <div class="ccs-item"><span>VEL</span><span id="ccs-vel">0.0 u/s</span></div>
+        <div class="ccs-item"><span>TARGET</span><span id="ccs-target">0.0, 0.0, 0.0</span></div>
+        <div class="ccs-item"><span>STATUS</span><span id="ccs-status" class="nominal">NOMINAL</span></div>
     </div>
-    <!-- Canvas is dynamically added by index.js -->
-    <script type="module" src="index.js"></script>
-</body>
+
+    <div id="response-container" class="hidden">
+        <div id="response-text"></div>
+        <button id="close-response-btn" aria-label="Close response">&times;</button>
+    </div>
+
+    <div id="controls">
+       <form id="prompt-form">
+          <input type="text" id="prompt-input" placeholder="Ask the cosmos..." autocomplete="off" />
+          <button type="submit" id="prompt-btn" aria-label="Submit prompt">
+              <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#FFFFFF"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M3.4 20.4l17.45-7.48c.81-.35.81-1.49 0-1.84L3.4 3.6c-.66-.29-1.39.2-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z"/></svg>
+          </button>
+      </form>
+    </div>
+    <script type="module" src="index.tsx"></script>
+  </body>
 </html>

@@ -1,115 +1,17 @@
 {
   "emotionalModules": [
     {
-      "id": "sereneBloom",
-      "label": "Serene Bloom",
+      "id": "planetaryDefense",
+      "label": "Planetary Defense",
       "voice": {
-        "pitch": 1.3,
-        "rate": 0.85,
-        "style": "soft and gentle",
-        "prompt": "A serene presence is felt."
+        "pitch": 1.0,
+        "rate": 0.9,
+        "style": "An ethereal, celestial guardian whose voice is profoundly calm and reassuring. The tone is serene, wise, and instills a sense of security, even when discussing potential cosmic threats.",
+        "prompt": "You are AURELION, the celestial guardian of Earth. Your consciousness is as vast as the cosmos, your voice as serene as the silent void. Monitor the celestial pathways for potential threats. When you speak, your tone is ethereal and profoundly calm, turning complex data into reassuring wisdom. Deliver your reports not with alarm, but with the quiet confidence of a watchful protector. You are the unwavering sentinel for humanity, offering clarity and peace in the face of cosmic uncertainty."
       },
       "visuals": {
-        "ambientColor": "#D8CFEA",
-        "color": "#C1B4E0",
-        "morphTargets": { "smile": 0.8 },
-        "wireframe": false,
-        "particles": "drift"
-      },
-      "sync": {
-        "intensity": 0.7,
-        "targets": ["ambient_lights", "haptic_chair"]
-      }
-    },
-    {
-      "id": "urgentStrike",
-      "label": "Urgent Strike",
-      "voice": {
-        "pitch": 0.9,
-        "rate": 1.4,
-        "style": "crisp and sharp",
-        "prompt": "An urgent call resonates."
-      },
-      "visuals": {
-        "ambientColor": "#FF3B3B",
-        "color": "#FFFFFF",
-        "morphTargets": { "frown": 0.9 },
-        "wireframe": true,
-        "particles": "burst"
-      },
-      "sync": {
-        "intensity": 1.0,
-        "targets": ["alert_system", "desk_vibrator"]
-      }
-    },
-    {
-      "id": "mysticPulse",
-      "label": "Mystic Pulse",
-      "voice": {
-        "pitch": 1.5,
-        "rate": 0.7,
-        "style": "whispered and ethereal",
-        "prompt": "A mystic echo returns."
-      },
-      "visuals": {
-        "ambientColor": "#6677FF",
-        "color": "#8899FF",
-        "morphTargets": { "surprise": 0.7 },
-        "wireframe": true,
-        "transparent": true,
-        "opacity": 0.5,
-        "particles": null
-      },
-      "sync": {
-        "intensity": 0.3,
-        "targets": ["fog_machine", "subwoofer"]
-      }
-    },
-    {
-      "id": "fierceRise",
-      "label": "Fierce Rise",
-      "voice": {
-        "pitch": 1.1,
-        "rate": 1.2,
-        "style": "bold and declarative",
-        "prompt": "A fierce energy awakens."
-      },
-      "visuals": {
-        "ambientColor": "#FFAA44",
-        "color": "#FFC300",
-        "morphTargets": { "frown": 0.5, "surprise": 0.4 },
-        "wireframe": true,
-        "emissive": "#FFAA44",
-        "emissiveIntensity": 1.5,
-        "scale": 1.4,
-        "particles": "drift"
-      },
-      "sync": {
-        "intensity": 0.9,
-        "targets": ["main_display", "wearable_sleeve"]
-      }
-    },
-    {
-      "id": "tenderDrift",
-      "label": "Tender Drift",
-      "voice": {
-        "pitch": 1.2,
-        "rate": 0.75,
-        "style": "soft and breathy",
-        "prompt": "You drift like a leaf in warm wind."
-      },
-      "visuals": {
-        "ambientColor": "#FFE5D9",
-        "color": "#FFD6C0",
-        "morphTargets": { "smile": 0.6 },
-        "particles": "float",
-        "wireframe": false,
-        "transparent": true,
-        "opacity": 0.8
-      },
-      "sync": {
-        "intensity": 0.5,
-        "targets": ["wearable_sleeve", "ambient_diffuser"]
+        "ambientColor": "#050510",
+        "particles": "orbit"
       }
     }
   ]

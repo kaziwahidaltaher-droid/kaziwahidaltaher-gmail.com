@@ -242,7 +242,8 @@ export class GdmLiveAudioVisuals3D extends LitElement {
   }
 
   protected firstUpdated() {
-    this.canvas = this.shadowRoot!.querySelector('canvas') as HTMLCanvasElement;
+    // FIX: Use this.renderRoot to query the component's DOM.
+    this.canvas = this.renderRoot.querySelector('canvas') as HTMLCanvasElement;
     this.init();
   }
 

@@ -11,17 +11,16 @@
 
 // Use a descriptive and versioned cache name.
 // Increment the version number ('v1', 'v2', etc.) whenever you update the cached files.
-const CACHE_NAME = 'aurelion-engine-cache-v13';
+const CACHE_NAME = 'aurelion-engine-cache-v16-galaxy';
 
 // A list of all the essential files (the "app shell") that need to be cached.
 const urlsToCache = [
   '/', // Cache the root URL
   'index.html',
   'index.css',
-  'index.js', // Cache the compiled JavaScript file
+  'index.tsx',
   'manifest.json',
-  'icon.svg',
-  'emotional-modules.json' // Cache the new configuration file
+  'icon.svg'
 ];
 
 /**

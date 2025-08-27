@@ -1,12 +1,11 @@
-
 {
-  "name": "AURELION Guideform Evolution",
-  "short_name": "AURELION",
+  "name": "Cosmic Pulse: An Audio-Reactive Galaxy",
+  "short_name": "Cosmic Pulse",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",
-  "theme_color": "#111111",
-  "description": "A guideform that evolves with your breath and voice.",
+  "theme_color": "#0a0a2a",
+  "description": "An interactive 3D galaxy that visually reacts to ambient audio, creating a cosmic, synesthetic experience.",
   "icons": [
     {
       "src": "icon.svg",

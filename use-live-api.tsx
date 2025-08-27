@@ -59,7 +59,7 @@ export function useLiveApi({
       audioContext({ id: 'audio-out' }).then((audioCtx: AudioContext) => {
         audioStreamerRef.current = new AudioStreamer(audioCtx);
         audioStreamerRef.current
-          .addWorklet<any>('vumeter-out', VolMeterWorket, (ev: any) => {
+          .addWorklet('vumeter-out', VolMeterWorket, (ev: any) => {
             setVolume(ev.data.volume);
           })
           .then(() => {
