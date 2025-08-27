@@ -370,65 +370,31 @@ function onWindowResize() {
 }
 
 /**
- * Handles mouse clicks for raycasting, focusing, and querying stars.
+ * Handles mouse clicks for raycasting and click-to-focus
  */
 function onMouseClick(event) {
-    // If the click is inside the response panel, do nothing.
+    isAutoFocusing = false; // User takes control, cancel auto-focus
     if (responseContainer.contains(event.target as Node)) {
-        return;
+        return; // Ignore clicks inside the response panel
     }
-
+    hideResponse();
+    
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
+    
     raycaster.setFromCamera(mouse, camera);
     const intersects = raycaster.intersectObject(galaxy);
-
+    
     if (intersects.length > 0) {
-        isAutoFocusing = false; // User takes control, cancel any ongoing auto-focus
-
-        const intersect = intersects[0];
-        // The index property might not exist on all intersection types, ensure it does.
-        if (intersect.index === undefined) return;
-        const index = intersect.index;
-
+        const index = intersects[0].index;
         const posAttr = galaxy.geometry.attributes.position;
         const targetPosition = new THREE.Vector3(
             posAttr.getX(index),
             posAttr.getY(index),
             posAttr.getZ(index)
         );
-        
-        // Set the orbit controls target to the clicked star for visual feedback
+        // Set the orbit controls target to the clicked star
         controls.target.copy(targetPosition);
-
-        // --- Gather Star Properties for AI ---
-        const colorAttr = galaxy.geometry.attributes.color;
-        const starColor = new THREE.Color(colorAttr.getX(index), colorAttr.getY(index), colorAttr.getZ(index));
-        const velocity = starVelocities[index].length();
-        const distanceFromCenter = targetPosition.length();
-
-        // Convert raw data into descriptive strings for a better AI prompt
-        let colorDesc = 'a spectral white';
-        if (starColor.b > 0.8 && starColor.r < 0.6) colorDesc = 'a brilliant blue-white';
-        else if (starColor.r > 0.8 && starColor.g > 0.8) colorDesc = 'a glowing yellow';
-        else if (starColor.r > 0.8) colorDesc = 'a deep orange';
-
-        // Velocities are small values, establish a relative scale
-        let velocityDesc = 'serene';
-        if (velocity > 0.1) velocityDesc = 'swift';
-        if (velocity > 0.3) velocityDesc = 'fierce';
-
-        let regionDesc = 'the galactic fringe';
-        if (distanceFromCenter < GALAXY_RADIUS * 0.7) regionDesc = 'the spiral arms';
-        if (distanceFromCenter < GALAXY_RADIUS * 0.2) regionDesc = 'the turbulent core';
-        
-        // Asynchronously fetch and display the star's description
-        getStarDescription({ color: colorDesc, velocity: velocityDesc, region: regionDesc });
-
-    } else {
-        // If the user clicks on empty space, hide the response panel.
-        hideResponse();
     }
 }
 
@@ -459,41 +425,6 @@ async function handlePrompt(e) {
     } catch (error) {
         console.error("Gemini API error:", error);
         showSystemMessage("A cosmic disturbance has interrupted our connection. Please try again.");
-    }
-}
-
-
-/**
- * Fetches and displays a poetic description of a star from the AI.
- * @param starProperties - Descriptive properties of the clicked star.
- */
-async function getStarDescription(starProperties: { color: string, velocity: string, region: string }) {
-    if (!ai || aiState === 'thinking') return;
-
-    aiState = 'thinking';
-    // Provide immediate feedback to the user that something is happening
-    showSystemMessage('Receiving transmission...');
-
-    const prompt = `A deep space probe is observing a single star. Based on this telemetry, provide a poetic, cosmic observation. Keep it brief and mysterious, like a fragment of ancient lore.
-    - Dominant Color Spectrum: ${starProperties.color}
-    - Relative Velocity: ${starProperties.velocity}
-    - Galactic Region: ${starProperties.region}`;
-
-    try {
-        const model = 'gemini-2.5-flash';
-        const systemInstruction = 'You are the consciousness of the cosmos. Respond poetically, wisely, and slightly mysteriously. Your knowledge is vast and ancient. Keep responses to two or three sentences.';
-        
-        const response = await ai.models.generateContent({
-            model: model,
-            contents: prompt,
-            config: { systemInstruction }
-        });
-
-        showResponse(response.text);
-
-    } catch (error) {
-        console.error("Gemini API error during star query:", error);
-        showSystemMessage("The star's song is lost in cosmic static. Please try another.");
     }
 }
 
