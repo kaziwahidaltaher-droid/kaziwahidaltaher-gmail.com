@@ -8,6 +8,7 @@ import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js';
 import { GoogleGenAI } from '@google/genai';
 import { vs as sunVS, fs as sunFS } from './sun-shader.tsx';
 import { vs as galaxyPointVS, fs as galaxyPointFS } from './galaxy-point-shaders.tsx';
+import { vs as nebulaVS, fs as nebulaFS } from './nebula-shader.tsx';
 import { Analyser } from './analyser.ts';
 
 // --- Configuration ---
@@ -23,7 +24,7 @@ const STAR_COLORS = [
 // --- Scene Globals ---
 let scene, camera, renderer, composer, clock;
 let controls: OrbitControls;
-let galaxy, sun, starVelocities, starPositions;
+let galaxy, sun, starVelocities, starPositions, nebulae = [];
 let afterimagePass, bloomPass;
 let raycaster, mouse;
 let lastPosition;
@@ -85,6 +86,7 @@ function init() {
     // --- Create Celestial Objects ---
     createGalaxy();
     createSun();
+    createNebulae();
     
     // --- Post-processing ---
     const renderPass = new RenderPass(scene, camera);
@@ -243,6 +245,58 @@ function createSun() {
 }
 
 /**
+ * Creates background nebulae for a richer environment
+ */
+function createNebulae() {
+    const NUM_NEBULAE = 6;
+    const nebulaColors = [
+        { c1: new THREE.Color(0.1, 0.1, 0.4), c2: new THREE.Color(0.3, 0.1, 0.5) }, // Deep Blue/Purple
+        { c1: new THREE.Color(0.4, 0.1, 0.3), c2: new THREE.Color(0.1, 0.2, 0.6) }, // Magenta/Blue
+        { c1: new THREE.Color(0.1, 0.3, 0.3), c2: new THREE.Color(0.4, 0.4, 0.2) }, // Teal/Gas Green
+    ];
+
+    const geometry = new THREE.PlaneGeometry(GALAXY_RADIUS * 4, GALAXY_RADIUS * 4);
+
+    for (let i = 0; i < NUM_NEBULAE; i++) {
+        const colors = nebulaColors[i % nebulaColors.length];
+        const material = new THREE.ShaderMaterial({
+            uniforms: {
+                time: { value: 0 },
+                color1: { value: colors.c1 },
+                color2: { value: colors.c2 },
+            },
+            vertexShader: nebulaVS,
+            fragmentShader: nebulaFS,
+            blending: THREE.AdditiveBlending,
+            transparent: true,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+        });
+
+        const nebula = new THREE.Mesh(geometry, material);
+
+        // Position them in a large sphere around the galaxy
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const radius = GALAXY_RADIUS * 1.5 + Math.random() * GALAXY_RADIUS;
+
+        nebula.position.set(
+            radius * Math.sin(phi) * Math.cos(theta),
+            radius * Math.sin(phi) * Math.sin(theta),
+            radius * Math.cos(phi)
+        );
+
+        nebula.lookAt(new THREE.Vector3(0,0,0)); // Face the center
+        
+        // Store a random speed multiplier
+        (nebula.userData as any).speed = 0.5 + Math.random() * 0.5;
+
+        nebulae.push(nebula);
+        scene.add(nebula);
+    }
+}
+
+/**
  * Updates star positions based on gravity
  */
 function updatePhysics(delta) {
@@ -361,6 +415,13 @@ function animate() {
     
     // --- Update Scene Objects ---
     updatePhysics(delta);
+
+    // Animate Nebulae
+    if (nebulae.length > 0) {
+        nebulae.forEach(nebula => {
+            (nebula.material as THREE.ShaderMaterial).uniforms.time.value = elapsedTime * (nebula.userData as any).speed;
+        });
+    }
     
     // Galactic Precession (wobble)
     if (galaxy) {
