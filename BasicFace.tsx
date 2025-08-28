@@ -6,11 +6,9 @@ import { RefObject, useEffect, useState, useRef } from 'react';
 
 import { renderBasicFace } from './basic-face-render';
 
-import useFace from '../../../hooks/demo/use-face';
-import useHover from '../../../hooks/demo/use-hover';
-import useTilt from '../../../hooks/demo/use-tilt';
-import { useLiveAPIContext } from '../../../contexts/LiveAPIContext';
-
+import useFace from 
+import useHover from 
+import { useLiveAPIContext } from 
 // Minimum volume level that indicates audio output is occurring
 const AUDIO_OUTPUT_DETECTION_THRESHOLD = 0.05;
 
@@ -92,4 +90,8 @@ export default function BasicFace({
       }}
     />
   );
+}
+
+function useTilt(arg0: { maxAngle: number; speed: number; isActive: boolean; }) {
+throw new Error('Function not implemented.');
 }

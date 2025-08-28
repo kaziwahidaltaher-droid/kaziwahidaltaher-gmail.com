@@ -1,12 +1,12 @@
 
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js';
-import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OrbitControls } from 
+import { EffectComposer } from 
+import { RenderPass } from 
+import { UnrealBloomPass } from 
+import { AfterimagePass } from 
+import { SMAAPass } from 
+import { ShaderPass } from 
 import { GoogleGenAI, Type } from '@google/genai';
 import { vs as oltarisVS, fs as oltarisFS } from './oltaris-shader.tsx';
 import { vs as galaxyPointVS, fs as galaxyPointFS } from './galaxy-point-shaders.tsx';
