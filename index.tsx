@@ -145,6 +145,8 @@ const saveForm = document.getElementById('save-form');
 const saveNameInput = document.getElementById('save-name-input') as HTMLInputElement;
 const cancelSaveBtn = document.getElementById('cancel-save-btn');
 
+// OLTARIS Report Panel
+const oltarisReportPanel = document.getElementById('oltaris-report-panel');
 
 // Environment Generation Buttons
 let generationButtons: HTMLButtonElement[] = [];
@@ -1158,7 +1160,8 @@ function onMouseClick(event: MouseEvent) {
         ttsSettingsPanel?.contains(event.target as Node) ||
         missionModal?.contains(event.target as Node) ||
         saveModal?.contains(event.target as Node) ||
-        reactRoot?.contains(event.target as Node)) {
+        reactRoot?.contains(event.target as Node) ||
+        oltarisReportPanel?.contains(event.target as Node)) {
         return;
     }
     
@@ -1879,4 +1882,198 @@ function showResponse(text: string) {
     if (speechSettings.voice) utterance.voice = speechSettings.voice;
     utterance.pitch = speechSettings.pitch;
     utterance.rate = speechSettings.rate;
-    speechSynthesis.
+    speechSynthesis.speak(utterance);
+
+    utterance.onend = () => {
+        aiState = 'idle';
+    };
+}
+
+/**
+ * Hides the main response/modal panel.
+ */
+function hideResponse() {
+    if (speechSynthesis.speaking) speechSynthesis.cancel();
+    if (typewriterInterval) clearInterval(typewriterInterval);
+    responseContainer?.classList.add('hidden');
+    if (document.getElementById('response-actions')) {
+        (document.getElementById('response-actions') as HTMLElement).innerHTML = '';
+    }
+    closeResponseBtn?.classList.remove('hidden'); // Make sure it's visible for next time
+    aiState = 'idle';
+    applyResponseVisuals('');
+}
+
+
+function hideOltarisReport() {
+    oltarisReportPanel?.classList.add('hidden');
+}
+
+/**
+ * Displays the mission assessment report in its dedicated panel.
+ */
+function displayAssessmentReport(report: any) {
+    if (!oltarisReportPanel) return;
+
+    const getStatusClass = (status: string) => {
+        if (!status) return '';
+        const lowerStatus = status.toLowerCase();
+        if (lowerStatus.includes('success')) return 'status-success';
+        if (lowerStatus.includes('loss')) return 'status-loss';
+        if (lowerStatus.includes('failure')) return 'status-failure';
+        return '';
+    };
+
+    oltarisReportPanel.innerHTML = `
+        <button id="close-oltaris-report-btn" aria-label="Close OLTARIS report">&times;</button>
+        <div class="assessment-report">
+            <h3>OLTARIS Telemetry Report</h3>
+            <div class="assessment-grid">
+                <div class="assessment-item" style="grid-column: 1 / -1;">
+                    <span class="label">Environment</span>
+                    <span class="value">${report.environment || 'N/A'}</span>
+                </div>
+                 <div class="assessment-item">
+                    <span class="label">Absorbed Dose (Tissue)</span>
+                    <span class="value">${report.dose?.value?.toFixed(2) || 'N/A'}<span class="unit">${report.dose?.unit || ''}</span></span>
+                </div>
+                <div class="assessment-item">
+                    <span class="label">Dose Equivalent</span>
+                    <span class="value">${report.doseEquivalent?.value?.toFixed(2) || 'N/A'}<span class="unit">${report.doseEquivalent?.unit || ''}</span></span>
+                </div>
+                <div class="assessment-item" style="grid-column: 1 / -1;">
+                    <span class="label">Risk of Exposure-Induced Death (REID)</span>
+                    <span class="value">${report.REID?.value?.toFixed(2) || 'N/A'}<span class="unit">${report.REID?.unit || '%'}</span></span>
+                </div>
+            </div>
+            ${report.missionLog ? `
+            <div class="mission-log-section">
+                <h4>Mission Simulation Log</h4>
+                 <div class="mission-status-grid">
+                    <div class="assessment-item">
+                        <span class="label">Mission Status</span>
+                        <span class="value ${getStatusClass(report.missionStatus)}">${report.missionStatus || 'UNKNOWN'}</span>
+                    </div>
+                    <div class="assessment-item">
+                        <span class="label">Success Rate</span>
+                        <span class="value">${report.successRate?.toFixed(1) || 'N/A'}<span class="unit">%</span></span>
+                    </div>
+                    <div class="assessment-item">
+                        <span class="label">Loss Rate</span>
+                        <span class="value">${report.lossRate?.toFixed(1) || 'N/A'}<span class="unit">%</span></span>
+                    </div>
+                </div>
+                <div class="assessment-summary">
+                     <p>${report.missionLog}</p>
+                </div>
+            </div>
+            ` : ''}
+        </div>
+    `;
+    
+    // Re-add event listener after innerHTML overwrite
+    oltarisReportPanel.querySelector('#close-oltaris-report-btn')?.addEventListener('click', hideOltarisReport);
+    oltarisReportPanel.classList.remove('hidden');
+}
+
+/**
+ * Updates the telemetry ticker with a new message.
+ */
+function updateTelemetry(message?: string) {
+    if (telemetryTicker) {
+        if (message) {
+            telemetryTicker.textContent = message;
+        } else {
+            telemetryIndex = (telemetryIndex + 1) % telemetryMessages.length;
+            telemetryTicker.textContent = telemetryMessages[telemetryIndex];
+        }
+    }
+}
+
+/**
+ * Updates the Camera Control System (CCS) panel with current data.
+ */
+function updateCCSPanel(delta: number) {
+    if (!ccsPos || !ccsVel || !ccsTarget || !ccsMode) return;
+    
+    const formatVec = (v: THREE.Vector3) => `${v.x.toFixed(1)}, ${v.y.toFixed(1)}, ${v.z.toFixed(1)}`;
+    
+    ccsPos.textContent = formatVec(camera.position);
+    
+    const velocity = camera.position.distanceTo(lastPosition) / (delta || 1);
+    lastPosition.copy(camera.position);
+    ccsVel.textContent = `${velocity.toFixed(1)} u/s`;
+
+    if (isAutoFocusing) {
+        ccsMode.textContent = 'AUTO-FOCUS';
+        ccsTarget.textContent = formatVec(autoFocusTarget);
+    } else {
+        ccsMode.textContent = 'MANUAL';
+        ccsTarget.textContent = formatVec(controls.target);
+    }
+}
+
+
+/**
+ * Starts the auto-focus sequence on a random point in the galaxy.
+ */
+function startAutoFocus() {
+    if (!galaxy || isTransitioning) return;
+    isAutoFocusing = true;
+    
+    const numStars = galaxy.geometry.attributes.position.count;
+    const randomIndex = Math.floor(Math.random() * numStars);
+    const posAttr = galaxy.geometry.attributes.position;
+    
+    autoFocusTarget.set(
+        posAttr.getX(randomIndex),
+        posAttr.getY(randomIndex),
+        posAttr.getZ(randomIndex)
+    );
+    
+    const direction = autoFocusTarget.clone().normalize();
+    const distance = 150; // A good distance to view the target from
+    autoFocusCameraTarget.copy(autoFocusTarget).add(direction.multiplyScalar(distance));
+
+    showSystemMessage('AUTO-FOCUS: Seeking anomaly...');
+}
+
+
+/**
+ * Shows a confirmation dialog using the response modal.
+ */
+function showConfirmationModal(message: string, confirmText: string, onConfirm: () => void) {
+    if(responseContainer && responseText) {
+        if (typewriterInterval) clearInterval(typewriterInterval);
+        
+        responseText.innerHTML = message;
+        
+        const actionsContainer = document.getElementById('response-actions');
+        if (actionsContainer) {
+            actionsContainer.innerHTML = ''; // Clear previous actions
+
+            const confirmBtn = document.createElement('button');
+            confirmBtn.textContent = confirmText;
+            confirmBtn.onclick = () => {
+                onConfirm();
+                hideResponse();
+            };
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.className = 'cancel-btn';
+            cancelBtn.onclick = hideResponse;
+
+            actionsContainer.appendChild(cancelBtn);
+            actionsContainer.appendChild(confirmBtn);
+        }
+        
+        closeResponseBtn?.classList.add('hidden');
+        responseContainer.classList.remove('hidden');
+    }
+}
+
+
+// --- App Initialization and Execution ---
+init();
+animate();
