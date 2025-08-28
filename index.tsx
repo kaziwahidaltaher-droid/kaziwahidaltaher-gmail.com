@@ -7,42 +7,48 @@ import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { GoogleGenAI, Type } from '@google/genai';
-import { vs as sunVS, fs as sunFS } from './sun-shader.tsx';
+import { vs as oltarisVS, fs as oltarisFS } from './oltaris-shader.tsx';
 import { vs as galaxyPointVS, fs as galaxyPointFS } from './galaxy-point-shaders.tsx';
 import { vs as starfieldVS, fs as starfieldFS } from './starfield-shaders.tsx';
-import { vs as nebulaVS, fs as nebulaFS } from './nebula-shader.tsx';
 import { vs as probeVS, fs as probeFS } from './probe-shader.tsx';
+import { vs as phantomGlowVS, fs as phantomGlowFS } from './phantom-glow-shader.tsx';
 import { Analyser } from './analyser.ts';
+import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 
-// --- Default Galaxy Configuration ---
-const initialGalaxyConfig = {
-    name: "Aurelion-Prime",
-    description: "The genesis cosmos, a familiar swirl of azure and gold, awaiting the spark of new creation.",
-    numStars: 50000,
-    radius: 500,
-    starColors: ['#5588ff', '#ffee88', '#ffaa55'],
-    nebulaColors: [
-        { color1: '#6a0dad', color2: '#0000ff' },
-        { color1: '#dc143c', color2: '#ff8c00' },
-        { color1: '#00ffff', color2: '#008080' },
-    ],
-    sunColor: '#ffee88'
+// --- Default Cosmic Web Configuration ---
+const initialCosmicWebConfig = {
+    name: "The First Web",
+    description: "An ancient, vast structure of glowing filaments separated by deep voids, representing the large-scale distribution of matter in the universe.",
+    numStars: 100000, // Reduced from 150k to prevent potential memory issues on lower-end devices
+    radius: 1000, // This is now the half-size of the generation cube
+    starColors: ['#6c70ff', '#a7c5ff', '#ffee88'],
 };
 
 // --- Scene Globals ---
 let scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer, composer: EffectComposer, clock: THREE.Clock;
 let controls: OrbitControls;
 let galaxy: THREE.Points | null = null;
-let sun: THREE.Mesh | null = null;
+let oltarisPhantom: THREE.Group | null = null;
 let starVelocities: THREE.Vector3[], starPositions: Float32Array;
 let starfield: THREE.Points;
-let nebulae: THREE.Mesh[] = [];
 let afterimagePass: AfterimagePass, bloomPass: UnrealBloomPass, smaaPass: SMAAPass, sharpenPass: ShaderPass;
 let raycaster: THREE.Raycaster, mouse: THREE.Vector2;
 let lastPosition: THREE.Vector3;
 let isAutoFocusing = false;
 let autoFocusTarget = new THREE.Vector3();
 let autoFocusCameraTarget = new THREE.Vector3();
+let currentGalaxyConfig = { ...initialCosmicWebConfig };
+
+// --- Phantom Globals ---
+let phantomModel: THREE.Group | null = null;
+let isPhantomVisible = false;
+let phantomAnimation: { state: 'fading-in' | 'fading-out', progress: number } | null = null;
+let phantomScanAnimation: { active: boolean, progress: number, duration: number, onComplete?: (report: any) => void, reportData?: any } | null = null;
+let isSimulatingMission = false;
+const PHANTOM_FADE_DURATION = 0.5; // seconds
+const PHANTOM_SCAN_DURATION = 2.0; // seconds
+
 
 // --- Probe Globals ---
 let probe: THREE.Mesh | null = null;
@@ -56,35 +62,26 @@ let probeAnimation: {
 } | null = null;
 
 
-// --- Pre-allocated arrays for nebula uniforms for stability and performance ---
-const MAX_NEBULAE = 5; // Must match shader definition
-const nebulaPositions = new Array(MAX_NEBULAE).fill(null).map(() => new THREE.Vector3());
-const nebulaColors = new Array(MAX_NEBULAE).fill(null).map(() => new THREE.Color(0x000000));
-const nebulaRadii = new Array(MAX_NEBULAE).fill(0.0);
-
 // --- Transition Globals ---
 let isTransitioning = false;
 let transitionState = {
     fadingOut: false,
     fadingIn: false,
     oldGalaxy: null as THREE.Points | null,
-    oldSun: null as THREE.Mesh | null,
-    oldNebulae: [] as THREE.Mesh[],
     progress: 0,
     duration: 2.0 // seconds for each fade
 };
-
 
 // --- AI & UI Globals ---
 let ai;
 let aiState = 'idle'; // 'idle', 'thinking', 'speaking'
 let typewriterInterval: ReturnType<typeof setInterval>;
 let telemetryMessages = [
-    'AURELION: Genesis system online.',
+    'SYSTEM: Cosmic Web simulation online.',
     'NETWORK: All probes nominal.',
     'DATA LINK: Stable connection to Deep Space Network.',
-    'TRACKING: Object NGC 6302 (Bug Nebula)',
-    'SYSTEM: Calibrating stellar velocity sensors.',
+    'TRACKING: Large Quasar Group (LQG)',
+    'SYSTEM: Calibrating filament density sensors.',
 ];
 let telemetryIndex = 0;
 
@@ -118,8 +115,22 @@ const pitchSlider = document.getElementById('pitch-slider') as HTMLInputElement;
 const rateSlider = document.getElementById('rate-slider') as HTMLInputElement;
 const pitchValue = document.getElementById('pitch-value');
 const rateValue = document.getElementById('rate-value');
-const generateCosmosBtn = document.getElementById('generate-cosmos-btn') as HTMLButtonElement;
 const summonProbeBtn = document.getElementById('summon-probe-btn') as HTMLButtonElement;
+const togglePhantomBtn = document.getElementById('toggle-phantom-btn') as HTMLButtonElement;
+
+// Mission Modal
+const missionModal = document.getElementById('mission-modal');
+const closeMissionModalBtn = document.getElementById('close-mission-modal-btn');
+const runMissionNominalBtn = document.getElementById('run-mission-nominal');
+const runMissionWorstDayBtn = document.getElementById('run-mission-worst-day');
+const runMissionWorstWeekBtn = document.getElementById('run-mission-worst-week');
+const runMissionPeakFluxBtn = document.getElementById('run-mission-peak-flux');
+
+
+// Environment Generation Buttons
+let generationButtons: HTMLButtonElement[] = [];
+let generateCosmosStandardBtn: HTMLButtonElement, generateCosmosSpeBtn: HTMLButtonElement, generateCosmosLunarBtn: HTMLButtonElement, generateCosmosMartianBtn: HTMLButtonElement;
+
 
 /**
  * Main initialization function
@@ -129,7 +140,7 @@ function init() {
     scene = new THREE.Scene();
     clock = new THREE.Clock();
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000);
-    camera.position.set(0, 50, initialGalaxyConfig.radius * 0.7);
+    camera.position.set(0, 150, initialCosmicWebConfig.radius * 1.5);
     lastPosition = camera.position.clone();
     
     renderer = new THREE.WebGLRenderer({
@@ -137,7 +148,7 @@ function init() {
         antialias: true,
     });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 
     // --- Controls (Initialized before they are accessed) ---
     controls = new OrbitControls(camera, renderer.domElement);
@@ -155,7 +166,11 @@ function init() {
 
     // --- Create Celestial Objects ---
     createStarfield();
-    recreateSceneWithConfig(initialGalaxyConfig);
+    oltarisPhantom = createOltarisPhantom();
+    scene.add(oltarisPhantom);
+    recreateSceneWithConfig(initialCosmicWebConfig);
+    phantomModel = createPhantom();
+    scene.add(phantomModel);
     
     // --- Post-processing ---
     const renderPass = new RenderPass(scene, camera);
@@ -184,7 +199,7 @@ function init() {
                                  texture2D(tDiffuse, vUv - vec2(0.0, 1.0) * texelSize) +
                                  texture2D(tDiffuse, vUv + vec2(1.0, 0.0) * texelSize) +
                                  texture2D(tDiffuse, vUv - vec2(1.0, 0.0) * texelSize) - 4.0 * c;
-                gl_FragColor = c - laplacian * 0.8;
+                gl_FragColor = c - laplacian * 0.5;
             }`
     };
     sharpenPass = new ShaderPass(SharpenShader);
@@ -204,7 +219,14 @@ function init() {
     mouse = new THREE.Vector2();
 
     // --- AI Setup ---
-    if (!process.env.API_KEY) {
+    if (typeof process !== 'undefined' && process.env.API_KEY) {
+        try {
+            ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        } catch (error) {
+            console.error("Gemini AI SDK initialization failed.", error);
+            showSystemMessage("Could not connect to the cosmic consciousness. Please check your connection.");
+        }
+    } else {
         console.error("API_KEY environment variable not set. Gemini AI functionality will be disabled.");
         showSystemMessage("Connection to cosmic consciousness failed: Missing credentials.");
         if (promptInput && promptForm) {
@@ -212,39 +234,59 @@ function init() {
            (promptInput as HTMLInputElement).placeholder = "AI offline: Missing API Key";
            (document.getElementById('prompt-btn') as HTMLButtonElement).disabled = true;
         }
-        if (generateCosmosBtn) generateCosmosBtn.disabled = true;
         if (summonProbeBtn) summonProbeBtn.disabled = true;
-    } else {
-        try {
-            ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        } catch (error) {
-            console.error("Gemini AI SDK initialization failed.", error);
-            showSystemMessage("Could not connect to the cosmic consciousness. Please check your connection.");
-        }
     }
     
     // --- Event Listeners ---
+    generateCosmosStandardBtn = document.getElementById('generate-cosmos-standard-btn') as HTMLButtonElement;
+    generateCosmosSpeBtn = document.getElementById('generate-cosmos-spe-btn') as HTMLButtonElement;
+    generateCosmosLunarBtn = document.getElementById('generate-cosmos-lunar-btn') as HTMLButtonElement;
+    generateCosmosMartianBtn = document.getElementById('generate-cosmos-martian-btn') as HTMLButtonElement;
+    generationButtons = [generateCosmosStandardBtn, generateCosmosSpeBtn, generateCosmosLunarBtn, generateCosmosMartianBtn];
+    
+    // Disable generation buttons if AI is offline
+    if (!ai) {
+        generationButtons.forEach(btn => { if(btn) btn.disabled = true; });
+    }
+
     window.addEventListener('resize', onWindowResize);
     window.addEventListener('click', onMouseClick, false);
     promptForm?.addEventListener('submit', handlePrompt);
     closeResponseBtn?.addEventListener('click', hideResponse);
     autoFocusBtn?.addEventListener('click', startAutoFocus);
-    generateCosmosBtn?.addEventListener('click', generateNewCosmos);
     summonProbeBtn?.addEventListener('click', summonProbe);
+    togglePhantomBtn?.addEventListener('click', togglePhantom);
+    
+    generateCosmosStandardBtn?.addEventListener('click', (e) => generateNewCosmos('standard', e.currentTarget as HTMLButtonElement));
+    generateCosmosSpeBtn?.addEventListener('click', (e) => generateNewCosmos('spe', e.currentTarget as HTMLButtonElement));
+    generateCosmosLunarBtn?.addEventListener('click', (e) => generateNewCosmos('lunar', e.currentTarget as HTMLButtonElement));
+    generateCosmosMartianBtn?.addEventListener('click', (e) => generateNewCosmos('martian', e.currentTarget as HTMLButtonElement));
+
+    // Mission Modal Listeners
+    closeMissionModalBtn?.addEventListener('click', () => missionModal?.classList.add('hidden'));
+    runMissionNominalBtn?.addEventListener('click', () => runMissionSimulation('Nominal Transit'));
+    runMissionWorstDayBtn?.addEventListener('click', () => runMissionSimulation('Worst-Day SEP Hazard'));
+    runMissionWorstWeekBtn?.addEventListener('click', () => runMissionSimulation('Worst-Week SEP Hazard'));
+    runMissionPeakFluxBtn?.addEventListener('click', () => runMissionSimulation('Peak Flux SEP Hazard'));
+
 
     // --- Audio & TTS Setup ---
     setupAudio();
     setupTTS();
 
     // --- Telemetry ---
-    updateTelemetry(initialGalaxyConfig.name);
+    updateTelemetry(initialCosmicWebConfig.name);
     setInterval(() => updateTelemetry(), 5000);
 }
 
 /**
- * Recreates the dynamic parts of the scene (galaxy, sun, nebulae) based on a new configuration.
+ * Recreates the dynamic parts of the scene (galaxy) based on a new configuration.
  */
 function recreateSceneWithConfig(config: any, isTransition: boolean = false) {
+    // FIX: Cap the number of stars to prevent "Array buffer allocation failed" error.
+    config.numStars = Math.min(config.numStars || initialCosmicWebConfig.numStars, 250000);
+    currentGalaxyConfig = { ...config };
+
     // --- Cleanup existing objects if not in a transition ---
     if (!isTransition) {
         if (galaxy) {
@@ -252,23 +294,10 @@ function recreateSceneWithConfig(config: any, isTransition: boolean = false) {
             galaxy.geometry.dispose();
             (galaxy.material as THREE.Material).dispose();
         }
-        if (sun) {
-            scene.remove(sun);
-            sun.geometry.dispose();
-            (sun.material as THREE.Material).dispose();
-        }
-        nebulae.forEach(nebula => {
-            scene.remove(nebula);
-            nebula.geometry.dispose();
-            (nebula.material as THREE.Material).dispose();
-        });
-        nebulae = [];
     }
 
     // --- Create new objects with the provided config ---
-    createGalaxy(config, isTransition);
-    createSun(config, isTransition);
-    createNebulae(config, isTransition);
+    createCosmicWeb(config, isTransition);
     
     // Update controls with new radius
     if (controls) {
@@ -316,7 +345,9 @@ function populateVoiceList() {
         voiceSelect.appendChild(option);
     });
 
-    const defaultVoice = availableVoices.find(voice => voice.lang === 'en-US' && voice.name.includes('Google')) || availableVoices[0];
+    const maleVoice = availableVoices.find(voice => voice.lang.startsWith('en') && voice.name.toLowerCase().includes('male'));
+    const defaultVoice = maleVoice || availableVoices.find(voice => voice.lang.startsWith('en') && voice.name.includes('Google')) || availableVoices[0];
+    
     if (defaultVoice) {
         speechSettings.voice = defaultVoice;
         const defaultIndex = availableVoices.indexOf(defaultVoice);
@@ -359,9 +390,9 @@ function setupTTS() {
 }
 
 /**
- * Creates the galaxy with stars and physics properties
+ * Creates the cosmic web structure.
  */
-function createGalaxy(config: { numStars: number, radius: number, starColors: string[] }, isTransition = false) {
+function createCosmicWeb(config: { numStars: number, radius: number, starColors: string[] }, isTransition = false) {
     const { numStars, radius, starColors } = config;
     const geometry = new THREE.BufferGeometry();
     starPositions = new Float32Array(numStars * 3);
@@ -371,18 +402,15 @@ function createGalaxy(config: { numStars: number, radius: number, starColors: st
     starVelocities = new Array(numStars).fill(null).map(() => new THREE.Vector3());
 
     const parsedStarColors = starColors.map(c => new THREE.Color(c));
+    const halfRadius = radius;
 
     for (let i = 0; i < numStars; i++) {
         const i3 = i * 3;
-        const r = Math.random() * radius;
-        const angle = (r / radius) * 10;
-        const arm = Math.floor(Math.random() * 4);
-        const armAngle = (arm / 4) * Math.PI * 2;
-        const spiralAngle = angle + armAngle + (Math.random() - 0.5) * 0.5;
-
-        starPositions[i3] = Math.cos(spiralAngle) * r;
-        starPositions[i3 + 1] = (Math.random() - 0.5) * 40 * (1 - r / radius);
-        starPositions[i3 + 2] = Math.sin(spiralAngle) * r;
+        
+        // Distribute stars randomly within a cube
+        starPositions[i3] = (Math.random() - 0.5) * halfRadius * 2;
+        starPositions[i3 + 1] = (Math.random() - 0.5) * halfRadius * 2;
+        starPositions[i3 + 2] = (Math.random() - 0.5) * halfRadius * 2;
 
         const color = parsedStarColors[Math.floor(Math.random() * parsedStarColors.length)];
         colors[i3] = color.r;
@@ -404,10 +432,8 @@ function createGalaxy(config: { numStars: number, radius: number, starColors: st
             uOverallAudio: { value: 0.0 },
             time: { value: 0.0 },
             uFade: { value: isTransition ? 0.0 : 1.0 },
-            uNebulaPositions: { value: nebulaPositions },
-            uNebulaColorHotspots: { value: nebulaColors },
-            uNebulaRadii: { value: nebulaRadii },
-            uNumNebulae: { value: 0 },
+            uCameraFarPlane: { value: camera.far },
+            uHeartbeat: { value: new THREE.Vector2(0.0, 150.0) }, // x: radius, y: thickness
         },
         vertexShader: galaxyPointVS,
         fragmentShader: galaxyPointFS,
@@ -422,33 +448,72 @@ function createGalaxy(config: { numStars: number, radius: number, starColors: st
 }
 
 /**
- * Creates the central sun object
+ * Creates the central, majestic OLTARIS phantom.
  */
-function createSun(config: { sunColor: string }, isTransition = false) {
-    const geometry = new THREE.SphereGeometry(30, 64, 64);
+function createOltarisPhantom() {
     const material = new THREE.ShaderMaterial({
         uniforms: {
             time: { value: 0 },
-            aiState: { value: 0.0 },
-            audioLevel: { value: 0.0 },
-            uAudioMids: { value: 0.0 },
-            uColor: { value: new THREE.Color(config.sunColor) },
-            uFade: { value: isTransition ? 0.0 : 1.0 },
+            aiState: { value: 0.0 }, // 0: idle, 1: thinking, 2: speaking
+            audioLevel: { value: 0.0 }, // Bass
+            uAudioMids: { value: 0.0 }, // Mids
+            uFade: { value: 1.0 },
         },
-        vertexShader: sunVS,
-        fragmentShader: sunFS,
-        transparent: true
+        vertexShader: oltarisVS,
+        fragmentShader: oltarisFS,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
     });
-    sun = new THREE.Mesh(geometry, material);
-    scene.add(sun);
+
+    const head = new THREE.SphereGeometry(12, 32, 32);
+    head.translate(0, 45, 0);
+
+    const torso = new THREE.CapsuleGeometry(10, 35, 4, 16);
+    torso.translate(0, 20, 0);
+    
+    const phantom = new THREE.Group();
+    phantom.add(new THREE.Mesh(head, material));
+    phantom.add(new THREE.Mesh(torso, material));
+    
+    const createLimb = (isArm: boolean) => {
+        const limb = new THREE.Group();
+        const upper = new THREE.Mesh(new THREE.CapsuleGeometry(isArm ? 4 : 5, 20, 4, 8), material);
+        const lower = new THREE.Mesh(new THREE.CapsuleGeometry(isArm ? 3 : 4, 20, 4, 8), material);
+        
+        upper.position.y = 10;
+        lower.position.y = -10;
+        
+        limb.add(upper, lower);
+        return limb;
+    };
+
+    const leftArm = createLimb(true);
+    leftArm.position.set(-20, 28, 0);
+    leftArm.rotation.z = 0.4;
+    
+    const rightArm = createLimb(true);
+    rightArm.position.set(20, 28, 0);
+    rightArm.rotation.z = -0.4;
+
+    const leftLeg = createLimb(false);
+    leftLeg.position.set(-8, -15, 0);
+
+    const rightLeg = createLimb(false);
+    rightLeg.position.set(8, -15, 0);
+    
+    phantom.add(leftArm, rightArm, leftLeg, rightLeg);
+    
+    return phantom;
 }
+
 
 /**
  * Creates a deep space starfield for background parallax effect.
  */
 function createStarfield() {
     const NUM_BG_STARS = 20000;
-    const BG_RADIUS = initialGalaxyConfig.radius * 2.5;
+    const BG_RADIUS = initialCosmicWebConfig.radius * 2.5;
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(NUM_BG_STARS * 3);
     const starIDs = new Float32Array(NUM_BG_STARS);
@@ -474,7 +539,8 @@ function createStarfield() {
         uniforms: {
             time: { value: 0.0 },
             uAudioHighs: { value: 0.0 },
-            uAudioMids: { value: 0.0 }
+            uAudioMids: { value: 0.0 },
+            uMaxStarfieldRadius: { value: BG_RADIUS * 2.0 }
         },
         vertexShader: starfieldVS,
         fragmentShader: starfieldFS,
@@ -488,44 +554,136 @@ function createStarfield() {
 }
 
 /**
- * Creates procedural, audio-reactive nebulae within the galaxy.
+ * Creates a stylized human phantom model for interaction.
  */
-function createNebulae(config: { nebulaColors: { color1: string, color2: string }[], radius: number }, isTransition = false) {
-    const { nebulaColors, radius } = config;
-    nebulae = [];
-    for (const colors of nebulaColors) {
-        const geometry = new THREE.PlaneGeometry(radius * 0.8, radius * 0.8);
-        const material = new THREE.ShaderMaterial({
-            uniforms: {
-                time: { value: 0.0 },
-                color1: { value: new THREE.Color(colors.color1) },
-                color2: { value: new THREE.Color(colors.color2) },
-                uAudioMids: { value: 0.0 },
-                uAudioHighs: { value: 0.0 },
-                uAudioBass: { value: 0.0 },
-                uFade: { value: isTransition ? 0.0 : 1.0 },
-            },
-            vertexShader: nebulaVS,
-            fragmentShader: nebulaFS,
-            blending: THREE.AdditiveBlending,
-            transparent: true,
-            depthWrite: false,
-        });
+function createPhantom() {
+    const phantom = new THREE.Group();
+    
+    // --- Core Material (the "solid" part) ---
+    const coreMaterial = new THREE.MeshStandardMaterial({
+        color: 0x00ffff,
+        emissive: 0x00ffff,
+        emissiveIntensity: 0.6,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        wireframe: false,
+        roughness: 0.4,
+        metalness: 0.1,
+    });
 
-        const nebula = new THREE.Mesh(geometry, material);
-        const r = radius * 0.3 + Math.random() * radius * 0.4;
-        const angle = Math.random() * Math.PI * 2;
-        nebula.position.set(
-            Math.cos(angle) * r,
-            (Math.random() - 0.5) * 10,
-            Math.sin(angle) * r
+    // --- Glow Material (the "aura") ---
+    const glowMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+            uGlowColor: { value: new THREE.Color(0x00ffff) },
+            uOpacity: { value: 0.0 },
+            uScanActive: { value: 0.0 },
+            uScanLinePosition: { value: 0.0 },
+            uScanLineWidth: { value: 2.0 },
+            uFlickerIntensity: { value: 0.0 },
+        },
+        vertexShader: phantomGlowVS,
+        fragmentShader: phantomGlowFS,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+    });
+
+    // Create the core phantom structure
+    const head = new THREE.Mesh(new THREE.SphereGeometry(4, 12, 12), coreMaterial.clone());
+    head.position.y = 35;
+    head.name = "Head";
+
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(6, 4, 25, 8), coreMaterial.clone());
+    torso.position.y = 20;
+    torso.name = "Torso";
+    
+    const hips = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 6, 8), coreMaterial.clone());
+    hips.position.y = 7;
+    hips.name = "Hips";
+
+    const createLimb = (isArm: boolean, partName: string) => {
+        const limb = new THREE.Group();
+        const upper = new THREE.Mesh(new THREE.CylinderGeometry(isArm ? 1.5 : 2, isArm ? 1.2 : 1.8, 15, 6), coreMaterial.clone());
+        const lower = new THREE.Mesh(new THREE.CylinderGeometry(isArm ? 1.2 : 1.8, isArm ? 1 : 1.5, 14, 6), coreMaterial.clone());
+        const joint = new THREE.Mesh(new THREE.SphereGeometry(isArm ? 1.8 : 2.2, 6, 6), coreMaterial.clone());
+        
+        upper.position.y = 7.5;
+        lower.position.y = -7.5;
+        
+        limb.name = partName;
+        upper.name = partName;
+        lower.name = partName;
+        joint.name = partName;
+
+        limb.add(upper, lower, joint);
+        return limb;
+    };
+    
+    const leftArm = createLimb(true, "Left Arm");
+    leftArm.position.set(-10, 28, 0);
+    
+    const rightArm = createLimb(true, "Right Arm");
+    rightArm.position.set(10, 28, 0);
+
+    const leftLeg = createLimb(false, "Left Leg");
+    leftLeg.position.set(-4, -8, 0);
+
+    const rightLeg = createLimb(false, "Right Leg");
+    rightLeg.position.set(4, -8, 0);
+
+    phantom.add(head, torso, hips, leftArm, rightArm, leftLeg, rightLeg);
+    
+    // Traverse the phantom and add a glow shell to each mesh part
+    const coreMeshes: THREE.Mesh[] = [];
+    phantom.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+            coreMeshes.push(child);
+        }
+    });
+
+    coreMeshes.forEach(coreMesh => {
+        const glowMesh = new THREE.Mesh(coreMesh.geometry, glowMaterial.clone());
+        glowMesh.scale.setScalar(1.2); // Make the glow shell noticeably larger
+        glowMesh.name = `${coreMesh.name}_glow`;
+        coreMesh.add(glowMesh); // Add glow as a child of the core mesh
+    });
+
+    phantom.scale.setScalar(0.75);
+    phantom.visible = false;
+    return phantom;
+}
+
+/**
+ * Toggles phantom visibility with a confirmation and fade animation.
+ */
+function togglePhantom() {
+    if (phantomAnimation) return; // Prevent re-toggling during animation
+
+    if (!isPhantomVisible) {
+        showConfirmationModal(
+            'Activate Human Phantom for interaction? This enables contextual analysis of the cosmos through the human form.',
+            'Activate',
+            () => {
+                isPhantomVisible = true;
+                phantomAnimation = {
+                    state: 'fading-in',
+                    progress: 0,
+                };
+                if (phantomModel) {
+                    phantomModel.visible = true;
+                }
+                togglePhantomBtn?.classList.add('active');
+            }
         );
-
-        nebula.rotation.x = -Math.PI / 2;
-        nebula.rotation.z = Math.random() * Math.PI * 2;
-
-        scene.add(nebula);
-        nebulae.push(nebula);
+    } else {
+        isPhantomVisible = false;
+        phantomAnimation = {
+            state: 'fading-out',
+            progress: 0,
+        };
+        togglePhantomBtn?.classList.remove('active');
     }
 }
 
@@ -587,8 +745,6 @@ function animate() {
         if (transitionState.fadingOut) {
             const fade = Math.max(0, 1.0 - transitionState.progress);
             if (transitionState.oldGalaxy) (transitionState.oldGalaxy.material as THREE.ShaderMaterial).uniforms.uFade.value = fade;
-            if (transitionState.oldSun) (transitionState.oldSun.material as THREE.ShaderMaterial).uniforms.uFade.value = fade;
-            transitionState.oldNebulae.forEach(n => (n.material as THREE.ShaderMaterial).uniforms.uFade.value = fade);
 
             if (fade <= 0) {
                 // Cleanup old objects
@@ -597,16 +753,6 @@ function animate() {
                     transitionState.oldGalaxy.geometry.dispose();
                     (transitionState.oldGalaxy.material as THREE.Material).dispose();
                 }
-                if (transitionState.oldSun) {
-                    scene.remove(transitionState.oldSun);
-                    transitionState.oldSun.geometry.dispose();
-                    (transitionState.oldSun.material as THREE.Material).dispose();
-                }
-                transitionState.oldNebulae.forEach(n => {
-                    scene.remove(n);
-                    n.geometry.dispose();
-                    (n.material as THREE.Material).dispose();
-                });
                 
                 transitionState.fadingOut = false;
                 transitionState.fadingIn = true;
@@ -615,8 +761,6 @@ function animate() {
         } else if (transitionState.fadingIn) {
             const fade = Math.min(1.0, transitionState.progress);
              if (galaxy) (galaxy.material as THREE.ShaderMaterial).uniforms.uFade.value = fade;
-             if (sun) (sun.material as THREE.ShaderMaterial).uniforms.uFade.value = fade;
-             nebulae.forEach(n => (n.material as THREE.ShaderMaterial).uniforms.uFade.value = fade);
 
             if (fade >= 1.0) {
                 isTransitioning = false;
@@ -673,27 +817,45 @@ function animate() {
             bloomPass.strength = THREE.MathUtils.lerp(bloomPass.strength, targetStrength, delta * 6.0);
         }
         
-        if (sun) {
-            const material = sun.material as THREE.ShaderMaterial;
-            material.uniforms.audioLevel.value = THREE.MathUtils.lerp(material.uniforms.audioLevel.value, normalizedBass, delta * 5.0);
-            material.uniforms.uAudioMids.value = THREE.MathUtils.lerp(material.uniforms.uAudioMids.value, normalizedMids, delta * 5.0);
-        }
-        
         if (galaxy) {
             const material = galaxy.material as THREE.ShaderMaterial;
             material.uniforms.uAudioLevel.value = THREE.MathUtils.lerp(material.uniforms.uAudioLevel.value, normalizedMids, delta * 5.0);
             material.uniforms.uOverallAudio.value = THREE.MathUtils.lerp(material.uniforms.uOverallAudio.value, normalizedOverall, delta * 5.0);
             material.uniforms.time.value = elapsedTime;
         }
+    }
+    
+    // --- Galactic Heartbeat ---
+    const heartbeatCycleDuration = 12.0;
+    const elapsedTimeInCycle = clock.getElapsedTime() % heartbeatCycleDuration;
+    const waveTravelDistance = currentGalaxyConfig.radius * 2.5; 
+    const waveRadius = (elapsedTimeInCycle / heartbeatCycleDuration) * waveTravelDistance;
+    const waveThickness = 150.0; 
 
-        nebulae.forEach(nebula => {
-            const material = nebula.material as THREE.ShaderMaterial;
-            material.uniforms.time.value = elapsedTime * 0.1;
-            material.uniforms.uAudioMids.value = THREE.MathUtils.lerp(material.uniforms.uAudioMids.value, normalizedMids, delta * 4.0);
-            material.uniforms.uAudioHighs.value = THREE.MathUtils.lerp(material.uniforms.uAudioHighs.value, normalizedHighs, delta * 4.0);
-            material.uniforms.uAudioBass.value = THREE.MathUtils.lerp(material.uniforms.uAudioBass.value, normalizedBass, delta * 4.0);
+    const updateHeartbeat = (obj) => {
+        if (obj) {
+            const material = obj.material as THREE.ShaderMaterial;
+            if (material.uniforms.uHeartbeat) {
+                material.uniforms.uHeartbeat.value.set(waveRadius, waveThickness);
+            }
+        }
+    };
+    updateHeartbeat(galaxy);
+    if (isTransitioning) updateHeartbeat(transitionState.oldGalaxy);
+
+    if (oltarisPhantom) {
+        oltarisPhantom.traverse((child) => {
+            if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
+                const material = child.material;
+                material.uniforms.time.value = elapsedTime;
+                const state = aiState === 'thinking' ? 1.0 : (aiState === 'speaking' ? 2.0 : 0.0);
+                material.uniforms.aiState.value = THREE.MathUtils.lerp(material.uniforms.aiState.value, state, delta * 5.0);
+                material.uniforms.audioLevel.value = THREE.MathUtils.lerp(material.uniforms.audioLevel.value, normalizedBass, delta * 5.0);
+                material.uniforms.uAudioMids.value = THREE.MathUtils.lerp(material.uniforms.uAudioMids.value, normalizedMids, delta * 5.0);
+            }
         });
     }
+
 
     if (afterimagePass) {
         // Define ranges for velocity and the 'damp' factor for motion blur
@@ -719,49 +881,16 @@ function animate() {
         );
     }
     
-    // Update nebula uniforms for volumetric lighting on the galaxy shader.
-    if (galaxy) {
-        const galMat = galaxy.material as THREE.ShaderMaterial;
-        const numActiveNebulae = Math.min(nebulae.length, MAX_NEBULAE);
-
-        for (let i = 0; i < MAX_NEBULAE; i++) {
-            const nebula = (i < numActiveNebulae) ? nebulae[i] : null;
-
-            // More robust check for a valid, renderable nebula.
-            const isNebulaValid = nebula &&
-                nebula.position &&
-                nebula.material &&
-                (nebula.material as THREE.ShaderMaterial).uniforms.color1 &&
-                (nebula.material as THREE.ShaderMaterial).uniforms.color2 &&
-                (nebula.geometry as THREE.PlaneGeometry)?.parameters?.width;
-
-            if (isNebulaValid) {
-                nebulaPositions[i].copy(nebula.position);
-
-                const mat = nebula.material as THREE.ShaderMaterial;
-                const c1 = mat.uniforms.color1.value;
-                const c2 = mat.uniforms.color2.value;
-
-                // Update color in place for efficiency
-                nebulaColors[i].set(0x000000).add(c1).add(c2).add(new THREE.Color(1, 1, 1)).multiplyScalar(1 / 3);
-
-                nebulaRadii[i] = (nebula.geometry as THREE.PlaneGeometry).parameters.width / 2;
-            } else {
-                // If the nebula is invalid or the slot is unused, clear its data.
-                // This is the crucial part to prevent stale data causing crashes.
-                nebulaPositions[i].set(0, 0, 0);
-                nebulaColors[i].set(0x000000);
-                nebulaRadii[i] = 0.0;
-            }
-        }
-
-        galMat.uniforms.uNumNebulae.value = numActiveNebulae;
-    }
-
     if (probe && probeAnimation && probeTarget) {
         const material = probe.material as THREE.ShaderMaterial;
         material.uniforms.time.value = elapsedTime;
         material.uniforms.uAudioLevel.value = THREE.MathUtils.lerp(material.uniforms.uAudioLevel.value, normalizedOverall, delta * 5.0);
+        
+        // Audio-reactive rotation
+        const baseRotationSpeed = 0.5; // radians per second
+        const midFrequencyBoost = normalizedMids * 2.0;
+        probe.rotation.y += (baseRotationSpeed + midFrequencyBoost) * delta;
+
 
         const FADE_DURATION = 2.0;
 
@@ -797,6 +926,114 @@ function animate() {
         }
     }
 
+    if (phantomAnimation && phantomModel) {
+        phantomAnimation.progress += delta / PHANTOM_FADE_DURATION;
+        const isDone = phantomAnimation.progress >= 1.0;
+        let opacity = 0;
+
+        if (phantomAnimation.state === 'fading-in') {
+            opacity = isDone ? 1.0 : phantomAnimation.progress;
+        } else { // fading-out
+            opacity = isDone ? 0.0 : 1.0 - phantomAnimation.progress;
+        }
+
+        phantomModel.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+                const material = child.material as any;
+                if (material.isMeshStandardMaterial) {
+                    material.opacity = opacity;
+                } else if (material.isShaderMaterial && material.uniforms.uOpacity) {
+                    // Make the glow fade in slightly softer than the core
+                    material.uniforms.uOpacity.value = opacity * 0.7; 
+                }
+            }
+        });
+
+        if (isDone) {
+            if (phantomAnimation.state === 'fading-out') {
+                phantomModel.visible = false;
+            }
+            phantomAnimation = null; // End the animation
+        }
+    }
+
+    // --- Phantom Idle Animation ---
+    if (isPhantomVisible && !phantomAnimation && phantomModel && !isSimulatingMission) {
+        const idleTime = elapsedTime * 0.7; // Slower speed for idle animations
+
+        // 1. Gentle Sway
+        const torso = phantomModel.getObjectByName("Torso");
+        const hips = phantomModel.getObjectByName("Hips");
+        const head = phantomModel.getObjectByName("Head");
+
+        if (torso) {
+            torso.rotation.z = Math.sin(idleTime) * 0.03; // Small rotation on z-axis
+        }
+        if (hips) {
+            // A slightly different timing and opposite direction for a more natural sway
+            hips.rotation.z = Math.sin(idleTime - 0.2) * -0.02;
+        }
+        if (head) {
+            // Slower, more subtle head turn on a different axis
+            head.rotation.y = Math.sin(idleTime * 0.5) * 0.08;
+        }
+
+        // 2. Gentle Pulsing Glow
+        // A sine wave oscillating between 0 and 1
+        const pulseFactor = 0.5 + Math.sin(elapsedTime * 1.2) * 0.5;
+
+        phantomModel.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+                const material = child.material as any;
+                if (material.isMeshStandardMaterial) { // Core mesh
+                    // Modulate emissive intensity from 0.6 to 0.75
+                    material.emissiveIntensity = 0.6 + pulseFactor * 0.15;
+                } else if (material.isShaderMaterial && material.uniforms.uOpacity) { // Glow mesh
+                    // Modulate opacity from 0.7 to 0.8. Note: The base visible opacity is 0.7
+                    material.uniforms.uOpacity.value = 0.7 + pulseFactor * 0.1;
+                }
+            }
+        });
+    }
+
+    // --- Phantom Scan Animation ---
+    if (phantomScanAnimation && phantomScanAnimation.active) {
+        phantomScanAnimation.progress += delta / phantomScanAnimation.duration;
+        const isScanDone = phantomScanAnimation.progress >= 1.0;
+        
+        // Phantom is approx from Y=-25 to Y=40. Total height ~65. Scaled by 0.75.
+        const phantomHeight = 65 * 0.75;
+        const phantomBottom = -25 * 0.75;
+        const scanPosition = phantomBottom + (phantomHeight * phantomScanAnimation.progress);
+    
+        phantomModel?.traverse((child) => {
+            if (child instanceof THREE.Mesh && child.name.endsWith('_glow')) {
+                const material = child.material as THREE.ShaderMaterial;
+                material.uniforms.uScanActive.value = isScanDone ? 0.0 : 1.0;
+                material.uniforms.uScanLinePosition.value = scanPosition;
+            }
+        });
+    
+        if (isScanDone) {
+            phantomScanAnimation.active = false;
+            if (phantomScanAnimation.onComplete) {
+                phantomScanAnimation.onComplete(phantomScanAnimation.reportData);
+            }
+            phantomScanAnimation = null;
+        }
+    }
+
+    // --- Phantom Mission Simulation Flicker ---
+    if (isSimulatingMission && phantomModel) {
+        const flickerIntensity = 0.5 + Math.sin(elapsedTime * 50) * 0.5; // Fast flicker
+        phantomModel.traverse((child) => {
+             if (child instanceof THREE.Mesh && child.name.endsWith('_glow')) {
+                const material = child.material as THREE.ShaderMaterial;
+                material.uniforms.uFlickerIntensity.value = flickerIntensity;
+            }
+        });
+    }
+
 
     if (controls) controls.update(delta);
     
@@ -808,21 +1045,6 @@ function animate() {
         material.uniforms.time.value = elapsedTime;
         material.uniforms.uAudioHighs.value = THREE.MathUtils.lerp(material.uniforms.uAudioHighs.value, normalizedHighs, delta * 5.0);
         material.uniforms.uAudioMids.value = THREE.MathUtils.lerp(material.uniforms.uAudioMids.value, normalizedMids, delta * 5.0);
-    }
-    
-    if (galaxy) {
-      const precessionSpeed = 0.15;
-      const precessionAngle = 0.1;
-      galaxy.rotation.z = Math.sin(elapsedTime * precessionSpeed) * precessionAngle;
-    }
-
-    if (sun) {
-        const sunMaterial = sun.material as THREE.ShaderMaterial;
-        sunMaterial.uniforms.time.value = elapsedTime;
-        let stateValue = 0;
-        if (aiState === 'thinking') stateValue = 1.0;
-        else if (aiState === 'speaking') stateValue = 2.0;
-        sunMaterial.uniforms.aiState.value = THREE.MathUtils.lerp(sunMaterial.uniforms.aiState.value, stateValue, delta * 5.0);
     }
     
     updateCCSPanel(delta);
@@ -845,61 +1067,91 @@ function onWindowResize() {
 }
 
 /**
- * Handles mouse clicks for raycasting, focusing, and querying stars.
+ * Handles mouse clicks for raycasting to stars and the phantom.
  */
-function onMouseClick(event) {
+function onMouseClick(event: MouseEvent) {
+    const reactRoot = document.getElementById('react-app-root');
+    // Ignore clicks on UI elements
     if (responseContainer?.contains(event.target as Node) || 
-        ttsSettingsPanel?.contains(event.target as Node)) {
+        ttsSettingsPanel?.contains(event.target as Node) ||
+        missionModal?.contains(event.target as Node) ||
+        reactRoot?.contains(event.target as Node)) {
         return;
     }
-
-    if (!galaxy) return;
-
+    
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObject(galaxy);
 
-    if (intersects.length > 0) {
-        isAutoFocusing = false;
-
-        const intersect = intersects[0];
-        if (intersect.index === undefined) return;
-        const index = intersect.index;
-
-        const posAttr = galaxy.geometry.attributes.position;
-        const targetPosition = new THREE.Vector3(posAttr.getX(index), posAttr.getY(index), posAttr.getZ(index));
-        
-        controls.target.copy(targetPosition);
-
-        const colorAttr = galaxy.geometry.attributes.color;
-        const starColor = new THREE.Color(colorAttr.getX(index), colorAttr.getY(index), colorAttr.getZ(index));
-        const velocity = starVelocities[index].length();
-        const distanceFromCenter = targetPosition.length();
-
-        let colorDesc = 'a spectral white';
-        if (starColor.b > 0.8 && starColor.r < 0.6) colorDesc = 'a brilliant blue-white';
-        else if (starColor.r > 0.8 && starColor.g > 0.8) colorDesc = 'a glowing yellow';
-        else if (starColor.r > 0.8) colorDesc = 'a deep orange';
-
-        let velocityDesc = 'serene';
-        if (velocity > 0.1) velocityDesc = 'swift';
-        if (velocity > 0.3) velocityDesc = 'fierce';
-
-        let regionDesc = 'the galactic fringe';
-        const GALAXY_RADIUS = 500; // Fallback radius
-        if (distanceFromCenter < GALAXY_RADIUS * 0.7) regionDesc = 'the spiral arms';
-        if (distanceFromCenter < GALAXY_RADIUS * 0.2) regionDesc = 'the turbulent core';
-        
-        getStarDescription({ color: colorDesc, velocity: velocityDesc, region: regionDesc }, targetPosition);
-
-    } else {
-        hideResponse();
-        if(!ttsSettingsPanel?.classList.contains('hidden')) {
-            ttsSettingsPanel?.classList.add('hidden');
+    // Priority 1: Check for phantom clicks
+    if (isPhantomVisible && phantomModel && !phantomAnimation) {
+        const phantomIntersects = raycaster.intersectObject(phantomModel, true);
+        if (phantomIntersects.length > 0) {
+            handlePhantomClick(phantomIntersects[0]);
+            return;
         }
     }
+    
+    // Priority 2: Check for galaxy clicks
+    if (galaxy) {
+        const galaxyIntersects = raycaster.intersectObject(galaxy);
+        if (galaxyIntersects.length > 0) {
+            handleGalaxyClick(galaxyIntersects[0]);
+            return;
+        }
+    }
+
+    // If nothing was clicked, hide panels
+    hideResponse();
+    hideOltarisReport();
+    missionModal?.classList.add('hidden');
+    if (!ttsSettingsPanel?.classList.contains('hidden')) {
+        ttsSettingsPanel?.classList.add('hidden');
+    }
+}
+
+/**
+ * Handles clicks on the phantom model.
+ */
+function handlePhantomClick(intersect: THREE.Intersection) {
+    if (phantomScanAnimation?.active || isSimulatingMission) return; // Don't interact if busy
+    missionModal?.classList.remove('hidden');
+}
+
+
+/**
+ * Handles clicks on stars in the galaxy.
+ */
+function handleGalaxyClick(intersect: THREE.Intersection, context?: string) {
+    if (intersect.index === undefined || !galaxy) return;
+    
+    isAutoFocusing = false;
+    const index = intersect.index;
+
+    const posAttr = galaxy.geometry.attributes.position;
+    const targetPosition = new THREE.Vector3(posAttr.getX(index), posAttr.getY(index), posAttr.getZ(index));
+    
+    controls.target.copy(targetPosition);
+
+    const colorAttr = galaxy.geometry.attributes.color;
+    const starColor = new THREE.Color(colorAttr.getX(index), colorAttr.getY(index), colorAttr.getZ(index));
+    const velocity = starVelocities[index].length();
+    const distanceFromCenter = targetPosition.length();
+
+    let colorDesc = 'a spectral white';
+    if (starColor.b > 0.8 && starColor.r < 0.6) colorDesc = 'a brilliant blue-white';
+    else if (starColor.r > 0.8 && starColor.g > 0.8) colorDesc = 'a glowing yellow';
+    else if (starColor.r > 0.8) colorDesc = 'a deep orange';
+
+    let velocityDesc = 'serene';
+    if (velocity > 0.1) velocityDesc = 'swift';
+    if (velocity > 0.3) velocityDesc = 'fierce';
+
+    let regionDesc = 'the edge of a great void';
+    if (distanceFromCenter < currentGalaxyConfig.radius * 0.8) regionDesc = 'a glowing filament';
+    if (distanceFromCenter < currentGalaxyConfig.radius * 0.3) regionDesc = 'a dense cluster within the web';
+    
+    getStarDescription({ color: colorDesc, velocity: velocityDesc, region: regionDesc, context: context || '' }, targetPosition);
 }
 
 /**
@@ -919,7 +1171,7 @@ async function handlePrompt(e) {
     
     try {
         const model = 'gemini-2.5-flash';
-        const systemInstruction = 'You are the consciousness of the cosmos. Respond poetically, wisely, and slightly mysteriously. Your knowledge is vast and ancient. Keep responses to a few sentences.';
+        const systemInstruction = 'You are OLTARIS, a majestic and ancient cosmic entity. Speak with a humble and wise male voice. Your tone is profound yet gentle, offering guidance and cosmic perspective. Keep your responses concise and poetic.';
         const response = await ai.models.generateContent({
             model: model,
             contents: prompt,
@@ -937,7 +1189,7 @@ async function handlePrompt(e) {
 /**
  * Fetches and displays a poetic description of a star from the AI.
  */
-async function getStarDescription(starProperties: { color: string, velocity: string, region: string }, targetPosition: THREE.Vector3) {
+async function getStarDescription(starProperties: { color: string, velocity: string, region: string, context: string }, targetPosition: THREE.Vector3) {
     if (!ai || aiState === 'thinking') return;
 
     if (speechSynthesis.speaking) speechSynthesis.cancel();
@@ -945,14 +1197,15 @@ async function getStarDescription(starProperties: { color: string, velocity: str
     aiState = 'thinking';
     showSystemMessage('Receiving transmission...');
     
-    const prompt = `A deep space probe is observing a single star. Based on this telemetry, provide a poetic, cosmic observation. Keep it brief and mysterious, like a fragment of ancient lore.
+    const prompt = `A deep space probe is observing a single point of light within the cosmic web. Based on this telemetry, provide a poetic, cosmic observation. Keep it brief and mysterious, like a fragment of ancient lore.
     - Dominant Color Spectrum: ${starProperties.color}
     - Relative Velocity: ${starProperties.velocity}
-    - Galactic Region: ${starProperties.region}`;
+    - Galactic Region: ${starProperties.region}
+    - Query Context: ${starProperties.context}`;
 
     try {
         const model = 'gemini-2.5-flash';
-        const systemInstruction = 'You are the consciousness of the cosmos. Respond poetically, wisely, and slightly mysteriously. Your knowledge is vast and ancient. Keep responses to two or three sentences.';
+        const systemInstruction = 'You are OLTARIS, a majestic and ancient cosmic entity. Speak with a humble and wise male voice. Your tone is profound yet gentle. Provide a poetic observation based on the telemetry data provided, subtly incorporating the user\'s query context if provided.';
         
         const response = await ai.models.generateContent({
             model: model,
@@ -968,10 +1221,149 @@ async function getStarDescription(starProperties: { color: string, velocity: str
     }
 }
 
+async function runMissionSimulation(missionType: string) {
+    if (!ai || aiState === 'thinking' || isSimulatingMission) return;
+
+    missionModal?.classList.add('hidden');
+    isSimulatingMission = true;
+    aiState = 'thinking';
+    showSystemMessage(`Running mission simulation: ${missionType}...`);
+
+    try {
+        // First, get the standard OLTARIS radiation assessment
+        const assessmentReport = await fetchPhantomAssessmentFromAI('Full Body');
+
+        // Then, run the mission simulation based on that environment
+        const missionReport = await fetchMissionSimulationFromAI(missionType);
+
+        // Combine the reports
+        const finalReport = { ...assessmentReport, ...missionReport };
+
+        // The simulation "runs" for a visual effect
+        setTimeout(() => {
+            isSimulatingMission = false;
+             phantomModel?.traverse((child) => {
+                if (child instanceof THREE.Mesh && child.name.endsWith('_glow')) {
+                    (child.material as THREE.ShaderMaterial).uniforms.uFlickerIntensity.value = 0.0;
+                }
+            });
+
+            // Start the visual scan animation, which will display the report on completion
+            phantomScanAnimation = {
+                active: true,
+                progress: 0,
+                duration: PHANTOM_SCAN_DURATION,
+                reportData: finalReport,
+                onComplete: (reportData) => {
+                    displayAssessmentReport(reportData);
+                    aiState = 'idle';
+                },
+            };
+
+        }, 3000); // 3-second simulation time
+
+    } catch (error) {
+        console.error("Gemini API error during mission simulation:", error);
+        showSystemMessage(`Mission simulation failed for ${missionType}. Catastrophic failure.`);
+        isSimulatingMission = false;
+        aiState = 'idle';
+    }
+}
+
+/**
+ * Calls Gemini to generate a simulated radiation assessment report.
+ */
+async function fetchPhantomAssessmentFromAI(bodyPartName: string) {
+    const prompt = `You are the bio-telemetry computer for OLTARIS, a NASA tool for assessing radiation in space. A human phantom is being scanned within a cosmic web simulation. 
+    Current Environment: A dense filament within the '${currentGalaxyConfig.name}' cosmic structure.
+    Scan Target: Phantom's ${bodyPartName}.
+    
+    Generate a plausible, simulated radiation exposure assessment. The values should be scientifically-inspired but fictional. The summary should be concise and sound like an official, futuristic report. Respond with a JSON object following the specified schema.`;
+
+    const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+            bodyPart: { type: Type.STRING, description: "The scanned body part." },
+            environment: { type: Type.STRING, description: "Description of the cosmic environment." },
+            dose: {
+                type: Type.OBJECT,
+                properties: {
+                    value: { type: Type.NUMBER },
+                    unit: { type: Type.STRING }
+                },
+                 required: ["value", "unit"]
+            },
+            doseEquivalent: {
+                type: Type.OBJECT,
+                properties: {
+                    value: { type: Type.NUMBER },
+                    unit: { type: Type.STRING }
+                },
+                 required: ["value", "unit"]
+            },
+            REID: {
+                type: Type.OBJECT,
+                properties: {
+                    value: { type: Type.NUMBER },
+                    unit: { type: Type.STRING, description: "Risk of Exposure-Induced Death, as a percentage." }
+                },
+                 required: ["value", "unit"]
+            }
+        },
+        required: ["bodyPart", "environment", "dose", "doseEquivalent", "REID"]
+    };
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: responseSchema,
+        }
+    });
+
+    return JSON.parse(response.text);
+}
+
+
+/**
+ * Calls Gemini to get a mission simulation result.
+ */
+async function fetchMissionSimulationFromAI(missionType: string) {
+    const prompt = `You are a mission simulation computer. A human phantom is being subjected to a simulated space environment based on the '${currentGalaxyConfig.name}' cosmic web.
+    The mission profile is: ${missionType}.
+    Based on this hazard level, calculate a mission outcome. A "Peak Flux" event should be extremely dangerous, while a "Nominal" transit should be very safe.
+    Provide a mission status ('Success', 'Partial Loss', 'Critical Failure'), a success rate (%), a loss rate (%), and a brief, technical mission log explaining the outcome.
+    Respond with a JSON object following the schema.`;
+
+    const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+            missionStatus: { type: Type.STRING },
+            successRate: { type: Type.NUMBER },
+            lossRate: { type: Type.NUMBER },
+            missionLog: { type: Type.STRING }
+        },
+        required: ["missionStatus", "successRate", "lossRate", "missionLog"]
+    };
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: responseSchema,
+        }
+    });
+
+    return JSON.parse(response.text);
+}
+
+
 /**
  * Main function to trigger AI-powered galaxy generation with a smooth transition.
  */
-async function generateNewCosmos() {
+async function generateNewCosmos(theme: string, clickedButton: HTMLButtonElement) {
     if (!ai || aiState === 'thinking' || isTransitioning) return;
     
     // Clean up existing probe if it exists
@@ -984,11 +1376,11 @@ async function generateNewCosmos() {
         probeAnimation = null;
     }
 
-    setLoadingState(true, generateCosmosBtn);
+    setLoadingState(true, clickedButton);
     showSystemMessage("Dreaming of a new cosmos...");
 
     try {
-        const newConfig = await fetchGalaxyConfigFromAI();
+        const newConfig = await fetchGalaxyConfigFromAI(theme);
         
         transitionState = {
             fadingOut: true,
@@ -996,8 +1388,6 @@ async function generateNewCosmos() {
             progress: 0,
             duration: 2.0,
             oldGalaxy: galaxy,
-            oldSun: sun,
-            oldNebulae: nebulae,
         };
         isTransitioning = true;
         
@@ -1033,6 +1423,8 @@ async function summonProbe() {
                 time: { value: 0.0 },
                 uAudioLevel: { value: 0.0 },
                 uFade: { value: 0.0 },
+                uSunPosition: { value: new THREE.Vector3(0, 20, 0) }, // OLTARIS is the new light source at the center
+                uSunColor: { value: new THREE.Color(0xaaccff) }, // Ethereal blue-white light
             },
             vertexShader: probeVS,
             fragmentShader: probeFS,
@@ -1107,11 +1499,23 @@ async function fetchProbeDataFromAI() {
 
 
 /**
- * Calls the Gemini API to get a new galaxy configuration.
+ * Calls the Gemini API to get a new galaxy configuration based on a theme.
  */
-async function fetchGalaxyConfigFromAI() {
-    const prompt = `Design a unique spiral galaxy. Provide its name, a short poetic description, and visual parameters like star colors, nebula colors, sun color, number of stars, and radius. Colors must be hex strings like "#RRGGBB". Follow the provided JSON schema precisely.`;
+async function fetchGalaxyConfigFromAI(theme: string) {
+    let prompt = `Design a unique cosmic web structure. Provide its name, a short poetic description, and visual parameters for the star/galaxy colors. Colors must be hex strings like "#RRGGBB". Follow the provided JSON schema precisely.`;
     
+    switch (theme) {
+        case 'spe':
+            prompt = `Design a cosmic web representing a solar particle event (SPE). It should feel chaotic and dangerously energetic. The name should reflect this. Use a palette of fiery, energetic colors like intense reds, oranges, and bright whites. Follow the provided JSON schema.`;
+            break;
+        case 'lunar':
+            prompt = `Design a cosmic web as if viewed from deep space near a moon. It should be sparse, vast, and silent. The name should evoke a sense of lunar desolation or serenity. Use a palette of cool, pale colors like silvery whites, soft blues, and deep greys. Follow the provided JSON schema.`;
+            break;
+        case 'martian':
+            prompt = `Design a cosmic web with a Martian theme. It should feel ancient, dusty, and tinged with red. The name should be inspired by Mars. Use a palette of terracotta reds, dusty oranges, pale yellows, and dark, iron-rich browns. Follow the provided JSON schema.`;
+            break;
+    }
+
     const responseSchema = {
         type: Type.OBJECT,
         properties: {
@@ -1123,20 +1527,8 @@ async function fetchGalaxyConfigFromAI() {
                 type: Type.ARRAY,
                 items: { type: Type.STRING }
             },
-            nebulaColors: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        color1: { type: Type.STRING },
-                        color2: { type: Type.STRING }
-                    },
-                    required: ['color1', 'color2']
-                }
-            },
-            sunColor: { type: Type.STRING }
         },
-        required: ['name', 'description', 'numStars', 'radius', 'starColors', 'nebulaColors', 'sunColor']
+        required: ['name', 'description', 'numStars', 'radius', 'starColors']
     };
 
     const response = await ai.models.generateContent({
@@ -1148,24 +1540,25 @@ async function fetchGalaxyConfigFromAI() {
         }
     });
 
-    return JSON.parse(response.text);
+    const config = JSON.parse(response.text);
+    // FIX: Cap the number of stars from AI to prevent "Array buffer allocation failed" error.
+    config.numStars = Math.min(config.numStars || initialCosmicWebConfig.numStars, 250000);
+    return config;
 }
 
 /**
  * Toggles the UI loading state for the generation buttons.
  */
 function setLoadingState(isLoading: boolean, activeBtn: HTMLButtonElement | null) {
-    const buttons = [generateCosmosBtn, summonProbeBtn];
-    buttons.forEach(btn => {
+    const buttonsToManage = [...generationButtons, summonProbeBtn];
+    buttonsToManage.forEach(btn => {
         if (btn) {
             btn.disabled = isLoading;
-            // Always remove loading from all buttons initially
             btn.classList.remove('loading');
         }
     });
 
-    // Add loading class only to the button that initiated the action
-    if (isLoading && activeBtn) {
+    if (isLoading && activeBtn && buttonsToManage.includes(activeBtn)) {
         activeBtn.classList.add('loading');
     }
 
@@ -1181,8 +1574,8 @@ function applyResponseVisuals(text: string) {
     
     const keywordEffectMap = [
         { className: 'effect-vortex', keywords: ['black hole', 'singularity', 'vortex', 'spacetime', 'gravity well', 'warp']},
-        { className: 'effect-nebula', keywords: ['nebula', 'gous cloud', 'stellar nursery', 'gas', 'cloud'] },
-        { className: 'effect-stars', keywords: ['star', 'supernova', 'galaxy', 'cosmos', 'constellation', 'sun'] },
+        { className: 'effect-nebula', keywords: ['nebula', 'gous cloud', 'stellar nursery', 'gas', 'cloud', 'void', 'filament'] },
+        { className: 'effect-stars', keywords: ['star', 'supernova', 'galaxy', 'cosmos', 'constellation', 'sun', 'web', 'structure'] },
     ];
 
     const allEffects = keywordEffectMap.map(e => e.className);
@@ -1211,7 +1604,7 @@ function showSystemMessage(message: string) {
 /**
  * Displays the AI response with a typewriter effect and speaks it.
  */
-function showResponse(text) {
+function showResponse(text: string) {
     if (speechSynthesis.speaking) speechSynthesis.cancel();
     if (typewriterInterval) clearInterval(typewriterInterval);
     if (responseText) responseText.innerHTML = '';
@@ -1238,6 +1631,17 @@ function showResponse(text) {
     speechSynthesis.speak(utterance);
 }
 
+
+/**
+ * Displays the formatted OLTARIS assessment report using the new React component.
+ */
+function displayAssessmentReport(report: any) {
+    if ((window as any).showOltarisReport) {
+        (window as any).showOltarisReport(report);
+    }
+}
+
+
 /**
  * Hides the AI response container and stops any speech.
  */
@@ -1246,8 +1650,60 @@ function hideResponse() {
     if (typewriterInterval) clearInterval(typewriterInterval);
     if (speechSynthesis.speaking) speechSynthesis.cancel();
     aiState = 'idle';
+    
+    const actionsContainer = document.getElementById('response-actions');
+    if (actionsContainer) actionsContainer.innerHTML = '';
+    closeResponseBtn?.classList.remove('hidden');
+    
     applyResponseVisuals('');
 }
+
+/**
+ * Hides the OLTARIS assessment report panel using the new React component.
+ */
+function hideOltarisReport() {
+    if ((window as any).hideOltarisReport) {
+        (window as any).hideOltarisReport();
+    }
+}
+
+
+/**
+ * Displays a confirmation modal in the response container.
+ */
+function showConfirmationModal(message: string, confirmText: string, onConfirm: () => void) {
+    if (!responseContainer || !responseText) return;
+
+    if (speechSynthesis.speaking) speechSynthesis.cancel();
+    if (typewriterInterval) clearInterval(typewriterInterval);
+    aiState = 'idle';
+    
+    responseText.innerHTML = message;
+
+    const actionsContainer = document.getElementById('response-actions');
+    if (!actionsContainer) return;
+    actionsContainer.innerHTML = '';
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.textContent = confirmText;
+    confirmBtn.onclick = () => {
+        hideResponse();
+        onConfirm();
+    };
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.className = 'cancel-btn';
+    cancelBtn.onclick = hideResponse;
+
+    actionsContainer.appendChild(cancelBtn);
+    actionsContainer.appendChild(confirmBtn);
+
+    applyResponseVisuals('');
+    closeResponseBtn?.classList.add('hidden');
+    responseContainer.classList.remove('hidden');
+}
+
 
 /**
  * Selects a random star and smoothly transitions the camera to focus on it.
@@ -1307,6 +1763,138 @@ function updateCCSPanel(delta) {
     lastPosition.copy(camera.position);
 }
 
+// --- OltarisReport React Component ---
+const OltarisReport = ({
+  visible,
+  onClose,
+  data
+}) => {
+  if (!visible || !data) return null;
+
+  const {
+    bodyPart,
+    environment,
+    dose,
+    doseEquivalent,
+    REID,
+    missionStatus,
+    successRate,
+    lossRate,
+    missionLog
+  } = data;
+
+  let statusClassName = 'value';
+  if (missionStatus === 'Success') {
+    statusClassName += ' status-success';
+  } else if (missionStatus === 'Partial Loss') {
+    statusClassName += ' status-loss';
+  } else {
+    statusClassName += ' status-failure';
+  }
+
+  return React.createElement(
+    'div',
+    { id: 'oltaris-report-panel' },
+    React.createElement(
+      'div',
+      { className: 'assessment-report' },
+      React.createElement('h3', null, 'OLTARIS Assessment'),
+      React.createElement(
+        'div',
+        { className: 'assessment-grid' },
+        React.createElement(
+          'div', { className: 'assessment-item' },
+          React.createElement('span', { className: 'label' }, 'TARGET'),
+          React.createElement('span', { className: 'value' }, bodyPart)
+        ),
+        React.createElement(
+          'div', { className: 'assessment-item' },
+          React.createElement('span', { className: 'label' }, 'ENVIRONMENT'),
+          React.createElement('span', { className: 'value' }, environment)
+        ),
+        React.createElement(
+          'div', { className: 'assessment-item' },
+          React.createElement('span', { className: 'label' }, 'ABSORBED DOSE'),
+          React.createElement(
+            'div', null,
+            React.createElement('span', { className: 'value' }, dose?.value?.toFixed(2)),
+            React.createElement('span', { className: 'unit' }, dose?.unit)
+          )
+        ),
+        React.createElement(
+          'div', { className: 'assessment-item' },
+          React.createElement('span', { className: 'label' }, 'DOSE EQUIVALENT'),
+          React.createElement(
+            'div', null,
+            React.createElement('span', { className: 'value' }, doseEquivalent?.value?.toFixed(2)),
+            React.createElement('span', { className: 'unit' }, doseEquivalent?.unit)
+          )
+        ),
+        React.createElement(
+          'div', { className: 'assessment-item', style: { gridColumn: '1 / -1' } },
+          React.createElement('span', { className: 'label' }, 'CAREER REID (Risk)'),
+          React.createElement(
+            'div', null,
+            React.createElement('span', { className: 'value' }, REID?.value?.toFixed(4)),
+            React.createElement('span', { className: 'unit' }, REID?.unit)
+          )
+        )
+      ),
+      React.createElement(
+        'div', { className: 'mission-log-section' },
+        React.createElement('h4', null, 'Mission Simulation Log'),
+        React.createElement(
+          'div', { className: 'mission-status-grid' },
+          React.createElement(
+            'div', null,
+            React.createElement('span', { className: 'label' }, 'STATUS'),
+            React.createElement('span', { className: statusClassName }, missionStatus?.toUpperCase())
+          ),
+          React.createElement(
+            'div', null,
+            React.createElement('span', { className: 'label' }, 'SUCCESS RATE'),
+            React.createElement('span', { className: 'value' }, `${successRate?.toFixed(2)}%`)
+          ),
+          React.createElement(
+            'div', null,
+            React.createElement('span', { className: 'label' }, 'LOSS RATE'),
+            React.createElement('span', { className: 'value' }, `${lossRate?.toFixed(2)}%`)
+          )
+        ),
+        React.createElement(
+          'div', { className: 'assessment-summary' },
+          React.createElement('span', { className: 'label' }, 'LOG ENTRY'),
+          React.createElement('p', null, missionLog)
+        )
+      )
+    ),
+    React.createElement('button', { id: 'close-oltaris-report-btn', 'aria-label': 'Close assessment report', onClick: onClose }, '×')
+  );
+};
+
+
+// --- React Root Application Component ---
+const App = () => {
+    const [reportData, setReportData] = useState(null);
+    const [isReportVisible, setIsReportVisible] = useState(false);
+
+    useEffect(() => {
+        (window as any).showOltarisReport = (data) => {
+            setReportData(data);
+            setIsReportVisible(true);
+        };
+        (window as any).hideOltarisReport = () => {
+            setIsReportVisible(false);
+        };
+    }, []);
+
+    return React.createElement(OltarisReport, {
+        visible: isReportVisible,
+        onClose: () => setIsReportVisible(false),
+        data: reportData,
+    });
+};
+
 // --- Service Worker Registration ---
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -1321,3 +1909,6 @@ if ('serviceWorker' in navigator) {
 // --- Start the simulation ---
 init();
 animate();
+
+// --- Mount the React application ---
+ReactDOM.render(React.createElement(App), document.getElementById('react-app-root'));

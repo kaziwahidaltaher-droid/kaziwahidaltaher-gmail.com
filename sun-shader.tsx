@@ -1,4 +1,5 @@
 
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -69,7 +70,7 @@ float fbm(vec2 p) {
     float value = 0.0;
     float amplitude = 0.5;
     float frequency = 2.0;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 3; i++) {
         value += amplitude * snoise(p * frequency);
         amplitude *= 0.5;
         frequency *= 2.0;
@@ -99,6 +100,16 @@ void main() {
         staticNoise = pow(staticNoise, 2.0) * 0.5;
         vec3 thinkingColor = vec3(0.7, 0.8, 1.0) * staticNoise;
         finalColor += thinkingColor * thinkingFactor;
+    }
+
+    // --- Galactic Heartbeat effect ---
+    if (aiState < 1.0) { // Only pulse when idle
+      float heartbeatCycle = fract(time * 0.08333); // 1.0 / 12.0 seconds
+      float pulse = 1.0 - smoothstep(0.0, 0.15, heartbeatCycle); // A sharp pulse at the start of the cycle
+      pulse *= smoothstep(0.3, 0.2, heartbeatCycle); // Fade it out quickly
+      
+      vec3 pulseColor = vec3(1.0, 0.9, 0.7);
+      finalColor += pulseColor * pulse * 3.0;
     }
 
     // --- Audio Reactivity ---

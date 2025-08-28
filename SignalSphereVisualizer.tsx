@@ -14,6 +14,7 @@ import { fs as backdropFS, vs as backdropVS } from './backdrop-shader';
 export class SignalSphereVisualizer {
     public signalSphere: THREE.Mesh;
     public backdrop: THREE.Mesh;
+    private currentYRotationSpeed = 0.001;
 
     constructor(scene: THREE.Scene) {
         // Create backdrop
@@ -150,23 +151,32 @@ export class SignalSphereVisualizer {
             );
         }
 
-        // --- NEW: Dynamic, Audio-Reactive Animation ---
-        
-        // Scaling: The sphere "breathes" with the bass.
+        // --- REFINED Dynamic, Audio-Reactive Animation ---
+                
+        // Scaling: More responsive, "punchy" scaling based on bass peaks.
         const baseScale = 1.0;
-        const scalePulseAmount = 0.15;
-        const targetScale = baseScale + (normalizedBass * scalePulseAmount);
+        const scalePulseAmount = 0.2; // A bit more visual impact
+        // Using a power curve to make it react more to strong beats
+        const targetScale = baseScale + (Math.pow(normalizedBass, 2.0) * scalePulseAmount);
         const scaleVector = new THREE.Vector3(targetScale, targetScale, targetScale);
-        this.signalSphere.scale.lerp(scaleVector, 0.1); // Use lerp for smooth scaling
+        // Faster interpolation for a more responsive feel
+        this.signalSphere.scale.lerp(scaleVector, 0.2); 
 
-        // Rotation: Mids drive the main rotation, highs add a subtle "wobble".
+        // Rotation: More complex, organic, and responsive wobble.
         const baseRotationSpeed = 0.001;
-        const midRotationBoost = normalizedMids * 0.008;
-        const highWobbleAmount = normalizedHighs * 0.006;
-        
-        this.signalSphere.rotation.y += baseRotationSpeed + midRotationBoost;
-        // Lerp the wobble rotation for a smoother, more organic feel.
-        this.signalSphere.rotation.x = THREE.MathUtils.lerp(this.signalSphere.rotation.x, highWobbleAmount, 0.1);
+        // Make the main rotation speed also non-linear for better response to mid-range swells
+        const midRotationBoost = Math.pow(normalizedMids, 2.0) * 0.009;
+        const highWobbleAmount = Math.pow(normalizedHighs, 3.0) * 0.007; // More sensitive to sharp highs
+        const midWobbleAmount = (normalizedMids * -0.005 + Math.pow(normalizedMids, 3) * 0.003) * 1.2; // Amplify existing effect
+
+        // The main rotation is now more responsive to swells in the music.
+        const targetYRotationSpeed = baseRotationSpeed + midRotationBoost;
+        this.currentYRotationSpeed = THREE.MathUtils.lerp(this.currentYRotationSpeed, targetYRotationSpeed, 0.15);
+        this.signalSphere.rotation.y += this.currentYRotationSpeed;
+
+        // The wobbles are now more pronounced and react to peaks more sharply.
+        this.signalSphere.rotation.x = THREE.MathUtils.lerp(this.signalSphere.rotation.x, highWobbleAmount, 0.12);
+        this.signalSphere.rotation.z = THREE.MathUtils.lerp(this.signalSphere.rotation.z, midWobbleAmount, 0.12);
 
 
         // Update backdrop shader for twinkling stars and a slow pulsating glow

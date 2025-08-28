@@ -125,6 +125,38 @@ canvas#bg {
     z-index: 1;
 }
 
+#response-actions {
+    margin-top: 1.5rem;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+#response-actions button {
+    background: rgba(100, 150, 255, 0.2);
+    border: 1px solid rgba(100, 150, 255, 0.8);
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    font-family: sans-serif;
+    font-size: 0.9rem;
+}
+
+#response-actions button:hover {
+    background: rgba(100, 150, 255, 0.4);
+}
+
+#response-actions button.cancel-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+#response-actions button.cancel-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
 #close-response-btn {
     position: absolute;
     top: 10px;
@@ -136,6 +168,10 @@ canvas#bg {
     cursor: pointer;
     transition: color 0.3s;
     line-height: 1;
+}
+
+#close-response-btn.hidden {
+    display: none;
 }
 
 #close-response-btn:hover {
@@ -434,6 +470,12 @@ canvas#bg {
     border-color: rgba(100, 150, 255, 0.8);
 }
 
+.generation-btn.active {
+    background: rgba(100, 150, 255, 0.3);
+    border-color: rgba(100, 150, 255, 0.9);
+}
+
+
 .generation-btn:disabled {
     cursor: not-allowed;
     background: rgba(50, 50, 50, 0.5);
@@ -448,13 +490,284 @@ canvas#bg {
     animation: spin 2s linear infinite;
 }
 
+#generation-container {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    padding: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+#generation-container .generation-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    text-transform: none;
+    justify-content: flex-start;
+}
+
+#generation-container .generation-btn:hover {
+     background: rgba(100, 150, 255, 0.2);
+     border-color: rgba(100, 150, 255, 0.8);
+}
+
+
 @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }
 
+/* --- Mission Simulation Modal --- */
+#mission-modal {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 500px;
+    padding: 2rem;
+    background: rgba(10, 10, 25, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    color: #e0e0e0;
+    z-index: 22;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+#mission-modal.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -45%);
+}
+
+#mission-modal h3 {
+    text-align: center;
+    color: #00ffff;
+    margin-top: 0;
+    text-transform: uppercase;
+}
+
+#mission-modal p {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.5;
+    margin-bottom: 2rem;
+}
+
+#mission-modal .mission-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+#mission-modal .mission-btn {
+    background: rgba(0, 255, 255, 0.1);
+    border: 1px solid rgba(0, 255, 255, 0.3);
+    color: #fff;
+    padding: 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s, border-color 0.3s;
+    font-family: sans-serif;
+    font-size: 0.9rem;
+}
+
+#mission-modal .mission-btn:hover {
+    background: rgba(0, 255, 255, 0.2);
+    border-color: rgba(0, 255, 255, 0.7);
+}
+
+#close-mission-modal-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1.8rem;
+    cursor: pointer;
+    transition: color 0.3s;
+    line-height: 1;
+}
+
+#close-mission-modal-btn:hover {
+    color: white;
+}
+
+
+/* --- OLTARIS Report Panel --- */
+#oltaris-report-panel {
+    position: absolute;
+    top: 50%;
+    right: 20px;
+    transform: translate(0, -50%);
+    width: 90%;
+    max-width: 450px;
+    background: rgba(10, 20, 35, 0.7);
+    border: 1px solid rgba(0, 255, 255, 0.2);
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    color: #e0e0e0;
+    z-index: 25;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    padding: 1.5rem;
+    box-sizing: border-box;
+}
+
+#oltaris-report-panel.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(20px, -50%); /* Slide out to the right */
+}
+
+#close-oltaris-report-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1.8rem;
+    cursor: pointer;
+    transition: color 0.3s;
+    line-height: 1;
+}
+
+#close-oltaris-report-btn:hover {
+    color: white;
+}
+
+#oltaris-report-panel .assessment-report {
+    font-family: 'Courier New', Courier, monospace;
+}
+
+#oltaris-report-panel h3 {
+    text-align: center;
+    color: #00ffff;
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid rgba(0, 255, 255, 0.3);
+    padding-bottom: 0.5rem;
+}
+
+#oltaris-report-panel .assessment-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+#oltaris-report-panel .assessment-item {
+    background: rgba(0, 255, 255, 0.05);
+    padding: 0.75rem;
+    border-radius: 4px;
+    border-left: 3px solid #00ffff;
+    border-bottom: 1px solid rgba(0, 255, 255, 0.1);
+}
+
+#oltaris-report-panel .assessment-item[style*="grid-column"] {
+    border-bottom: none;
+}
+
+#oltaris-report-panel .assessment-item .label,
+#oltaris-report-panel .mission-log-section .label {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 0.35rem;
+    display: block;
+    text-transform: uppercase;
+}
+
+#oltaris-report-panel .assessment-item .value,
+#oltaris-report-panel .mission-log-section .value {
+    font-size: 1.2rem;
+    color: #ffffff;
+    font-weight: bold;
+    word-wrap: break-word;
+    text-shadow: 0 0 5px rgba(0, 255, 255, 0.5); /* Add a subtle glow */
+}
+
+#oltaris-report-panel .assessment-item .unit {
+    font-size: 0.9rem;
+    margin-left: 0.35rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+#oltaris-report-panel .mission-log-section {
+    border-top: 1px solid rgba(0, 255, 255, 0.3);
+    padding-top: 1rem;
+    margin-top: 1rem;
+}
+
+#oltaris-report-panel .mission-log-section h4 {
+    color: #00ffff;
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+}
+
+#oltaris-report-panel .mission-status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+#oltaris-report-panel .value.status-success {
+    color: #00ffff;
+    text-shadow: 0 0 8px #00ffff;
+}
+#oltaris-report-panel .value.status-loss {
+    color: #ffaa00;
+    text-shadow: 0 0 8px #ffaa00;
+}
+#oltaris-report-panel .value.status-failure {
+    color: #ff4444;
+    text-shadow: 0 0 8px #ff4444;
+}
+
+#oltaris-report-panel .assessment-summary {
+    border-top: 1px solid rgba(0, 255, 255, 0.15);
+    padding-top: 1rem;
+    line-height: 1.6;
+    font-size: 0.95rem;
+}
+
+#oltaris-report-panel .assessment-summary .label {
+    font-weight: bold;
+    color: #00ffff;
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+#oltaris-report-panel .assessment-summary p {
+    margin: 0;
+}
+
+
 @media (max-width: 900px) {
     #ccs-panel {
        display: none; /* Hide for simplicity on mobile */
+    }
+}
+
+@media (max-width: 500px) {
+    #mission-modal .mission-actions {
+        grid-template-columns: 1fr;
     }
 }

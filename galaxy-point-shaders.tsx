@@ -1,4 +1,3 @@
-
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -10,127 +9,245 @@ export const vs = `
   uniform float size;
   uniform float uAudioLevel; // Mids for color
   uniform float uOverallAudio; // Overall for size
+  uniform float uCameraFarPlane; // For LOD distance calculations
+  uniform float time;
+  uniform vec2 uHeartbeat; // x: radius, y: thickness
+
   attribute float aVelocityMagnitude; // Normalized 0-1
   attribute float aStarId;
+
   varying vec3 vColor;
   varying float vStarId;
   varying vec3 vWorldPosition;
+  varying float vDistToCam; // Pass distance to fragment shader for LOD
+  varying float vPointSize; // Pass calculated size to fragment shader for LOD
+  varying float vNoise;
+  varying float vWaveFactor;
+
+  // 3D Simplex Noise
+  vec3 mod289(vec3 x) {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+  }
+
+  vec4 mod289(vec4 x) {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+  }
+
+  vec4 permute(vec4 x) {
+      return mod289(((x*34.0)+1.0)*x);
+  }
+
+  vec4 taylorInvSqrt(vec4 r)
+  {
+    return 1.79284291400159 - 0.85373472095314 * r;
+  }
+
+  float snoise(vec3 v)
+  {
+    const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+    const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+
+    vec3 i  = floor(v + dot(v, C.yyy) );
+    vec3 x0 =   v - i + dot(i, C.xxx) ;
+
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min( g.xyz, l.zxy );
+    vec3 i2 = max( g.xyz, l.zxy );
+
+    vec3 x1 = x0 - i1 + C.xxx;
+    vec3 x2 = x0 - i2 + C.yyy; 
+    vec3 x3 = x0 - D.yyy;
+
+    i = mod289(i);
+    vec4 p = permute( permute( permute(
+              i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+            + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
+            + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+
+    float n_ = 0.142857142857; // 1.0/7.0
+    vec3  ns = n_ * D.wyz - D.xzx;
+
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_ );
+
+    vec4 x = x_ *ns.x + ns.yyyy;
+    vec4 y = y_ *ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(x) - abs(y);
+
+    vec4 b0 = vec4( x.xy, y.xy );
+    vec4 b1 = vec4( x.zw, y.zw );
+
+    vec4 s0 = floor(b0)*2.0 + 1.0;
+    vec4 s1 = floor(b1)*2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+
+    vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+    vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+
+    vec3 p0 = vec3(a0.xy,h.x);
+    vec3 p1 = vec3(a0.zw,h.y);
+    vec3 p2 = vec3(a1.xy,h.z);
+    vec3 p3 = vec3(a1.zw,h.w);
+
+    vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+    p0 *= norm.x;
+    p1 *= norm.y;
+    p2 *= norm.z;
+    p3 *= norm.w;
+
+    vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+    m = m * m;
+    return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1),
+                                  dot(p2,x2), dot(p3,x3) ) );
+  }
+
+  // Fractal Brownian Motion for more organic structures
+  float fbm(vec3 p) {
+      float value = 0.0;
+      float amplitude = 0.5;
+      float frequency = 1.0;
+      for (int i = 0; i < 4; i++) { // 4 octaves of noise
+          value += amplitude * snoise(p * frequency);
+          amplitude *= 0.5;
+          frequency *= 2.0;
+      }
+      return value;
+  }
+
 
   void main() {
     vStarId = aStarId;
     
-    // Pass world position to fragment shader for lighting calculations
-    vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+    // --- Galactic Heartbeat Wave ---
+    float distToCenter = length(position);
+    float waveRadius = uHeartbeat.x;
+    float waveThickness = uHeartbeat.y;
+    // Calculate a smooth wave profile (0 -> 1 -> 0)
+    vWaveFactor = smoothstep(waveRadius - waveThickness, waveRadius, distToCenter) - smoothstep(waveRadius, waveRadius + waveThickness, distToCenter);
     
-    // Base color is passed from geometry
-    vColor = color; 
-    
-    // Define the "hot" color for high-velocity stars
-    vec3 hotColor = vec3(0.8, 0.9, 1.0); // Bright blue-white
-    
-    // Define an "audio pulse" color
-    vec3 audioPulseColor = vec3(1.0, 0.7, 0.7); // A reddish-pink pulse
+    // Apply displacement. The original position is used for noise to keep the web structure stable.
+    vec3 displacement = normalize(position) * vWaveFactor * 60.0;
+    vec3 displacedPosition = position + displacement;
 
-    // Interpolate towards the hot color based on velocity.
-    // Higher velocity (closer to core) means more blending with hotColor.
-    vColor = mix(vColor, hotColor, aVelocityMagnitude * 0.7);
-
-    // Interpolate towards the audio pulse color based on audio level (mids)
-    vColor = mix(vColor, audioPulseColor, uAudioLevel * 0.5);
-
-    // Standard point projection
-    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    gl_Position = projectionMatrix * mvPosition;
+    vWorldPosition = (modelMatrix * vec4(displacedPosition, 1.0)).xyz;
     
-    // Modulate point size with overall audio level for a 'breathing' effect
+    // --- Cosmic Web Generation via multi-layered FBM noise for more organic structure ---
+    float noise_freq = 0.005;
+    float time_factor = time * 0.02;
+
+    // Use a multi-layered noise approach with domain warping for more organic structures
+    vec3 p1 = position * noise_freq * 0.8 + time_factor;
+    float base_noise = fbm(p1);
+
+    vec3 p2 = position * noise_freq * 2.5 + base_noise * 1.5 + time_factor * 2.0;
+    float detail_noise = fbm(p2);
+    
+    float noise = base_noise * 0.6 + detail_noise * 0.4;
+    noise = (noise + 1.0) / 2.0; // Map noise from [-1, 1] to [0, 1]
+    vNoise = noise;
+
+    // Use smoothstep to create sharp filaments from the noise field
+    float filament_threshold = 0.5;
+    float filament_thickness = 0.08; // Slightly thicker for a more substantial feel
+    float filament_factor = smoothstep(filament_threshold, filament_threshold + filament_thickness, noise);
+
+    // --- Audio-Reactive Color ---
+    // Color particles based on their density (noise value) and audio input.
+    vec3 hotColor = vec3(1.0, 0.9, 0.5); // Dense regions are hotter
+    vec3 baseColor = mix(color, hotColor, noise * noise); // Color from density
+    
+    // Enhanced audio reactivity: mid-frequencies make filaments pulse with a vibrant cyan light.
+    vec3 audioGlowColor = vec3(0.5, 1.0, 1.0); // A vibrant cyan
+    // Using a power curve to make the reaction to mid-range audio more dynamic and peaky.
+    float audioIntensity = pow(uAudioLevel, 2.0);
+    // Mix towards cyan based on intensity.
+    vec3 mixedColor = mix(baseColor, audioGlowColor, audioIntensity * 0.8);
+    // Also additively boost the brightness to make it pulse with light.
+    vColor = mixedColor + baseColor * audioIntensity * 0.5;
+
+    vec4 mvPosition = modelViewMatrix * vec4(displacedPosition, 1.0);
+    
+    // --- LOD: Distance Calculation ---
+    vDistToCam = -mvPosition.z;
+
+    // --- LOD: Size Attenuation & Culling ---
+    float distanceFade = 1.0 - smoothstep(uCameraFarPlane * 0.70, uCameraFarPlane * 0.95, vDistToCam);
+    float sizeAtDistance = (300.0 / vDistToCam) * distanceFade;
     float audioSizeMultiplier = 1.0 + uOverallAudio * 0.75;
-
-    // Size attenuation to make points in the distance smaller, and scale by size uniform
-    gl_PointSize = size * audioSizeMultiplier * (300.0 / -mvPosition.z);
+    
+    // Final point size is determined by LOD, audio, and its position in the filament structure.
+    // Points in voids (filament_factor = 0) will have their size culled to 0.
+    vPointSize = clamp(size * audioSizeMultiplier * sizeAtDistance, 0.0, 15.0) * filament_factor;
+    
+    gl_PointSize = vPointSize;
+    gl_Position = projectionMatrix * mvPosition;
   }
 `;
 
 export const fs = `
-  #define MAX_NEBULAE 5
+  precision highp float;
 
   uniform float time;
   uniform float uFade;
-  uniform vec3 uNebulaPositions[MAX_NEBULAE];
-  uniform vec3 uNebulaColorHotspots[MAX_NEBULAE];
-  uniform float uNebulaRadii[MAX_NEBULAE];
-  uniform int uNumNebulae;
+  uniform float uCameraFarPlane;
 
   varying vec3 vColor;
   varying float vStarId;
   varying vec3 vWorldPosition;
-
+  varying float vDistToCam;
+  varying float vPointSize;
+  varying float vNoise;
+  varying float vWaveFactor;
 
   void main() {
-    // --- Procedural Star Shape ---
-    vec2 p = gl_PointCoord - vec2(0.5);
-    float dist = length(p);
-    if (dist > 0.5) discard;
-    
-    // --- Nebula Interaction ---
-    vec3 colorFromNebulae = vColor;
-    float alphaFromNebulae = 1.0;
+    // --- LOD: Distance-based Culling & Fading ---
+    float lodFade = 1.0 - smoothstep(uCameraFarPlane * 0.85, uCameraFarPlane, vDistToCam);
+    if (lodFade < 0.01) discard;
 
-    for (int i = 0; i < MAX_NEBULAE; i++) {
-        if (i >= uNumNebulae) break; // Don't process empty slots
+    float twinkle = 0.7 + 0.3 * sin(time * 1.5 + vStarId * 1.5);
 
-        vec3 nebulaPos = uNebulaPositions[i];
-        vec3 nebulaColor = uNebulaColorHotspots[i];
-        float nebulaRadius = uNebulaRadii[i];
+    vec4 finalColor = vec4(vColor * twinkle, 0.0);
+    float finalAlpha = 0.0;
 
-        float distToNebulaCenter = distance(vWorldPosition, nebulaPos);
-        vec3 starToCamDir = normalize(cameraPosition - vWorldPosition);
+    // --- LOD: Dynamic Shader Complexity ---
+    if (vPointSize < 4.0) {
+        // PATH 1: Simplified (for small, distant stars)
+        float dist = length(gl_PointCoord - vec2(0.5));
+        if (dist > 0.5) discard;
+        finalAlpha = (1.0 - dist * 2.0);
+    } 
+    else {
+        // PATH 2: High-Detail (for large, close-up stars)
+        vec2 p = gl_PointCoord - vec2(0.5);
+        float dist = length(p);
+        if (dist > 0.5) discard;
+        
+        float core = 1.0 - smoothstep(0.0, 0.1 + vNoise * 0.05, dist);
+        float angle = atan(p.y, p.x);
+        float numRays = 4.0;
 
-        // --- 1. Scattering (Illumination) ---
-        // If the star is within the nebula's radius, tint it.
-        if (distToNebulaCenter < nebulaRadius) {
-            float scatterInfluence = 1.0 - smoothstep(0.0, nebulaRadius, distToNebulaCenter);
-            scatterInfluence = pow(scatterInfluence, 2.0); // Make it stronger towards the center
-            colorFromNebulae = mix(colorFromNebulae, nebulaColor, scatterInfluence * 0.6);
-        }
+        // Wave makes coronas sharper and brighter
+        float raySharpness = 8.0 + vWaveFactor * 20.0;
+        float rayBrightness = 0.3 + vWaveFactor * 0.5;
 
-        // --- 2. Absorption (Occlusion) ---
-        // If the nebula is between the star and the camera.
-        float starToCamDist = distance(vWorldPosition, cameraPosition);
-        float nebulaToCamDist = distance(nebulaPos, cameraPosition);
-
-        if (starToCamDist > nebulaToCamDist) {
-            // Check if the star is behind the nebula's "disc" from the camera's POV
-            vec3 nebulaToStar = vWorldPosition - nebulaPos;
-            vec3 projected = dot(nebulaToStar, starToCamDir) * starToCamDir;
-            float distToLineOfSight = distance(nebulaToStar, projected);
-            
-            if (distToLineOfSight < nebulaRadius) {
-                  // The star is occluded. Dim and color shift it.
-                  float occlusionFactor = 1.0 - smoothstep(0.0, nebulaRadius, distToLineOfSight);
-                  occlusionFactor = pow(occlusionFactor, 1.5); // Sharpen the effect
-                  colorFromNebulae = mix(colorFromNebulae, nebulaColor, occlusionFactor * 0.7); // Strong color shift
-                  alphaFromNebulae *= 1.0 - (occlusionFactor * 0.8); // Dim alpha significantly
-            }
-        }
+        float rays = pow(sin(angle * numRays) * 0.5 + 0.5, raySharpness) * smoothstep(0.05, 0.5, dist);
+        float glow = 1.0 - smoothstep(0.2, 0.5, dist);
+        
+        finalAlpha = clamp(core * 1.5 + rays * rayBrightness + glow * 0.2, 0.0, 1.0);
     }
-
-    // --- Twinkling Effect ---
-    float twinkle = sin(time * 0.8 + vStarId * 1.5) * 0.5 + 0.5; // slow pulse
-    twinkle += sin(time * 2.5 + vStarId * 0.8) * 0.2; // faster shimmer
-    twinkle = pow(twinkle, 3.0) * 0.4 + 0.6; // Clamp to a nice range (0.6 to 1.0)
     
-    // --- Procedural Star Shape (continued) ---
-    float core = 1.0 - smoothstep(0.0, 0.1, dist);
-    float angle = atan(p.y, p.x);
-    float rays = pow(sin(angle * 4.0) * 0.5 + 0.5, 8.0); 
-    rays *= smoothstep(0.05, 0.5, dist);
-    float glow = 1.0 - smoothstep(0.2, 0.5, dist);
+    // --- Galactic Heartbeat Visual Effect ---
+    if (vWaveFactor > 0.01) {
+        vec3 waveColor = vec3(1.0, 0.85, 0.6); // Fiery gold
+        finalColor.rgb = mix(finalColor.rgb, waveColor, vWaveFactor);
+        finalColor.rgb *= 1.0 + vWaveFactor * 2.0; // Boost brightness in the wave
+    }
     
-    // --- Combine components ---
-    float proceduralAlpha = clamp(core * 1.5 + rays * 0.3 + glow * 0.2, 0.0, 1.0);
-    float finalAlpha = proceduralAlpha * alphaFromNebulae;
-    vec3 finalColor = colorFromNebulae;
-    
-    gl_FragColor = vec4(finalColor * twinkle * 1.1, finalAlpha * uFade);
+    // Final composition
+    finalAlpha *= lodFade;
+    gl_FragColor = vec4(finalColor.rgb, finalAlpha * uFade);
   }
 `;
