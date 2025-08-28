@@ -8,7 +8,8 @@
 // tslint:disable:no-new-decorators
 
 import {LitElement, css, html} from 'lit';
-import {customElement, property} from 'lit/decorators.js';
+// FIX: Replaced manual DOM query with the `@query` decorator.
+import {customElement, property, query} from 'lit/decorators.js';
 import {Analyser} from './analyser';
 
 import * as THREE from 'three';
@@ -59,6 +60,8 @@ export class GdmLiveAudioVisuals3D extends LitElement {
     return this._inputNode;
   }
 
+  // FIX: Use the `@query` decorator to get a reference to the canvas element.
+  @query('canvas')
   private canvas!: HTMLCanvasElement;
 
   static styles = css`
@@ -243,7 +246,6 @@ export class GdmLiveAudioVisuals3D extends LitElement {
 
   protected firstUpdated() {
     // FIX: Use this.shadowRoot to query the component's DOM.
-    this.canvas = this.shadowRoot!.querySelector('canvas') as HTMLCanvasElement;
     this.init();
   }
 

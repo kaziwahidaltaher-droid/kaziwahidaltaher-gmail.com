@@ -1,7 +1,7 @@
 {
   "name": "Cosmic Pulse: An Audio-Reactive Galaxy",
-  "version": "6.0.0",
-  "description": "A beautiful 3D galaxy visualization that subtly reacts to ambient audio from the microphone. The color and intensity of the galaxy and its surrounding space change with sound, creating an immersive cosmic experience.",
+  "version": "7.0.0",
+  "description": "An advanced, high-performance 3D cosmic simulation that generates unique galaxies on-demand with AI. The entire cosmos reacts to ambient audio for a deeply immersive experience, featuring smooth transitions between generated universes.",
   "requestFramePermissions": [
     "microphone"
   ],

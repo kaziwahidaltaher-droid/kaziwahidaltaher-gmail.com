@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -7,8 +8,14 @@
 
 export const vs = `
 varying vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vWorldPosition;
+
 void main() {
     vUv = uv;
+    vNormal = normalize(normalMatrix * normal);
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldPosition = worldPos.xyz;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
@@ -19,7 +26,14 @@ precision highp float;
 uniform float time;
 uniform vec3 color1;
 uniform vec3 color2;
+uniform float uAudioMids;  // For swirl speed
+uniform float uAudioHighs; // For brightness
+uniform float uAudioBass;  // For alpha pulsing
+uniform float uFade;
+
 varying vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vWorldPosition;
 
 // 2D simplex noise
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -49,40 +63,69 @@ float snoise(vec2 v) {
     return 130.0 * dot(m, g);
 }
 
-// Fractal Brownian Motion
+// Fractal Brownian Motion - tweaked for more detail and contrast
 float fbm(vec2 p) {
     float value = 0.0;
     float amplitude = 0.5;
     float frequency = 2.0;
+    // More octaves for finer detail
     for (int i = 0; i < 6; i++) {
         value += amplitude * snoise(p * frequency);
-        amplitude *= 0.5;
-        frequency *= 2.0;
+        amplitude *= 0.6; // Higher gain for more contrast
+        frequency *= 2.0; // Standard lacunarity
     }
     return value;
 }
 
 void main() {
-    // A secondary, slow-moving noise field to warp the main coordinates for a flowing effect
-    vec2 motion = vec2(fbm(vUv * 0.5 + time * 0.01), fbm(vUv * 0.5 + time * 0.01 + 10.0));
+    // --- Enhanced Dynamic Movement & Fractal Domain Warping ---
+    float dynamicTime = time * (1.0 + uAudioMids * 4.0);
+    float angle = dynamicTime * 0.05;
+    mat2 rotationMatrix = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+    vec2 rotatedUv = vUv - 0.5;
+    rotatedUv = rotationMatrix * rotatedUv;
+    rotatedUv += 0.5;
+
+    float timeScaledForChurn = dynamicTime * 0.02;
+
+    // Layer 1 of warping noise (low frequency) creates large-scale swirls
+    vec2 q = vec2(fbm(rotatedUv + timeScaledForChurn * 0.5), fbm(rotatedUv + timeScaledForChurn * 0.5 + vec2(5.2,1.3)));
     
-    // Apply the motion warp and a slow, constant drift
-    vec2 p = vUv * 2.5 + motion * 0.3;
-    p.x -= time * 0.02; // Slow horizontal drift
+    // Layer 2 of warping noise (medium frequency, warped by layer 1) adds complexity
+    vec2 r = vec2(fbm(rotatedUv + q*1.5 + timeScaledForChurn * 1.5), fbm(rotatedUv + q*1.5 + timeScaledForChurn * 1.5 + vec2(8.3,2.8)));
+
+    // Final noise lookup, warped by layer 2, for intricate, wispy details
+    float noise = fbm(rotatedUv*2.0 + r*0.7);
+
+    // --- Brighter Cores and Wispier Tendrils ---
+    // Sharpen the noise falloff significantly to create bright, dense cores and fine, wispy edges.
+    noise = smoothstep(0.2, 0.7, noise); // Contract the active range of the noise for higher contrast
+    float alpha = pow(noise, 8.0); // A very high power creates a sharp falloff, making the core small and bright.
     
-    float noise = fbm(p);
-    noise = (noise + 1.0) * 0.5; // Remap from [-1, 1] to [0, 1]
+    // --- Multi-layered, Audio-Reactive Color ---
+    vec3 baseColor = mix(color1, color2, noise);
+    
+    // A brighter "hotspot" color for the nebula's core, derived from base colors
+    vec3 hotColor = (color1 + color2 + vec3(1.0, 1.0, 0.8)) * 0.5; // Bright, slightly warm, desaturated average
 
-    // Create a wispy, gaseous look by raising noise to a higher power
-    float alpha = pow(noise, 3.0);
+    // Mix in the hotspot color based on noise density and high-frequency audio
+    // This will make the core pulse with high notes
+    float hotspotMix = smoothstep(0.7, 1.0, noise) * (1.0 + uAudioHighs * 2.5);
+    vec3 finalColor = mix(baseColor, hotColor, hotspotMix);
 
-    // Color mixing
-    vec3 finalColor = mix(color1, color2, noise);
+    // --- Volumetric Rim Lighting ---
+    vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+    float rimDot = 1.0 - clamp(dot(viewDir, normalize(vNormal)), 0.0, 1.0);
+    float rim = pow(rimDot, 3.0) * 2.0;
+    
+    finalColor += hotColor * rim * 1.5; // Make rim lighting brighter and use the hot color
+    alpha += rim * 0.5;
 
-    // Fade out at the edges of the plane to avoid hard cuts
+    // --- Final Composition ---
     float edgeFade = smoothstep(0.0, 0.4, vUv.x) * (1.0 - smoothstep(0.6, 1.0, vUv.x));
     edgeFade *= smoothstep(0.0, 0.4, vUv.y) * (1.0 - smoothstep(0.6, 1.0, vUv.y));
+    float bassPulse = uAudioBass * 0.4;
     
-    gl_FragColor = vec4(finalColor, alpha * edgeFade * 0.5); // Make it quite transparent
+    gl_FragColor = vec4(finalColor, clamp(alpha, 0.0, 1.0) * edgeFade * (0.6 + bassPulse) * uFade);
 }
 `;

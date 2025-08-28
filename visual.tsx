@@ -5,7 +5,8 @@
 /* tslint:disable */
 
 import {LitElement, css, html} from 'lit';
-import {customElement, property} from 'lit/decorators.js';
+// FIX: Replaced manual DOM query with the `@query` decorator.
+import {customElement, property, query} from 'lit/decorators.js';
 import {Analyser} from './analyser';
 
 @customElement('gdm-live-audio-visuals')
@@ -37,6 +38,8 @@ export class GdmLiveAudioVisuals extends LitElement {
     return this._inputNode;
   }
 
+  // FIX: Use the `@query` decorator to get a reference to the canvas element.
+  @query('canvas')
   private canvas: HTMLCanvasElement;
   private canvasCtx: CanvasRenderingContext2D;
 
@@ -104,7 +107,6 @@ export class GdmLiveAudioVisuals extends LitElement {
   // FIX: The `firstUpdated` method in LitElement is protected, not private.
   protected firstUpdated() {
     // FIX: Use this.shadowRoot to query the component's DOM.
-    this.canvas = this.shadowRoot!.querySelector('canvas')!;
     this.canvas.width = 400;
     this.canvas.height = 400;
     this.canvasCtx = this.canvas.getContext('2d');

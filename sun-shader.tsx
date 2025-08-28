@@ -26,10 +26,10 @@ precision highp float;
 
 uniform float time;
 uniform float aiState; // 0: idle, 1: thinking, 2: speaking
-uniform vec3 beamTarget;
-uniform float beamActive;
-uniform float responseMetric; // 0.0 to 1.0, based on response length
-uniform float audioLevel;
+uniform float audioLevel; // Bass
+uniform float uAudioMids; // Mids
+uniform vec3 uColor; // Base color from AI
+uniform float uFade;
 
 varying vec2 vUv;
 varying vec3 vNormal;
@@ -79,48 +79,42 @@ float fbm(vec2 p) {
 
 void main() {
     // --- Sun Surface ---
-    float speed = 0.1 + aiState * 0.2; // Idle speed is 0.1, Thinking 0.3, Speaking 0.5
+    float speed = 0.1 + aiState * 0.4; // Idle: 0.1, Thinking: 0.5, Speaking: 0.9
     float turbulence = 0.5 + aiState * 0.4;
     
     vec2 uv = vUv;
     float noise = fbm(uv * 4.0 + time * speed);
     noise = fbm(uv + noise * turbulence);
 
-    vec3 color1 = vec3(1.0, 0.6, 0.2); // Brighter Orange
-    vec3 color2 = vec3(1.0, 0.9, 0.4); // Brighter Yellow
+    // Derive color palette from the AI-provided base color
+    vec3 color1 = uColor * 0.8; // A darker, more saturated version
+    vec3 color2 = uColor + vec3(0.2, 0.2, 0.1); // A brighter, slightly yellower version
     vec3 finalColor = mix(color1, color2, noise);
     
-    float baseBrightness = 1.0 + aiState * 0.4;
-    float pulse = (aiState > 1.5) ? 0.5 * sin(time * 10.0) + 0.5 : 0.0; // Pulse when speaking
-    float audioPulse = audioLevel * 1.5; // Pulse with audio
-    finalColor *= baseBrightness + pulse * 0.5 + audioPulse;
-    
-    // --- Rim lighting for volume ---
-    float rim = 1.0 - clamp(dot(normalize(vViewPosition), vNormal), 0.0, 1.0);
-    finalColor += pow(rim, 2.0) * 0.8; // Wider, brighter corona
-
-    // --- Focus Beam ---
-    if (beamActive > 0.5) {
-        vec3 sunToTarget = normalize(beamTarget); // Sun is at origin
-        vec3 sunToFragment = normalize(vWorldPosition);
-        
-        float dotProd = dot(sunToTarget, sunToFragment);
-        
-        // The beam is a cone; pow() makes it tighter.
-        // A longer response (higher metric) makes the beam wider.
-        float beamTightness = 60.0 - responseMetric * 30.0; // Ranges from 60 (tight) to 30 (wider)
-        float beamIntensity = pow(max(0.0, dotProd), beamTightness);
-        
-        // Color changes from cyan (short response) to magenta (long response)
-        vec3 colorA = vec3(0.5, 0.8, 1.0); // Bright cyan
-        vec3 colorB = vec3(1.0, 0.5, 0.9); // Magenta/Pink
-        vec3 beamColor = mix(colorA, colorB, responseMetric);
-        
-        // Final beam is colored and intensity is modulated by the response metric
-        finalColor += beamColor * beamIntensity * (1.5 + responseMetric * 1.0);
+    // --- AI State Visuals ---
+    // 'Thinking' state adds a cool, high-frequency static effect.
+    float thinkingFactor = smoothstep(0.5, 1.0, aiState) * (1.0 - smoothstep(1.0, 1.5, aiState));
+    if (thinkingFactor > 0.0) {
+        float staticNoise = snoise(vUv * 80.0 + time * 20.0);
+        staticNoise = pow(staticNoise, 2.0) * 0.5;
+        vec3 thinkingColor = vec3(0.7, 0.8, 1.0) * staticNoise;
+        finalColor += thinkingColor * thinkingFactor;
     }
 
-    gl_FragColor = vec4(finalColor, 1.0);
+    // --- Audio Reactivity ---
+    float audioPulse = audioLevel * 1.5; // Pulse brightness with bass
+    vec3 midGlowColor = vec3(0.8, 1.0, 1.0); // Cyan glow for mids
+    finalColor = mix(finalColor, midGlowColor, uAudioMids * 0.3); // Mix in mid-range glow
+
+    // --- Brightness & Rim ---
+    float baseBrightness = 1.2 + aiState * 0.4;
+    float speakingPulse = (aiState > 1.5) ? (0.5 * sin(time * 10.0) + 0.5) : 0.0; // Pulse when speaking
+    finalColor *= baseBrightness + speakingPulse * 0.5 + audioPulse;
+    
+    float rim = 1.0 - clamp(dot(normalize(vViewPosition), vNormal), 0.0, 1.0);
+    finalColor += pow(rim, 2.0) * 1.5; // Wider, brighter corona
+
+    gl_FragColor = vec4(finalColor, uFade);
 }
 `;
 

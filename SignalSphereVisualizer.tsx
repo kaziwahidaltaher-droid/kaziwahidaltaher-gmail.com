@@ -1,7 +1,3 @@
-
-
-
-
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -67,7 +63,7 @@ export class SignalSphereVisualizer {
                 // A rapid, sharp shimmer effect controlled by the shimmerIntensity uniform
                 float shimmer = pow(sin(time * 50.0) * 0.5 + 0.5, 8.0);
                 vec3 shimmerColor = vec3(0.8, 0.9, 1.0); // Bright, cool white
-                totalEmissiveRadiance += shimmer * shimmerIntensity * shimmerColor * 0.75; // Reduced intensity for a more subtle effect
+                totalEmissiveRadiance += shimmer * shimmerIntensity * shimmerColor;
                 `
             );
         };
@@ -94,16 +90,84 @@ export class SignalSphereVisualizer {
     update(time: number, audioAnalyser: Analyser | null) {
         if (!this.signalSphere.visible) return;
 
-        // Update sphere shader uniforms and rotation
         const sphereMaterial = this.signalSphere.material as THREE.MeshStandardMaterial;
         const shader = (sphereMaterial as any).userData.shader;
+        
+        let normalizedBass = 0, normalizedMids = 0, normalizedHighs = 0;
+
         if (shader && audioAnalyser) {
             shader.uniforms.time.value = time * 0.001;
             const audioData = audioAnalyser.data;
+            const bufferLength = audioData.length;
+
+            // --- Audio Band Analysis for dynamic animation ---
+            const bassBand = { start: 1, end: 10 };
+            const midBand = { start: 11, end: 100 };
+            const highBand = { start: 101, end: bufferLength - 1 };
+
+            const getBandAverage = (band: { start: number, end: number }) => {
+                const size = band.end - band.start + 1;
+                if (size <= 0 || bufferLength === 0) return 0;
+                let sum = 0;
+                for (let i = band.start; i <= band.end; i++) {
+                     if (i < bufferLength) sum += audioData[i];
+                }
+                return sum / size;
+            };
+
+            const bassAvg = getBandAverage(bassBand);
+            const midAvg = getBandAverage(midBand);
+            const highAvg = getBandAverage(highBand);
+            const overallAvg = bufferLength > 0 ? audioData.reduce((sum, value) => sum + value, 0) / bufferLength : 0;
+
+            normalizedBass = Math.min(bassAvg / 140.0, 1.0) || 0;
+            normalizedMids = Math.min(midAvg / 150.0, 1.0) || 0;
+            normalizedHighs = Math.min(highAvg / 120.0, 1.0) || 0;
+            const normalizedOverall = Math.min(overallAvg / 140.0, 1.0) || 0;
+            
+            // Keep the vertex shader deformation as is
             shader.uniforms.inputData.value.set( (1 * audioData[0]) / 255, (0.1 * audioData[1]) / 255, (10 * audioData[2]) / 255, 0 );
             shader.uniforms.outputData.value.set( (2 * audioData[0]) / 255, (0.1 * audioData[1]) / 255, (10 * audioData[2]) / 255, 0 );
+
+            // Update shimmer with a more pronounced non-linear curve for a dynamic, peak-reactive effect.
+            const shimmerPower = 10.0; // Further increased power for sharper peak reactivity.
+            const shimmerMultiplier = 5.0; // Slightly boost the peak brightness.
+            const targetIntensity = Math.pow(normalizedHighs, shimmerPower) * shimmerMultiplier;
+            
+            // Smoothly interpolate to the target intensity with a faster response time.
+            const currentIntensity = shader.uniforms.shimmerIntensity.value;
+            shader.uniforms.shimmerIntensity.value = THREE.MathUtils.lerp(currentIntensity, targetIntensity, 0.5);
+
+            // Update pulsating glow with more robust overall data
+            const baseIntensity = 1.4;
+            const pulseAmount = 0.8;
+            const targetIntensityGlow = baseIntensity + normalizedOverall * pulseAmount;
+            const smoothingFactor = 0.075;
+            sphereMaterial.emissiveIntensity = THREE.MathUtils.lerp(
+                sphereMaterial.emissiveIntensity,
+                targetIntensityGlow,
+                smoothingFactor
+            );
         }
-        this.signalSphere.rotation.y += 0.002;
+
+        // --- NEW: Dynamic, Audio-Reactive Animation ---
+        
+        // Scaling: The sphere "breathes" with the bass.
+        const baseScale = 1.0;
+        const scalePulseAmount = 0.15;
+        const targetScale = baseScale + (normalizedBass * scalePulseAmount);
+        const scaleVector = new THREE.Vector3(targetScale, targetScale, targetScale);
+        this.signalSphere.scale.lerp(scaleVector, 0.1); // Use lerp for smooth scaling
+
+        // Rotation: Mids drive the main rotation, highs add a subtle "wobble".
+        const baseRotationSpeed = 0.001;
+        const midRotationBoost = normalizedMids * 0.008;
+        const highWobbleAmount = normalizedHighs * 0.006;
+        
+        this.signalSphere.rotation.y += baseRotationSpeed + midRotationBoost;
+        // Lerp the wobble rotation for a smoother, more organic feel.
+        this.signalSphere.rotation.x = THREE.MathUtils.lerp(this.signalSphere.rotation.x, highWobbleAmount, 0.1);
+
 
         // Update backdrop shader for twinkling stars and a slow pulsating glow
         const backdropMaterial = this.backdrop.material as THREE.RawShaderMaterial;

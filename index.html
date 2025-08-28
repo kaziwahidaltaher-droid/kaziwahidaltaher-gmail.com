@@ -31,13 +31,24 @@
   <body>
     <canvas id="bg"></canvas>
 
+    <div id="top-right-controls">
+        <button id="summon-probe-btn" class="generation-btn" aria-label="Summon AI Probe">
+            <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#FFFFFF"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12s4.48 10 10 10 10-4.48 10-10zm-10 8c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/><path d="M12 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zM4.93 4.93l1.41 1.41C7.89 4.79 9.85 4 12 4s4.11.79 5.66 2.34l1.41-1.41C17.39 3.26 14.83 2 12 2S6.61 3.26 4.93 4.93z"/></svg>
+            <span>SUMMON PROBE</span>
+        </button>
+        <button id="generate-cosmos-btn" class="generation-btn" aria-label="Generate New Cosmos">
+            <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#FFFFFF"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5s-2.24-5-5-5c-1.25 0-2.42.47-3.32 1.26C12.25 6.47 11.4 5.5 11.4 4.5c0-.83.67-1.5 1.5-1.5zm-6.5 9c0-3.59 2.91-6.5 6.5-6.5s6.5 2.91 6.5 6.5-2.91 6.5-6.5 6.5S5.5 15.59 5.5 12z"/></svg>
+            <span>GENERATE NEW COSMOS</span>
+        </button>
+    </div>
+    
     <div id="telemetry-ticker"></div>
     
     <div id="ccs-panel">
         <div class="ccs-item"><span>MODE</span><span id="ccs-mode">IDLE</span></div>
-        <div class="ccs-item"><span>POS</span><span id="ccs-pos">0.0, 0.0, 0.0</span></div>
-        <div class="ccs-item"><span>VEL</span><span id="ccs-vel">0.0 u/s</span></div>
-        <div class="ccs-item"><span>TARGET</span><span id="ccs-target">0.0, 0.0, 0.0</span></div>
+        <div class="ccs-item"><span>CAM POS</span><span id="ccs-pos">0.0, 0.0, 0.0</span></div>
+        <div class="ccs-item"><span>CAM VEL</span><span id="ccs-vel">0.0 u/s</span></div>
+        <div class="ccs-item"><span>CAM TGT</span><span id="ccs-target">0.0, 0.0, 0.0</span></div>
         <div class="ccs-item"><span>STATUS</span><span id="ccs-status" class="nominal">NOMINAL</span></div>
         <button id="auto-focus-btn" aria-label="Seek Anomaly">SEEK ANOMALY</button>
     </div>
@@ -47,7 +58,28 @@
         <button id="close-response-btn" aria-label="Close response">&times;</button>
     </div>
 
+    <div id="tts-settings-panel" class="hidden">
+      <h3>Voice Settings</h3>
+      <div class="setting-item">
+          <label for="voice-select">VOICE</label>
+          <select id="voice-select"></select>
+      </div>
+      <div class="setting-item">
+          <label for="pitch-slider">PITCH: <span id="pitch-value">1.0</span></label>
+          <input type="range" id="pitch-slider" min="0" max="2" step="0.1" value="1">
+      </div>
+      <div class="setting-item">
+          <label for="rate-slider">SPEED: <span id="rate-value">1.0</span></label>
+          <input type="range" id="rate-slider" min="0.1" max="2" step="0.1" value="1">
+      </div>
+      <button id="close-tts-settings-btn" aria-label="Close voice settings">&times;</button>
+    </div>
+
+
     <div id="controls">
+       <button id="tts-settings-btn" aria-label="Open voice settings">
+          <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#FFFFFF"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M3 9v6h4l5 5V4L7 9H3zm7 .17v5.66L8.17 13H5v-2h3.17L10 9.17zM14.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM19 12c0 2.21-.91 4.2-2.36 5.64l-1.42-1.42C16.45 15 17 13.57 17 12s-.55-3-1.78-4.22l1.42-1.42C18.09 7.8 19 9.79 19 12z"/></svg>
+       </button>
        <form id="prompt-form">
           <input type="text" id="prompt-input" placeholder="Ask the cosmos..." autocomplete="off" />
           <button type="submit" id="prompt-btn" aria-label="Submit prompt">

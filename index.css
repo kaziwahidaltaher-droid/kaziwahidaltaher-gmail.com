@@ -28,6 +28,28 @@ canvas#bg {
     max-width: 600px;
 }
 
+#tts-settings-btn {
+    width: 50px;
+    height: 50px;
+    flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 25px;
+    cursor: pointer;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    transition: background-color 0.3s, border-color 0.3s;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#tts-settings-btn:hover {
+    background: rgba(100, 150, 255, 0.2);
+    border-color: rgba(100, 150, 255, 0.8);
+}
+
 #prompt-form {
     flex-grow: 1;
     position: relative;
@@ -86,6 +108,7 @@ canvas#bg {
     color: #e0e0e0;
     z-index: 20;
     transition: opacity 0.4s ease, transform 0.4s ease;
+    overflow: hidden; /* Contain visual effects */
 }
 
 #response-container.hidden {
@@ -98,6 +121,8 @@ canvas#bg {
     margin: 0;
     line-height: 1.6;
     font-size: 1.0rem;
+    position: relative; /* Ensure text is above visual effects */
+    z-index: 1;
 }
 
 #close-response-btn {
@@ -116,6 +141,188 @@ canvas#bg {
 #close-response-btn:hover {
     color: white;
 }
+
+/* --- TTS Settings Panel --- */
+#tts-settings-panel {
+    position: absolute;
+    bottom: 85px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 400px;
+    padding: 1.5rem;
+    background: rgba(10, 10, 25, 0.7);
+    border: 1px solid rgba(100, 150, 255, 0.3);
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    color: #e0e0e0;
+    z-index: 15;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+#tts-settings-panel.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 10px);
+}
+
+#tts-settings-panel h3 {
+    margin-top: 0;
+    text-align: center;
+    color: #a7c5ff;
+    letter-spacing: 2px;
+}
+
+#tts-settings-panel .setting-item {
+    margin-bottom: 1rem;
+}
+
+#tts-settings-panel label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+#tts-settings-panel select,
+#tts-settings-panel input[type="range"] {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    border-radius: 5px;
+    padding: 5px;
+    box-sizing: border-box;
+}
+
+#tts-settings-panel select {
+    padding: 8px;
+}
+
+#tts-settings-panel select:focus,
+#tts-settings-panel input[type="range"]:focus {
+    outline: none;
+    border-color: rgba(100, 150, 255, 0.8);
+}
+
+#close-tts-settings-btn {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 1.5rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+#close-tts-settings-btn:hover {
+    color: white;
+}
+
+
+/* --- Content-Aware Visual Effects --- */
+#response-container::before,
+#response-container::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 15px;
+    opacity: 0;
+    transition: opacity 1.5s ease-in-out; /* Slower fade in */
+    pointer-events: none;
+    z-index: 0; /* Behind text, but inside container */
+    background-blend-mode: screen; /* Blend light effects nicely */
+}
+
+/* --- Starfield Effect --- */
+@keyframes star-anim {
+  from { transform: translateY(0); }
+  to { transform: translateY(-1000px); }
+}
+
+#response-container.effect-stars::before {
+    height: 300%;
+    background:
+        radial-gradient(1px 1px at 50px 100px, white, transparent 100%),
+        radial-gradient(1px 1px at 150px 250px, white, transparent 100%),
+        radial-gradient(1px 1px at 250px 400px, white, transparent 100%),
+        radial-gradient(1px 1px at 320px 50px, white, transparent 100%),
+        radial-gradient(1px 1px at 400px 300px, white, transparent 100%);
+    background-repeat: repeat-y;
+    background-size: 100% 500px;
+    animation: star-anim 150s linear infinite; /* Slower */
+    opacity: 0.6; /* More subtle */
+}
+
+#response-container.effect-stars::after {
+    height: 300%;
+    background:
+        radial-gradient(1px 1px at 80px 180px, white, transparent 100%),
+        radial-gradient(1px 1px at 200px 320px, white, transparent 100%),
+        radial-gradient(1px 1px at 300px 450px, white, transparent 100%),
+        radial-gradient(1px 1px at 380px 200px, white, transparent 100%),
+        radial-gradient(1px 1px at 450px 10px, white, transparent 100%);
+    background-repeat: repeat-y;
+    background-size: 100% 500px;
+    animation: star-anim 200s linear infinite; /* Slower for parallax */
+    opacity: 0.6; /* More subtle */
+}
+
+/* --- Nebula Effect --- */
+@keyframes swirl {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+#response-container.effect-nebula::before {
+    background:
+        radial-gradient(ellipse at 70% 30%, rgba(100, 80, 200, 0.3) 0%, transparent 55%),
+        radial-gradient(ellipse at 30% 80%, rgba(200, 80, 100, 0.3) 0%, transparent 55%),
+        radial-gradient(circle at 50% 50%, rgba(50, 150, 200, 0.25) 0%, transparent 45%);
+    background-size: 250% 250%; /* Larger size for softer gradients */
+    animation: swirl 40s ease-in-out infinite; /* Slower */
+    opacity: 0.7;
+}
+
+#response-container.effect-nebula::after {
+    opacity: 0;
+}
+
+/* --- Vortex Effect (Black Hole) --- */
+@keyframes vortex-swirl {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes vortex-stars {
+    from { opacity: 1; transform: scale(1.5) rotate(0deg); } /* Start smaller */
+    to { opacity: 0; transform: scale(0.1) rotate(270deg); }
+}
+
+#response-container.effect-vortex::before {
+    /* Softer gradient for the event horizon */
+    background: radial-gradient(circle at center, transparent 35%, rgba(10, 0, 20, 0.85) 70%);
+    animation: vortex-swirl 60s linear infinite; /* Slower */
+    opacity: 0.9;
+}
+
+#response-container.effect-vortex::after {
+    /* Fewer, smaller stars being pulled in */
+    background: 
+        radial-gradient(1px 1px at 20% 50%, white, transparent),
+        radial-gradient(1px 1px at 80% 50%, white, transparent),
+        radial-gradient(1px 1px at 50% 75%, white, transparent);
+    animation: vortex-stars 9s ease-in infinite; /* Slower animation */
+    opacity: 0; /* Animation handles opacity */
+}
+
 
 #telemetry-ticker {
     position: absolute;
@@ -147,9 +354,9 @@ canvas#bg {
     font-size: 0.9rem;
     color: #0f0;
     display: grid;
-    grid-template-columns: 70px 1fr;
+    grid-template-columns: 80px 1fr;
     gap: 5px 10px;
-    width: 280px;
+    width: 300px;
     z-index: 5;
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
@@ -167,7 +374,7 @@ canvas#bg {
     font-weight: bold;
 }
 
-#auto-focus-btn {
+#auto-focus-btn, #ping-btn {
     grid-column: 1 / -1; /* Span all columns */
     margin-top: 5px;
     background: transparent;
@@ -183,6 +390,71 @@ canvas#bg {
     box-sizing: border-box;
 }
 
-#auto-focus-btn:hover {
+#ping-btn {
+    margin-top: 2px;
+}
+
+#auto-focus-btn:hover, #ping-btn:hover {
     background: rgba(0, 255, 0, 0.2);
+}
+
+/* --- Top Right Controls --- */
+#top-right-controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 5;
+}
+
+.generation-btn {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    transition: background-color 0.3s, border-color 0.3s;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    justify-content: flex-start;
+}
+
+
+.generation-btn:hover {
+    background: rgba(100, 150, 255, 0.2);
+    border-color: rgba(100, 150, 255, 0.8);
+}
+
+.generation-btn:disabled {
+    cursor: not-allowed;
+    background: rgba(50, 50, 50, 0.5);
+    color: #888;
+}
+
+.generation-btn svg {
+    transition: transform 1s ease-in-out;
+}
+
+.generation-btn.loading svg {
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@media (max-width: 900px) {
+    #ccs-panel {
+       display: none; /* Hide for simplicity on mobile */
+    }
 }
