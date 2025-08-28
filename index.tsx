@@ -1,3 +1,4 @@
+
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -11,10 +12,12 @@ import { vs as oltarisVS, fs as oltarisFS } from './oltaris-shader.tsx';
 import { vs as galaxyPointVS, fs as galaxyPointFS } from './galaxy-point-shaders.tsx';
 import { vs as starfieldVS, fs as starfieldFS } from './starfield-shaders.tsx';
 import { vs as probeVS, fs as probeFS } from './probe-shader.tsx';
-import { vs as phantomGlowVS, fs as phantomGlowFS } from './phantom-glow-shader.tsx';
+import { vs as phantomVS, fs as phantomFS } from './phantom-glow-shader.tsx';
+import { vs as shieldingVS, fs as shieldingFS } from './shielding-shader.tsx';
 import { Analyser } from './analyser.ts';
 import React, { useState, useEffect } from 'react';
-import ReactDOM from 'react-dom';
+// FIX: Updated to use 'react-dom/client' for React 18 compatibility.
+import ReactDOM from 'react-dom/client';
 
 // --- Default Cosmic Web Configuration ---
 const initialCosmicWebConfig = {
@@ -48,6 +51,11 @@ let phantomScanAnimation: { active: boolean, progress: number, duration: number,
 let isSimulatingMission = false;
 const PHANTOM_FADE_DURATION = 0.5; // seconds
 const PHANTOM_SCAN_DURATION = 2.0; // seconds
+
+// --- Shielding Globals ---
+let shieldingSpheres: THREE.Group | null = null;
+let shieldingAnimation: { state: 'fading-in' | 'fading-out', progress: number } | null = null;
+const SHIELDING_FADE_DURATION = 1.0; // seconds
 
 
 // --- Probe Globals ---
@@ -94,6 +102,9 @@ let speechSettings = {
 };
 let availableVoices: SpeechSynthesisVoice[] = [];
 
+// --- Local Storage ---
+const LOCAL_STORAGE_KEY = 'aurelion-saved-cosmos';
+
 
 // --- DOM Elements ---
 const promptForm = document.getElementById('prompt-form');
@@ -125,6 +136,14 @@ const runMissionNominalBtn = document.getElementById('run-mission-nominal');
 const runMissionWorstDayBtn = document.getElementById('run-mission-worst-day');
 const runMissionWorstWeekBtn = document.getElementById('run-mission-worst-week');
 const runMissionPeakFluxBtn = document.getElementById('run-mission-peak-flux');
+
+// Save Modal
+const saveCosmosBtn = document.getElementById('save-cosmos-btn') as HTMLButtonElement;
+const savedCosmosContainer = document.getElementById('saved-cosmos-container');
+const saveModal = document.getElementById('save-modal');
+const saveForm = document.getElementById('save-form');
+const saveNameInput = document.getElementById('save-name-input') as HTMLInputElement;
+const cancelSaveBtn = document.getElementById('cancel-save-btn');
 
 
 // Environment Generation Buttons
@@ -170,6 +189,10 @@ function init() {
     scene.add(oltarisPhantom);
     recreateSceneWithConfig(initialCosmicWebConfig);
     phantomModel = createPhantom();
+    shieldingSpheres = createShieldingSpheres();
+    if (phantomModel && shieldingSpheres) {
+        phantomModel.add(shieldingSpheres);
+    }
     scene.add(phantomModel);
     
     // --- Post-processing ---
@@ -256,6 +279,9 @@ function init() {
     autoFocusBtn?.addEventListener('click', startAutoFocus);
     summonProbeBtn?.addEventListener('click', summonProbe);
     togglePhantomBtn?.addEventListener('click', togglePhantom);
+    saveCosmosBtn?.addEventListener('click', showSaveModal);
+    cancelSaveBtn?.addEventListener('click', hideSaveModal);
+    saveForm?.addEventListener('submit', handleSaveCosmos);
     
     generateCosmosStandardBtn?.addEventListener('click', (e) => generateNewCosmos('standard', e.currentTarget as HTMLButtonElement));
     generateCosmosSpeBtn?.addEventListener('click', (e) => generateNewCosmos('spe', e.currentTarget as HTMLButtonElement));
@@ -277,6 +303,9 @@ function init() {
     // --- Telemetry ---
     updateTelemetry(initialCosmicWebConfig.name);
     setInterval(() => updateTelemetry(), 5000);
+    
+    // --- Load Saved Content ---
+    loadAndDisplaySavedCosmos();
 }
 
 /**
@@ -558,56 +587,53 @@ function createStarfield() {
  */
 function createPhantom() {
     const phantom = new THREE.Group();
-    
-    // --- Core Material (the "solid" part) ---
-    const coreMaterial = new THREE.MeshStandardMaterial({
-        color: 0x00ffff,
-        emissive: 0x00ffff,
-        emissiveIntensity: 0.6,
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        wireframe: false,
-        roughness: 0.4,
-        metalness: 0.1,
-    });
 
-    // --- Glow Material (the "aura") ---
-    const glowMaterial = new THREE.ShaderMaterial({
+    // --- Create a single, powerful shader for all phantom parts ---
+    const phantomMaterial = new THREE.ShaderMaterial({
         uniforms: {
+            time: { value: 0.0 },
             uGlowColor: { value: new THREE.Color(0x00ffff) },
             uOpacity: { value: 0.0 },
+            uIsGlow: { value: 0.0 }, // Default to core mesh
+            
+            // Feature Uniforms
+            aiState: { value: 0.0 },
+            uAudioBass: { value: 0.0 },
+            uAudioMids: { value: 0.0 },
+            uAudioHighs: { value: 0.0 },
+            uHeartbeat: { value: new THREE.Vector2(0.0, 150.0) },
+
+            // Mission Uniforms
             uScanActive: { value: 0.0 },
             uScanLinePosition: { value: 0.0 },
             uScanLineWidth: { value: 2.0 },
             uFlickerIntensity: { value: 0.0 },
         },
-        vertexShader: phantomGlowVS,
-        fragmentShader: phantomGlowFS,
+        vertexShader: phantomVS,
+        fragmentShader: phantomFS,
         transparent: true,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
     });
 
     // Create the core phantom structure
-    const head = new THREE.Mesh(new THREE.SphereGeometry(4, 12, 12), coreMaterial.clone());
+    const head = new THREE.Mesh(new THREE.SphereGeometry(4, 12, 12), phantomMaterial);
     head.position.y = 35;
     head.name = "Head";
 
-    const torso = new THREE.Mesh(new THREE.CylinderGeometry(6, 4, 25, 8), coreMaterial.clone());
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(6, 4, 25, 8), phantomMaterial);
     torso.position.y = 20;
     torso.name = "Torso";
     
-    const hips = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 6, 8), coreMaterial.clone());
+    const hips = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 6, 8), phantomMaterial);
     hips.position.y = 7;
     hips.name = "Hips";
 
     const createLimb = (isArm: boolean, partName: string) => {
         const limb = new THREE.Group();
-        const upper = new THREE.Mesh(new THREE.CylinderGeometry(isArm ? 1.5 : 2, isArm ? 1.2 : 1.8, 15, 6), coreMaterial.clone());
-        const lower = new THREE.Mesh(new THREE.CylinderGeometry(isArm ? 1.2 : 1.8, isArm ? 1 : 1.5, 14, 6), coreMaterial.clone());
-        const joint = new THREE.Mesh(new THREE.SphereGeometry(isArm ? 1.8 : 2.2, 6, 6), coreMaterial.clone());
+        const upper = new THREE.Mesh(new THREE.CylinderGeometry(isArm ? 1.5 : 2, isArm ? 1.2 : 1.8, 15, 6), phantomMaterial);
+        const lower = new THREE.Mesh(new THREE.CylinderGeometry(isArm ? 1.2 : 1.8, isArm ? 1 : 1.5, 14, 6), phantomMaterial);
+        const joint = new THREE.Mesh(new THREE.SphereGeometry(isArm ? 1.8 : 2.2, 6, 6), phantomMaterial);
         
         upper.position.y = 7.5;
         lower.position.y = -7.5;
@@ -644,16 +670,58 @@ function createPhantom() {
     });
 
     coreMeshes.forEach(coreMesh => {
-        const glowMesh = new THREE.Mesh(coreMesh.geometry, glowMaterial.clone());
-        glowMesh.scale.setScalar(1.2); // Make the glow shell noticeably larger
+        const glowMaterial = phantomMaterial.clone();
+        glowMaterial.uniforms.uIsGlow.value = 1.0;
+        
+        const glowMesh = new THREE.Mesh(coreMesh.geometry, glowMaterial);
+        glowMesh.scale.setScalar(1.2); 
         glowMesh.name = `${coreMesh.name}_glow`;
-        coreMesh.add(glowMesh); // Add glow as a child of the core mesh
+        coreMesh.add(glowMesh); 
     });
 
     phantom.scale.setScalar(0.75);
     phantom.visible = false;
     return phantom;
 }
+
+/**
+ * Creates the visual representation of the shielding layers.
+ */
+function createShieldingSpheres(): THREE.Group {
+    const group = new THREE.Group();
+    group.name = "ShieldingLayers";
+
+    const layers = [
+        { name: 'Aluminum', color: new THREE.Color(0xaaaaaa), radius: 45 },
+        { name: 'Polyethylene', color: new THREE.Color(0xeeeeee), radius: 40 },
+        { name: 'Tissue', color: new THREE.Color(0xff8080), radius: 35 },
+    ];
+
+    layers.forEach(layer => {
+        const geometry = new THREE.SphereGeometry(layer.radius, 48, 48);
+        const material = new THREE.ShaderMaterial({
+            uniforms: {
+                time: { value: 0.0 },
+                uColor: { value: layer.color },
+                uOpacity: { value: 0.0 },
+            },
+            vertexShader: shieldingVS,
+            fragmentShader: shieldingFS,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.FrontSide,
+        });
+
+        const sphere = new THREE.Mesh(geometry, material);
+        sphere.name = layer.name;
+        group.add(sphere);
+    });
+
+    group.visible = false;
+    return group;
+}
+
 
 /**
  * Toggles phantom visibility with a confirmation and fade animation.
@@ -938,13 +1006,10 @@ function animate() {
         }
 
         phantomModel.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-                const material = child.material as any;
-                if (material.isMeshStandardMaterial) {
-                    material.opacity = opacity;
-                } else if (material.isShaderMaterial && material.uniforms.uOpacity) {
-                    // Make the glow fade in slightly softer than the core
-                    material.uniforms.uOpacity.value = opacity * 0.7; 
+            if (child instanceof THREE.Mesh && child.name !== 'ShieldingLayers') {
+                const material = child.material as THREE.ShaderMaterial;
+                if (material.isShaderMaterial && material.uniforms.uOpacity) {
+                    material.uniforms.uOpacity.value = opacity;
                 }
             }
         });
@@ -957,44 +1022,28 @@ function animate() {
         }
     }
 
-    // --- Phantom Idle Animation ---
-    if (isPhantomVisible && !phantomAnimation && phantomModel && !isSimulatingMission) {
-        const idleTime = elapsedTime * 0.7; // Slower speed for idle animations
-
-        // 1. Gentle Sway
-        const torso = phantomModel.getObjectByName("Torso");
-        const hips = phantomModel.getObjectByName("Hips");
-        const head = phantomModel.getObjectByName("Head");
-
-        if (torso) {
-            torso.rotation.z = Math.sin(idleTime) * 0.03; // Small rotation on z-axis
-        }
-        if (hips) {
-            // A slightly different timing and opposite direction for a more natural sway
-            hips.rotation.z = Math.sin(idleTime - 0.2) * -0.02;
-        }
-        if (head) {
-            // Slower, more subtle head turn on a different axis
-            head.rotation.y = Math.sin(idleTime * 0.5) * 0.08;
-        }
-
-        // 2. Gentle Pulsing Glow
-        // A sine wave oscillating between 0 and 1
-        const pulseFactor = 0.5 + Math.sin(elapsedTime * 1.2) * 0.5;
-
+    // --- Phantom All-Features Animation ---
+    if (isPhantomVisible && !phantomAnimation && phantomModel) {
+        const state = aiState === 'thinking' ? 1.0 : (aiState === 'speaking' ? 2.0 : 0.0);
+        
         phantomModel.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-                const material = child.material as any;
-                if (material.isMeshStandardMaterial) { // Core mesh
-                    // Modulate emissive intensity from 0.6 to 0.75
-                    material.emissiveIntensity = 0.6 + pulseFactor * 0.15;
-                } else if (material.isShaderMaterial && material.uniforms.uOpacity) { // Glow mesh
-                    // Modulate opacity from 0.7 to 0.8. Note: The base visible opacity is 0.7
-                    material.uniforms.uOpacity.value = 0.7 + pulseFactor * 0.1;
+            if (child instanceof THREE.Mesh && child.name !== 'ShieldingLayers') {
+                const material = child.material as THREE.ShaderMaterial;
+                if (material.isShaderMaterial && material.uniforms) {
+                    // The glow meshes have their own cloned materials, so we update them all
+                    if (material.uniforms.time !== undefined) material.uniforms.time.value = elapsedTime;
+                    if (material.uniforms.aiState !== undefined) material.uniforms.aiState.value = THREE.MathUtils.lerp(material.uniforms.aiState.value || 0, state, delta * 5.0);
+                    if (material.uniforms.uAudioBass !== undefined) material.uniforms.uAudioBass.value = THREE.MathUtils.lerp(material.uniforms.uAudioBass.value || 0, normalizedBass, delta * 5.0);
+                    if (material.uniforms.uAudioMids !== undefined) material.uniforms.uAudioMids.value = THREE.MathUtils.lerp(material.uniforms.uAudioMids.value || 0, normalizedMids, delta * 5.0);
+                    if (material.uniforms.uAudioHighs !== undefined) material.uniforms.uAudioHighs.value = THREE.MathUtils.lerp(material.uniforms.uAudioHighs.value || 0, normalizedHighs, delta * 5.0);
+                    if (material.uniforms.uHeartbeat) {
+                         material.uniforms.uHeartbeat.value.set(waveRadius, waveThickness);
+                    }
                 }
             }
         });
     }
+
 
     // --- Phantom Scan Animation ---
     if (phantomScanAnimation && phantomScanAnimation.active) {
@@ -1007,10 +1056,12 @@ function animate() {
         const scanPosition = phantomBottom + (phantomHeight * phantomScanAnimation.progress);
     
         phantomModel?.traverse((child) => {
-            if (child instanceof THREE.Mesh && child.name.endsWith('_glow')) {
+            if (child instanceof THREE.Mesh) {
                 const material = child.material as THREE.ShaderMaterial;
-                material.uniforms.uScanActive.value = isScanDone ? 0.0 : 1.0;
-                material.uniforms.uScanLinePosition.value = scanPosition;
+                if (material.isShaderMaterial && material.uniforms.uScanActive) {
+                    material.uniforms.uScanActive.value = isScanDone ? 0.0 : 1.0;
+                    material.uniforms.uScanLinePosition.value = scanPosition;
+                }
             }
         });
     
@@ -1025,13 +1076,44 @@ function animate() {
 
     // --- Phantom Mission Simulation Flicker ---
     if (isSimulatingMission && phantomModel) {
-        const flickerIntensity = 0.5 + Math.sin(elapsedTime * 50) * 0.5; // Fast flicker
         phantomModel.traverse((child) => {
-             if (child instanceof THREE.Mesh && child.name.endsWith('_glow')) {
+             if (child instanceof THREE.Mesh) {
                 const material = child.material as THREE.ShaderMaterial;
-                material.uniforms.uFlickerIntensity.value = flickerIntensity;
+                if (material.isShaderMaterial && material.uniforms.uFlickerIntensity) {
+                    const flickerIntensity = 0.5 + Math.sin(elapsedTime * 50) * 0.5; // Fast flicker
+                    material.uniforms.uFlickerIntensity.value = flickerIntensity;
+                }
             }
         });
+    }
+
+    // --- Shielding Animation ---
+    if (shieldingAnimation && shieldingSpheres) {
+        shieldingAnimation.progress += delta / SHIELDING_FADE_DURATION;
+        const isDone = shieldingAnimation.progress >= 1.0;
+        let opacity = 0;
+
+        if (shieldingAnimation.state === 'fading-in') {
+            opacity = isDone ? 1.0 : shieldingAnimation.progress;
+        } else { // fading-out
+            opacity = isDone ? 0.0 : 1.0 - shieldingAnimation.progress;
+        }
+
+        shieldingSpheres.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+                const material = child.material as THREE.ShaderMaterial;
+                if (material.isShaderMaterial && material.uniforms.uOpacity) {
+                    material.uniforms.uOpacity.value = opacity;
+                }
+            }
+        });
+
+        if (isDone) {
+            if (shieldingAnimation.state === 'fading-out') {
+                shieldingSpheres.visible = false;
+            }
+            shieldingAnimation = null; // End the animation
+        }
     }
 
 
@@ -1075,6 +1157,7 @@ function onMouseClick(event: MouseEvent) {
     if (responseContainer?.contains(event.target as Node) || 
         ttsSettingsPanel?.contains(event.target as Node) ||
         missionModal?.contains(event.target as Node) ||
+        saveModal?.contains(event.target as Node) ||
         reactRoot?.contains(event.target as Node)) {
         return;
     }
@@ -1108,6 +1191,7 @@ function onMouseClick(event: MouseEvent) {
     if (!ttsSettingsPanel?.classList.contains('hidden')) {
         ttsSettingsPanel?.classList.add('hidden');
     }
+    hideSaveModal();
 }
 
 /**
@@ -1229,6 +1313,11 @@ async function runMissionSimulation(missionType: string) {
     aiState = 'thinking';
     showSystemMessage(`Running mission simulation: ${missionType}...`);
 
+    if (shieldingSpheres) {
+        shieldingSpheres.visible = true;
+        shieldingAnimation = { state: 'fading-in', progress: 0 };
+    }
+
     try {
         // First, get the standard OLTARIS radiation assessment
         const assessmentReport = await fetchPhantomAssessmentFromAI('Full Body');
@@ -1243,8 +1332,11 @@ async function runMissionSimulation(missionType: string) {
         setTimeout(() => {
             isSimulatingMission = false;
              phantomModel?.traverse((child) => {
-                if (child instanceof THREE.Mesh && child.name.endsWith('_glow')) {
-                    (child.material as THREE.ShaderMaterial).uniforms.uFlickerIntensity.value = 0.0;
+                if (child instanceof THREE.Mesh) {
+                    const material = child.material as THREE.ShaderMaterial;
+                    if (material.isShaderMaterial && material.uniforms.uFlickerIntensity) {
+                        material.uniforms.uFlickerIntensity.value = 0.0;
+                    }
                 }
             });
 
@@ -1547,6 +1639,165 @@ async function fetchGalaxyConfigFromAI(theme: string) {
 }
 
 /**
+ * Shows the modal for saving the current cosmos configuration.
+ */
+function showSaveModal() {
+    if (isTransitioning) return;
+    saveModal?.classList.remove('hidden');
+    saveNameInput?.focus();
+}
+
+/**
+ * Hides the save cosmos modal.
+ */
+function hideSaveModal() {
+    saveModal?.classList.add('hidden');
+    if(saveNameInput) saveNameInput.value = '';
+}
+
+/**
+ * Handles the submission of the save cosmos form.
+ */
+function handleSaveCosmos(event: Event) {
+    event.preventDefault();
+    const name = saveNameInput?.value.trim();
+    if (!name) {
+        showSystemMessage("Please provide a name for your cosmos.");
+        return;
+    }
+
+    const savedCosmos = getSavedCosmos();
+    // Prevent duplicate names
+    if (savedCosmos.some(c => c.name === name)) {
+        showSystemMessage(`A cosmos named "${name}" already exists.`);
+        return;
+    }
+
+    const newConfig = {
+        ...currentGalaxyConfig,
+        name: name,
+        id: Date.now().toString() // Use string ID for consistency
+    };
+
+    savedCosmos.push(newConfig);
+    saveCosmosToStorage(savedCosmos);
+    
+    loadAndDisplaySavedCosmos(); // Refresh the whole list to keep order
+    hideSaveModal();
+    showSystemMessage(`Cosmos "${name}" has been saved.`);
+}
+
+/**
+ * Retrieves saved cosmos configurations from localStorage.
+ */
+function getSavedCosmos(): any[] {
+    try {
+        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+        return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+        console.error("Could not read saved cosmos from localStorage", e);
+        return [];
+    }
+}
+
+/**
+ * Saves an array of cosmos configurations to localStorage.
+ */
+function saveCosmosToStorage(configs: any[]) {
+    try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(configs));
+    } catch (e) {
+        console.error("Could not save cosmos to localStorage", e);
+    }
+}
+
+/**
+ * Loads and populates the UI with saved cosmos configurations from localStorage.
+ */
+function loadAndDisplaySavedCosmos() {
+    if (!savedCosmosContainer) return;
+    const savedCosmos = getSavedCosmos();
+    savedCosmosContainer.innerHTML = ''; // Clear existing
+
+    if (savedCosmos.length > 0) {
+        const heading = document.createElement('h4');
+        heading.textContent = 'Saved Presets';
+        savedCosmosContainer.appendChild(heading);
+        savedCosmos.forEach(createSavedCosmosButton);
+    }
+}
+
+/**
+ * Creates and appends a button for a saved cosmos configuration to the UI.
+ */
+function createSavedCosmosButton(config: any) {
+    if (!savedCosmosContainer) return;
+
+    const button = document.createElement('button');
+    button.className = 'saved-cosmos-btn';
+    button.textContent = config.name;
+    button.setAttribute('aria-label', `Load ${config.name}`);
+    button.onclick = (e) => {
+        // Prevent delete button from also triggering this
+        if ((e.target as HTMLElement).classList.contains('delete-cosmos-btn')) return;
+        loadSavedCosmos(config);
+    };
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'delete-cosmos-btn';
+    deleteBtn.innerHTML = '&times;';
+    deleteBtn.setAttribute('aria-label', `Delete ${config.name}`);
+    deleteBtn.onclick = () => deleteCosmos(config.id);
+    
+    button.appendChild(deleteBtn);
+    savedCosmosContainer.appendChild(button);
+}
+
+/**
+ * Loads a cosmos from a saved configuration object.
+ */
+function loadSavedCosmos(config: any) {
+    if (isTransitioning) return;
+    
+    // Clean up existing probe if it exists
+    if (probe) {
+        scene.remove(probe);
+        probe.geometry.dispose();
+        (probe.material as THREE.Material).dispose();
+        probe = null;
+        probeTarget = null;
+        probeAnimation = null;
+    }
+
+    setLoadingState(true, null); // Generic loading state
+    showSystemMessage(`Loading cosmos: ${config.name}...`);
+
+    transitionState = {
+        fadingOut: true,
+        fadingIn: false,
+        progress: 0,
+        duration: 2.0,
+        oldGalaxy: galaxy,
+    };
+    isTransitioning = true;
+    
+    recreateSceneWithConfig(config, true); // Create new scene invisibly
+
+    updateTelemetry(`SYSTEM: Recalling saved cosmos ${config.name}.`);
+    showResponse(`Returning to: ${config.name}. ${config.description}`);
+}
+
+/**
+ * Deletes a saved cosmos configuration by its ID.
+ */
+function deleteCosmos(id: string) {
+    let savedCosmos = getSavedCosmos();
+    savedCosmos = savedCosmos.filter(c => c.id !== id);
+    saveCosmosToStorage(savedCosmos);
+    loadAndDisplaySavedCosmos(); // Refresh the UI
+}
+
+/**
  * Toggles the UI loading state for the generation buttons.
  */
 function setLoadingState(isLoading: boolean, activeBtn: HTMLButtonElement | null) {
@@ -1628,287 +1879,4 @@ function showResponse(text: string) {
     if (speechSettings.voice) utterance.voice = speechSettings.voice;
     utterance.pitch = speechSettings.pitch;
     utterance.rate = speechSettings.rate;
-    speechSynthesis.speak(utterance);
-}
-
-
-/**
- * Displays the formatted OLTARIS assessment report using the new React component.
- */
-function displayAssessmentReport(report: any) {
-    if ((window as any).showOltarisReport) {
-        (window as any).showOltarisReport(report);
-    }
-}
-
-
-/**
- * Hides the AI response container and stops any speech.
- */
-function hideResponse() {
-    responseContainer?.classList.add('hidden');
-    if (typewriterInterval) clearInterval(typewriterInterval);
-    if (speechSynthesis.speaking) speechSynthesis.cancel();
-    aiState = 'idle';
-    
-    const actionsContainer = document.getElementById('response-actions');
-    if (actionsContainer) actionsContainer.innerHTML = '';
-    closeResponseBtn?.classList.remove('hidden');
-    
-    applyResponseVisuals('');
-}
-
-/**
- * Hides the OLTARIS assessment report panel using the new React component.
- */
-function hideOltarisReport() {
-    if ((window as any).hideOltarisReport) {
-        (window as any).hideOltarisReport();
-    }
-}
-
-
-/**
- * Displays a confirmation modal in the response container.
- */
-function showConfirmationModal(message: string, confirmText: string, onConfirm: () => void) {
-    if (!responseContainer || !responseText) return;
-
-    if (speechSynthesis.speaking) speechSynthesis.cancel();
-    if (typewriterInterval) clearInterval(typewriterInterval);
-    aiState = 'idle';
-    
-    responseText.innerHTML = message;
-
-    const actionsContainer = document.getElementById('response-actions');
-    if (!actionsContainer) return;
-    actionsContainer.innerHTML = '';
-
-    const confirmBtn = document.createElement('button');
-    confirmBtn.textContent = confirmText;
-    confirmBtn.onclick = () => {
-        hideResponse();
-        onConfirm();
-    };
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.className = 'cancel-btn';
-    cancelBtn.onclick = hideResponse;
-
-    actionsContainer.appendChild(cancelBtn);
-    actionsContainer.appendChild(confirmBtn);
-
-    applyResponseVisuals('');
-    closeResponseBtn?.classList.add('hidden');
-    responseContainer.classList.remove('hidden');
-}
-
-
-/**
- * Selects a random star and smoothly transitions the camera to focus on it.
- */
-function startAutoFocus() {
-    if (isAutoFocusing || !galaxy) return;
-
-    const numStars = galaxy.geometry.attributes.position.count;
-    const randomIndex = Math.floor(Math.random() * numStars);
-    const posAttr = galaxy.geometry.attributes.position;
-    
-    autoFocusTarget.set(
-        posAttr.getX(randomIndex),
-        posAttr.getY(randomIndex),
-        posAttr.getZ(randomIndex)
-    );
-
-    const offsetDistance = 100;
-    autoFocusCameraTarget
-        .copy(autoFocusTarget)
-        .normalize()
-        .multiplyScalar(autoFocusTarget.length() + offsetDistance);
-    autoFocusCameraTarget.y += 20;
-
-    isAutoFocusing = true;
-}
-
-/**
- * Updates the telemetry ticker with a new message
- */
-function updateTelemetry(newMessage?: string) {
-    if (!telemetryTicker) return;
-    if (newMessage) {
-        telemetryTicker.textContent = newMessage;
-    } else {
-        telemetryIndex = (telemetryIndex + 1) % telemetryMessages.length;
-        telemetryTicker.textContent = telemetryMessages[telemetryIndex];
-    }
-}
-
-/**
- * Updates the CCS panel with live data
- */
-function updateCCSPanel(delta) {
-    if (!ccsMode || !ccsPos || !ccsVel || !lastPosition || !camera || !controls || !ccsTarget) return;
-    
-    const velocity = camera.position.distanceTo(lastPosition) / (delta || 1);
-
-    if (isAutoFocusing) ccsMode.textContent = 'AUTOPILOT';
-    else if (velocity > 1.0) ccsMode.textContent = 'MANEUVERING';
-    else ccsMode.textContent = 'IDLE';
-
-    ccsPos.textContent = `${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)}`;
-    ccsVel.textContent = `${velocity.toFixed(1)} u/s`;
-    ccsTarget.textContent = `${controls.target.x.toFixed(1)}, ${controls.target.y.toFixed(1)}, ${controls.target.z.toFixed(1)}`;
-
-    lastPosition.copy(camera.position);
-}
-
-// --- OltarisReport React Component ---
-const OltarisReport = ({
-  visible,
-  onClose,
-  data
-}) => {
-  if (!visible || !data) return null;
-
-  const {
-    bodyPart,
-    environment,
-    dose,
-    doseEquivalent,
-    REID,
-    missionStatus,
-    successRate,
-    lossRate,
-    missionLog
-  } = data;
-
-  let statusClassName = 'value';
-  if (missionStatus === 'Success') {
-    statusClassName += ' status-success';
-  } else if (missionStatus === 'Partial Loss') {
-    statusClassName += ' status-loss';
-  } else {
-    statusClassName += ' status-failure';
-  }
-
-  return React.createElement(
-    'div',
-    { id: 'oltaris-report-panel' },
-    React.createElement(
-      'div',
-      { className: 'assessment-report' },
-      React.createElement('h3', null, 'OLTARIS Assessment'),
-      React.createElement(
-        'div',
-        { className: 'assessment-grid' },
-        React.createElement(
-          'div', { className: 'assessment-item' },
-          React.createElement('span', { className: 'label' }, 'TARGET'),
-          React.createElement('span', { className: 'value' }, bodyPart)
-        ),
-        React.createElement(
-          'div', { className: 'assessment-item' },
-          React.createElement('span', { className: 'label' }, 'ENVIRONMENT'),
-          React.createElement('span', { className: 'value' }, environment)
-        ),
-        React.createElement(
-          'div', { className: 'assessment-item' },
-          React.createElement('span', { className: 'label' }, 'ABSORBED DOSE'),
-          React.createElement(
-            'div', null,
-            React.createElement('span', { className: 'value' }, dose?.value?.toFixed(2)),
-            React.createElement('span', { className: 'unit' }, dose?.unit)
-          )
-        ),
-        React.createElement(
-          'div', { className: 'assessment-item' },
-          React.createElement('span', { className: 'label' }, 'DOSE EQUIVALENT'),
-          React.createElement(
-            'div', null,
-            React.createElement('span', { className: 'value' }, doseEquivalent?.value?.toFixed(2)),
-            React.createElement('span', { className: 'unit' }, doseEquivalent?.unit)
-          )
-        ),
-        React.createElement(
-          'div', { className: 'assessment-item', style: { gridColumn: '1 / -1' } },
-          React.createElement('span', { className: 'label' }, 'CAREER REID (Risk)'),
-          React.createElement(
-            'div', null,
-            React.createElement('span', { className: 'value' }, REID?.value?.toFixed(4)),
-            React.createElement('span', { className: 'unit' }, REID?.unit)
-          )
-        )
-      ),
-      React.createElement(
-        'div', { className: 'mission-log-section' },
-        React.createElement('h4', null, 'Mission Simulation Log'),
-        React.createElement(
-          'div', { className: 'mission-status-grid' },
-          React.createElement(
-            'div', null,
-            React.createElement('span', { className: 'label' }, 'STATUS'),
-            React.createElement('span', { className: statusClassName }, missionStatus?.toUpperCase())
-          ),
-          React.createElement(
-            'div', null,
-            React.createElement('span', { className: 'label' }, 'SUCCESS RATE'),
-            React.createElement('span', { className: 'value' }, `${successRate?.toFixed(2)}%`)
-          ),
-          React.createElement(
-            'div', null,
-            React.createElement('span', { className: 'label' }, 'LOSS RATE'),
-            React.createElement('span', { className: 'value' }, `${lossRate?.toFixed(2)}%`)
-          )
-        ),
-        React.createElement(
-          'div', { className: 'assessment-summary' },
-          React.createElement('span', { className: 'label' }, 'LOG ENTRY'),
-          React.createElement('p', null, missionLog)
-        )
-      )
-    ),
-    React.createElement('button', { id: 'close-oltaris-report-btn', 'aria-label': 'Close assessment report', onClick: onClose }, '×')
-  );
-};
-
-
-// --- React Root Application Component ---
-const App = () => {
-    const [reportData, setReportData] = useState(null);
-    const [isReportVisible, setIsReportVisible] = useState(false);
-
-    useEffect(() => {
-        (window as any).showOltarisReport = (data) => {
-            setReportData(data);
-            setIsReportVisible(true);
-        };
-        (window as any).hideOltarisReport = () => {
-            setIsReportVisible(false);
-        };
-    }, []);
-
-    return React.createElement(OltarisReport, {
-        visible: isReportVisible,
-        onClose: () => setIsReportVisible(false),
-        data: reportData,
-    });
-};
-
-// --- Service Worker Registration ---
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js').then(registration => {
-      console.log('SW registered: ', registration);
-    }).catch(registrationError => {
-      console.log('SW registration failed: ', registrationError);
-    });
-  });
-}
-
-// --- Start the simulation ---
-init();
-animate();
-
-// --- Mount the React application ---
-ReactDOM.render(React.createElement(App), document.getElementById('react-app-root'));
+    speechSynthesis.
