@@ -2,9 +2,12 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-import {Blob} from '@google/genai';
+import { Part } from '@google/genai';
 
-function encode(bytes) {
+/**
+ * Encodes a byte array into a base64 string.
+ */
+function encode(bytes: Uint8Array): string {
   let binary = '';
   const len = bytes.byteLength;
   for (let i = 0; i < len; i++) {
@@ -13,7 +16,10 @@ function encode(bytes) {
   return btoa(binary);
 }
 
-function decode(base64) {
+/**
+ * Decodes a base64 string into a byte array.
+ */
+function decode(base64: string): Uint8Array {
   const binaryString = atob(base64);
   const len = binaryString.length;
   const bytes = new Uint8Array(len);
@@ -23,20 +29,39 @@ function decode(base64) {
   return bytes;
 }
 
-function createBlob(data: Float32Array): Blob {
-  const l = data.length;
+/**
+ * Converts a Float32Array of audio data to an Int16Array.
+ * @param buffer The Float32Array audio data (ranging from -1.0 to 1.0).
+ * @returns An Int16Array containing the converted audio data.
+ */
+function float32ToInt16(buffer: Float32Array): Int16Array {
+  const l = buffer.length;
   const int16 = new Int16Array(l);
   for (let i = 0; i < l; i++) {
-    // convert float32 -1 to 1 to int16 -32768 to 32767
-    int16[i] = data[i] * 32768;
+    // Clamp the values to avoid overflow and convert.
+    int16[i] = Math.max(-1, Math.min(1, buffer[i])) * 32767;
   }
+  return int16;
+}
 
+/**
+ * Creates a GenAI `Part` object from raw Float32Array audio data.
+ * @param data The raw audio data.
+ * @returns A `Part` object ready to be sent to the Gemini API.
+ */
+function createAudioPart(data: Float32Array): Part {
+  const int16 = float32ToInt16(data);
   return {
-    data: encode(new Uint8Array(int16.buffer)),
-    mimeType: 'audio/pcm;rate=16000',
+    inlineData: {
+      data: encode(new Uint8Array(int16.buffer)),
+      mimeType: 'audio/pcm;rate=16000',
+    }
   };
 }
 
+/**
+ * Decodes raw audio data into a playable AudioBuffer.
+ */
 async function decodeAudioData(
   data: Uint8Array,
   ctx: AudioContext,
@@ -56,7 +81,7 @@ async function decodeAudioData(
     dataFloat32[i] = dataInt16[i] / 32768.0;
   }
   // Extract interleaved channels
-  if (numChannels === 0) {
+  if (numChannels === 1) { // Corrected from 0 to 1
     buffer.copyToChannel(dataFloat32, 0);
   } else {
     for (let i = 0; i < numChannels; i++) {
@@ -70,4 +95,5 @@ async function decodeAudioData(
   return buffer;
 }
 
-export {createBlob, decode, decodeAudioData, encode};
+
+export { createAudioPart, decode, decodeAudioData, encode, float32ToInt16 };

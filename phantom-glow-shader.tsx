@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Shaders for the Human Phantom, incorporating all major visual features.
+// Shaders for the interactive human phantom model, including its glow effect.
 
 export const vs = `
 varying vec3 vNormal;
@@ -24,8 +24,9 @@ export const fs = `
 precision highp float;
 
 uniform float time;
-uniform float uOpacity;
 uniform vec3 uGlowColor;
+uniform float uOpacity;
+uniform float uIsGlow; // 0 for core, 1 for glow
 
 // Feature Uniforms
 uniform float aiState; // 0: idle, 1: thinking, 2: speaking
@@ -33,7 +34,6 @@ uniform float uAudioBass;
 uniform float uAudioMids;
 uniform float uAudioHighs;
 uniform vec2 uHeartbeat; // x: radius, y: thickness
-uniform float uIsGlow; // 0.0 for core, 1.0 for glow
 
 // Mission Uniforms
 uniform float uScanActive;
@@ -72,91 +72,63 @@ float snoise(vec2 v) {
     return 130.0 * dot(m, g);
 }
 
-// Fractal Brownian Motion
-float fbm(vec2 p, int octaves) {
-    float value = 0.0;
-    float amplitude = 0.5;
-    float frequency = 2.0;
-    for (int i = 0; i < octaves; i++) {
-        value += amplitude * snoise(p * frequency);
-        amplitude *= 0.5;
-        frequency *= 2.0;
-    }
-    return value;
-}
-
-float hash(vec2 p) {
-  return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-}
-
 void main() {
-    // 1. BASE ENERGY PATTERN (FBM)
-    float speed = 0.1 + aiState * 0.4 + uAudioMids * 1.5;
-    float turbulence = 1.0 + aiState * 2.0;
-    vec2 uv = vWorldPosition.xy;
-    float noise = fbm(uv * vec2(0.1, 0.5) + vec2(0.0, time * speed * -0.2), 4);
-    noise = fbm(uv + noise * turbulence, 3);
-    noise = (noise + 1.0) * 0.5;
-
-    // 2. BASE COLOR & FRESNEL
-    vec3 finalColor = uGlowColor * noise;
-    float fresnel = pow(1.0 - clamp(dot(normalize(vViewPosition), vNormal), 0.0, 1.0), 2.0);
+    float fresnel = pow(1.0 - clamp(dot(normalize(vViewPosition), vNormal), 0.0, 1.0), 3.0);
     
-    // 3. AI STATE EFFECTS
-    float thinkingFactor = smoothstep(0.5, 1.5, aiState) * (1.0 - smoothstep(1.5, 2.0, aiState));
+    // Base texture and color
+    float speed = 0.1 + aiState * 0.3;
+    float turbulence = 1.0 + aiState * 1.5;
+    float energyPattern = snoise(vWorldPosition.xy * 0.5 + time * speed);
+    energyPattern = snoise(vWorldPosition.xy + energyPattern * turbulence);
+    energyPattern = (energyPattern + 1.0) * 0.5;
+
+    vec3 finalColor = uGlowColor * energyPattern * 0.7;
+    
+    // Audio Reactivity
+    finalColor += uGlowColor * uAudioBass * 1.5; // Bass pulses brightness
+    finalColor += vec3(0.8, 1.0, 1.0) * uAudioMids * 0.5; // Mids add cyan highlights
+
+    // 'Thinking' glitch effect
+    float thinkingFactor = smoothstep(0.5, 1.0, aiState) * (1.0 - smoothstep(1.0, 1.5, aiState));
     if (thinkingFactor > 0.0) {
-        float staticNoise = fract(sin(vWorldPosition.y * 300.0 + time * 25.0) * 43758.5453);
-        finalColor += vec3(0.8, 1.0, 1.0) * staticNoise * thinkingFactor * 0.5;
+        float staticNoise = fract(sin(vWorldPosition.y * 500.0 + time * 20.0) * 43758.5453);
+        finalColor += vec3(1.0) * staticNoise * thinkingFactor * 0.6;
     }
 
-    // 4. AUDIO REACTIVITY
-    float bassPulse = uAudioBass * 1.5;
-    float shimmer = pow(snoise(vWorldPosition.xy * 20.0 + time * 30.0), 12.0);
-    shimmer = max(0.0, shimmer) * uAudioHighs * 2.5;
-    finalColor += vec3(1.0) * shimmer;
-
-    // 5. GALACTIC HEARTBEAT
-    float distFromHeart = length(vWorldPosition.y - 20.0); // Heart is around y=20
-    float waveRadius = uHeartbeat.x;
-    float waveThickness = uHeartbeat.y * 0.3; // Make phantom wave thinner
-    float waveFactor = smoothstep(waveRadius - waveThickness, waveRadius, distFromHeart) - smoothstep(waveRadius, waveRadius + waveThickness, distFromHeart);
-    if (waveFactor > 0.01) {
-        vec3 waveColor = vec3(1.0, 0.9, 0.7);
-        finalColor += waveColor * waveFactor * 3.0;
+    // Flicker for mission simulation
+    if (uFlickerIntensity > 0.01) {
+        finalColor *= 0.5 + uFlickerIntensity * 1.5;
     }
 
-    // 6. MISSION EFFECTS
+    // Scanline
     if (uScanActive > 0.5) {
-        float scanLineFactor = smoothstep(uScanLineWidth, 0.0, abs(vWorldPosition.y - uScanLinePosition));
-        vec3 scanColor = vec3(0.5, 1.0, 1.0);
-        finalColor = mix(finalColor, scanColor, scanLineFactor * 2.0);
-    }
-    if (uFlickerIntensity > 0.0) {
-        float flicker = hash(vWorldPosition.xy * 0.1 + vec2(uFlickerIntensity, time));
-        finalColor = mix(finalColor, vec3(1.0, 1.0, 0.8), flicker * uFlickerIntensity * 0.8);
-    }
-
-    // 7. FINAL COMPOSITION (CORE vs GLOW)
-    finalColor *= (1.0 + bassPulse);
-    finalColor += fresnel * 2.5;
-
-    float finalAlpha;
-    if (uIsGlow > 0.5) {
-        // Glow is mostly fresnel, wispy
-        finalAlpha = fresnel * 0.8 + noise * 0.1;
-    } else {
-        // Core is more solid, defined by noise
-        finalAlpha = noise * 0.6 + fresnel * 0.3;
+        float scanDist = abs(vWorldPosition.y - uScanLinePosition);
+        float scanGlow = 1.0 - smoothstep(0.0, uScanLineWidth, scanDist);
+        finalColor += vec3(1.0, 1.0, 1.0) * pow(scanGlow, 2.0) * 2.5;
     }
     
-    // Scan line should be more opaque
-    if (uScanActive > 0.5) {
-        float scanLineFactor = smoothstep(uScanLineWidth, 0.0, abs(vWorldPosition.y - uScanLinePosition));
-        finalAlpha = max(finalAlpha, scanLineFactor);
-    }
-    if (uFlickerIntensity > 0.0) {
-        finalAlpha *= (1.0 - uFlickerIntensity) + (hash(vWorldPosition.yz + time) * uFlickerIntensity * 3.0);
+    // Heartbeat from cosmic web
+    float distToCenter = length(vWorldPosition.xz); // Use XZ plane for a ring effect around the model
+    float waveRadius = uHeartbeat.x;
+    float waveThickness = uHeartbeat.y;
+    float waveFactor = smoothstep(waveRadius - waveThickness, waveRadius, distToCenter) - smoothstep(waveRadius, waveRadius + waveThickness, distToCenter);
+    if (waveFactor > 0.01) {
+        finalColor += vec3(1.0, 0.8, 0.6) * waveFactor * 2.0;
     }
 
-    gl_FragColor = vec4(finalColor, finalAlpha * uOpacity);
+    // Add base fresnel glow to everything
+    finalColor += uGlowColor * fresnel * 0.5;
+
+    // Final Alpha calculation
+    float alpha;
+    if (uIsGlow > 0.5) {
+        // Glow mesh is a soft fresnel effect
+        alpha = fresnel * 0.7;
+    } else {
+        // Core mesh is more solid, with some texture and a fresnel highlight
+        alpha = fresnel * 0.8 + energyPattern * 0.2;
+    }
+
+    gl_FragColor = vec4(finalColor, alpha * uOpacity);
 }
+`;

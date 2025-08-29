@@ -77,9 +77,10 @@ void main() {
     float turbulence = 1.5 + aiState * 2.0; // More turbulence when thinking/speaking
     
     // Create flowing energy patterns
+    // OPTIMIZATION: Reduced FBM octaves for better performance on fragment shader.
     vec2 uv = vUv;
-    float noise = fbm(uv * vec2(1.0, 4.0) + vec2(0.0, time * speed * -0.5), 4);
-    noise = fbm(uv + noise * turbulence, 3);
+    float noise = fbm(uv * vec2(1.0, 4.0) + vec2(0.0, time * speed * -0.5), 2);
+    noise = fbm(uv + noise * turbulence, 1);
     noise = (noise + 1.0) * 0.5; // map to 0-1 range
 
     // Base ethereal color
@@ -110,4 +111,3 @@ void main() {
 
     gl_FragColor = vec4(finalColor, fresnel * 0.5 + noise * 0.5) * uFade;
 }
-`;

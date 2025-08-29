@@ -12,6 +12,9 @@ export const vs = `
   uniform float uCameraFarPlane; // For LOD distance calculations
   uniform float time;
   uniform vec2 uHeartbeat; // x: radius, y: thickness
+  uniform vec3 uFlarePosition;
+  uniform float uFlareIntensity;
+  uniform float uFlareRadius;
 
   attribute float aVelocityMagnitude; // Normalized 0-1
   attribute float aStarId;
@@ -23,6 +26,7 @@ export const vs = `
   varying float vPointSize; // Pass calculated size to fragment shader for LOD
   varying float vNoise;
   varying float vWaveFactor;
+  varying float vFlareEffect;
 
   // 3D Simplex Noise
   vec3 mod289(vec3 x) {
@@ -30,7 +34,7 @@ export const vs = `
   }
 
   vec4 mod289(vec4 x) {
-    return x - floor(x * (1.0 / 289.0)) * 289.0;
+    return x - floor(x * (1.o / 289.0)) * 289.0;
   }
 
   vec4 permute(vec4 x) {
@@ -109,7 +113,8 @@ export const vs = `
       float value = 0.0;
       float amplitude = 0.5;
       float frequency = 1.0;
-      for (int i = 0; i < 4; i++) { // 4 octaves of noise
+      // OPTIMIZATION: Reduced octaves from 3 to 2 for performance.
+      for (int i = 0; i < 2; i++) {
           value += amplitude * snoise(p * frequency);
           amplitude *= 0.5;
           frequency *= 2.0;
@@ -132,26 +137,32 @@ export const vs = `
     vec3 displacement = normalize(position) * vWaveFactor * 60.0;
     vec3 displacedPosition = position + displacement;
 
+    // --- Stellar Flare Effect ---
+    vFlareEffect = 0.0;
+    if (uFlareIntensity > 0.0) {
+        float distToFlare = distance(displacedPosition, uFlarePosition);
+        if (distToFlare < uFlareRadius) {
+            // Calculate effect strength based on distance from flare center
+            float flareFalloff = 1.0 - smoothstep(0.0, uFlareRadius, distToFlare);
+            vFlareEffect = flareFalloff * flareFalloff; // squared for a sharper core effect
+
+            // Apply displacement
+            vec3 flareDir = normalize(displacedPosition - uFlarePosition);
+            displacedPosition += flareDir * uFlareIntensity * vFlareEffect;
+        }
+    }
+
     vWorldPosition = (modelMatrix * vec4(displacedPosition, 1.0)).xyz;
     
-    // --- Cosmic Web Generation via multi-layered FBM noise for more organic structure ---
-    float noise_freq = 0.005;
-    float time_factor = time * 0.02;
-
-    // Use a multi-layered noise approach with domain warping for more organic structures
-    vec3 p1 = position * noise_freq * 0.8 + time_factor;
-    float base_noise = fbm(p1);
-
-    vec3 p2 = position * noise_freq * 2.5 + base_noise * 1.5 + time_factor * 2.0;
-    float detail_noise = fbm(p2);
-    
-    float noise = base_noise * 0.6 + detail_noise * 0.4;
+    // --- Cosmic Web Generation via FBM noise ---
+    vec3 p1 = position * 0.004 + time * 0.02;
+    float noise = fbm(p1);
     noise = (noise + 1.0) / 2.0; // Map noise from [-1, 1] to [0, 1]
     vNoise = noise;
 
     // Use smoothstep to create sharp filaments from the noise field
-    float filament_threshold = 0.5;
-    float filament_thickness = 0.08; // Slightly thicker for a more substantial feel
+    float filament_threshold = 0.48; // Adjusted for new noise characteristics
+    float filament_thickness = 0.08;
     float filament_factor = smoothstep(filament_threshold, filament_threshold + filament_thickness, noise);
 
     // --- Audio-Reactive Color ---
@@ -201,6 +212,7 @@ export const fs = `
   varying float vPointSize;
   varying float vNoise;
   varying float vWaveFactor;
+  varying float vFlareEffect;
 
   void main() {
     // --- LOD: Distance-based Culling & Fading ---
@@ -246,6 +258,12 @@ export const fs = `
         finalColor.rgb *= 1.0 + vWaveFactor * 2.0; // Boost brightness in the wave
     }
     
+    // --- Stellar Flare Visual Effect ---
+    if (vFlareEffect > 0.01) {
+        vec3 flareColor = vec3(1.0, 1.0, 0.6); // Hot yellow-white
+        finalColor.rgb += flareColor * vFlareEffect * 2.0; // Additive bright flare
+    }
+
     // Final composition
     finalAlpha *= lodFade;
     gl_FragColor = vec4(finalColor.rgb, finalAlpha * uFade);

@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import * as THREE from 'three';
-import { Analyser } from './analyser';
-import { vs as sphereVS } from './sphere-shader';
-import { fs as backdropFS, vs as backdropVS } from './backdrop-shader';
+import { Analyser } from './analyser.ts';
+import { vs as sphereVS } from './sphere-shader.tsx';
+import { fs as backdropFS, vs as backdropVS } from './backdrop-shader.tsx';
 
 /**
  * Encapsulates the 3D visuals for the 'Cosmic Transmission' module,
@@ -19,7 +19,7 @@ export class SignalSphereVisualizer {
     constructor(scene: THREE.Scene) {
         // Create backdrop
         this.backdrop = new THREE.Mesh(
-            new THREE.IcosahedronGeometry(10, 5),
+            new THREE.IcosahedronGeometry(1000, 5),
             new THREE.RawShaderMaterial({
                 uniforms: {
                     resolution: { value: new THREE.Vector2(window.innerWidth * window.devicePixelRatio, window.innerHeight * window.devicePixelRatio) },
@@ -69,7 +69,7 @@ export class SignalSphereVisualizer {
             );
         };
 
-        this.signalSphere = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 10), sphereMaterial);
+        this.signalSphere = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 40), sphereMaterial);
         this.signalSphere.visible = false;
         scene.add(this.signalSphere);
     }

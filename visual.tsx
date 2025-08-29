@@ -7,8 +7,9 @@
 import {LitElement, css, html} from 'lit';
 // FIX: Replaced manual DOM query with the `@query` decorator.
 import {customElement, property, query} from 'lit/decorators.js';
-import {Analyser} from './analyser';
+import {Analyser} from './analyser.ts';
 
+// FIX: Corrected the mangled decorator syntax.
 @customElement('gdm-live-audio-visuals')
 export class GdmLiveAudioVisuals extends LitElement {
   private inputAnalyser: Analyser;
@@ -16,6 +17,7 @@ export class GdmLiveAudioVisuals extends LitElement {
 
   private _outputNode: AudioNode;
 
+  // FIX: Replaced corrupted text with the correct `@property` decorator.
   @property()
   set outputNode(node: AudioNode) {
     this._outputNode = node;

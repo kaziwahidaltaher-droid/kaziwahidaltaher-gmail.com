@@ -6,7 +6,21 @@ body {
   color: #fff;
 }
 
+/* For screen-reader accessibility */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 canvas#bg {
+  cursor: crosshair;
   position: fixed;
   top: 0;
   left: 0;
@@ -15,1030 +29,109 @@ canvas#bg {
   display: block;
 }
 
-#controls {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    gap: 15px;
+/* --- New Interaction Canvas for Pointing --- */
+.interaction-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 5; /* Above 3D canvas, below most UI */
+    pointer-events: auto;
+    width: 100%;
+    height: 100%;
+}
+
+
+/* --- React UI Layout --- */
+#aurelion-app-container {
+    position: fixed;
+    inset: 0;
+    pointer-events: none; /* Allows clicks to pass through to the canvas */
     z-index: 10;
-    width: 90%;
-    max-width: 600px;
 }
 
-#tts-settings-btn {
-    width: 50px;
-    height: 50px;
-    flex-shrink: 0;
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 25px;
-    cursor: pointer;
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
-    transition: background-color 0.3s, border-color 0.3s;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-#tts-settings-btn:hover {
-    background: rgba(100, 150, 255, 0.2);
-    border-color: rgba(100, 150, 255, 0.8);
-}
-
-#prompt-form {
-    flex-grow: 1;
-    position: relative;
-    height: 50px;
-}
-
-#prompt-input {
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 25px;
-    color: white;
-    font-size: 1rem;
-    padding: 0 55px 0 20px;
-    box-sizing: border-box;
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
-    transition: border-color 0.3s;
-}
-
-#prompt-input:focus {
-    outline: none;
-    border-color: rgba(100, 150, 255, 0.8);
-}
-
-#prompt-btn {
-    position: absolute;
-    right: 0px;
-    top: 0px;
-    width: 50px;
-    height: 50px;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-}
-
-#prompt-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-#response-container {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 90%;
-    max-width: 500px;
-    padding: 2rem;
-    background: rgba(10, 10, 25, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 15px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-    color: #e0e0e0;
-    z-index: 20;
-    transition: opacity 0.4s ease, transform 0.4s ease;
-    overflow: hidden; /* Contain visual effects */
-}
-
-#response-container.hidden {
-    opacity: 0;
-    pointer-events: none;
-    transform: translate(-50%, -45%);
-}
-
-#response-text {
-    margin: 0;
-    line-height: 1.6;
-    font-size: 1.0rem;
-    position: relative; /* Ensure text is above visual effects */
-    z-index: 1;
-}
-
-#response-actions {
-    margin-top: 1.5rem;
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-}
-
-#response-actions button {
-    background: rgba(100, 150, 255, 0.2);
-    border: 1px solid rgba(100, 150, 255, 0.8);
-    color: #fff;
-    padding: 8px 16px;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-    font-family: sans-serif;
-    font-size: 0.9rem;
-}
-
-#response-actions button:hover {
-    background: rgba(100, 150, 255, 0.4);
-}
-
-#response-actions button.cancel-btn {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.3);
-}
-
-#response-actions button.cancel-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-}
-
-#close-response-btn {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 1.8rem;
-    cursor: pointer;
-    transition: color 0.3s;
-    line-height: 1;
-}
-
-#close-response-btn.hidden {
-    display: none;
-}
-
-#close-response-btn:hover {
-    color: white;
-}
-
-/* --- TTS Settings Panel --- */
-#tts-settings-panel {
-    position: absolute;
-    bottom: 85px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 90%;
-    max-width: 400px;
-    padding: 1.5rem;
-    background: rgba(10, 10, 25, 0.7);
-    border: 1px solid rgba(100, 150, 255, 0.3);
-    border-radius: 15px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-    color: #e0e0e0;
-    z-index: 15;
-    transition: opacity 0.4s ease, transform 0.4s ease;
-    font-family: 'Courier New', Courier, monospace;
-}
-
-#tts-settings-panel.hidden {
-    opacity: 0;
-    pointer-events: none;
-    transform: translate(-50%, 10px);
-}
-
-#tts-settings-panel h3 {
-    margin-top: 0;
-    text-align: center;
-    color: #a7c5ff;
-    letter-spacing: 2px;
-}
-
-#tts-settings-panel .setting-item {
-    margin-bottom: 1rem;
-}
-
-#tts-settings-panel label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.7);
-}
-
-#tts-settings-panel select,
-#tts-settings-panel input[type="range"] {
-    width: 100%;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: white;
-    border-radius: 5px;
-    padding: 5px;
-    box-sizing: border-box;
-}
-
-#tts-settings-panel select {
-    padding: 8px;
-}
-
-#tts-settings-panel select:focus,
-#tts-settings-panel input[type="range"]:focus {
-    outline: none;
-    border-color: rgba(100, 150, 255, 0.8);
-}
-
-#close-tts-settings-btn {
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 1.5rem;
-    background: none;
-    border: none;
-    cursor: pointer;
-}
-#close-tts-settings-btn:hover {
-    color: white;
-}
-
-
-/* --- Content-Aware Visual Effects --- */
-#response-container::before,
-#response-container::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: 15px;
-    opacity: 0;
-    transition: opacity 1.5s ease-in-out; /* Slower fade in */
-    pointer-events: none;
-    z-index: 0; /* Behind text, but inside container */
-    background-blend-mode: screen; /* Blend light effects nicely */
-}
-
-/* --- Starfield Effect --- */
-@keyframes star-anim {
-  from { transform: translateY(0); }
-  to { transform: translateY(-1000px); }
-}
-
-#response-container.effect-stars::before {
-    height: 300%;
-    background:
-        radial-gradient(1px 1px at 50px 100px, white, transparent 100%),
-        radial-gradient(1px 1px at 150px 250px, white, transparent 100%),
-        radial-gradient(1px 1px at 250px 400px, white, transparent 100%),
-        radial-gradient(1px 1px at 320px 50px, white, transparent 100%),
-        radial-gradient(1px 1px at 400px 300px, white, transparent 100%);
-    background-repeat: repeat-y;
-    background-size: 100% 500px;
-    animation: star-anim 150s linear infinite; /* Slower */
-    opacity: 0.6; /* More subtle */
-}
-
-#response-container.effect-stars::after {
-    height: 300%;
-    background:
-        radial-gradient(1px 1px at 80px 180px, white, transparent 100%),
-        radial-gradient(1px 1px at 200px 320px, white, transparent 100%),
-        radial-gradient(1px 1px at 300px 450px, white, transparent 100%),
-        radial-gradient(1px 1px at 380px 200px, white, transparent 100%),
-        radial-gradient(1px 1px at 450px 10px, white, transparent 100%);
-    background-repeat: repeat-y;
-    background-size: 100% 500px;
-    animation: star-anim 200s linear infinite; /* Slower for parallax */
-    opacity: 0.6; /* More subtle */
-}
-
-/* --- Nebula Effect --- */
-@keyframes swirl {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
-
-#response-container.effect-nebula::before {
-    background:
-        radial-gradient(ellipse at 70% 30%, rgba(100, 80, 200, 0.3) 0%, transparent 55%),
-        radial-gradient(ellipse at 30% 80%, rgba(200, 80, 100, 0.3) 0%, transparent 55%),
-        radial-gradient(circle at 50% 50%, rgba(50, 150, 200, 0.25) 0%, transparent 45%);
-    background-size: 250% 250%; /* Larger size for softer gradients */
-    animation: swirl 40s ease-in-out infinite; /* Slower */
-    opacity: 0.7;
-}
-
-#response-container.effect-nebula::after {
-    opacity: 0;
-}
-
-/* --- Vortex Effect (Black Hole) --- */
-@keyframes vortex-swirl {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-
-@keyframes vortex-stars {
-    from { opacity: 1; transform: scale(1.5) rotate(0deg); } /* Start smaller */
-    to { opacity: 0; transform: scale(0.1) rotate(270deg); }
-}
-
-#response-container.effect-vortex::before {
-    /* Softer gradient for the event horizon */
-    background: radial-gradient(circle at center, transparent 35%, rgba(10, 0, 20, 0.85) 70%);
-    animation: vortex-swirl 60s linear infinite; /* Slower */
-    opacity: 0.9;
-}
-
-#response-container.effect-vortex::after {
-    /* Fewer, smaller stars being pulled in */
-    background: 
-        radial-gradient(1px 1px at 20% 50%, white, transparent),
-        radial-gradient(1px 1px at 80% 50%, white, transparent),
-        radial-gradient(1px 1px at 50% 75%, white, transparent);
-    animation: vortex-stars 9s ease-in infinite; /* Slower animation */
-    opacity: 0; /* Animation handles opacity */
-}
-
-
-#telemetry-ticker {
+#react-ui-container {
     position: absolute;
     top: 20px;
     left: 20px;
-    background: rgba(0, 0, 0, 0.3);
-    padding: 5px 10px;
-    border-radius: 4px;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 0.9rem;
-    color: #0f0;
-    text-shadow: 0 0 5px #0f0;
-    z-index: 5;
-    max-width: 400px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-#ccs-panel {
-    position: absolute;
-    bottom: 20px;
-    left: 20px;
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(0, 255, 0, 0.3);
-    border-radius: 8px;
-    padding: 10px;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 0.9rem;
-    color: #0f0;
-    display: grid;
-    grid-template-columns: 80px 1fr;
-    gap: 5px 10px;
-    width: 300px;
-    z-index: 5;
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
-}
-
-#ccs-panel span:first-child {
-    color: rgba(0, 255, 0, 0.6);
-    text-align: right;
-    font-weight: bold;
-}
-
-#ccs-panel .nominal {
-    color: #0f0;
-    text-shadow: 0 0 5px #0f0;
-    font-weight: bold;
-}
-
-#auto-focus-btn, #ping-btn {
-    grid-column: 1 / -1; /* Span all columns */
-    margin-top: 5px;
-    background: transparent;
-    border: 1px solid rgba(0, 255, 0, 0.5);
-    color: #0f0;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 0.9rem;
-    cursor: pointer;
-    padding: 4px;
-    width: 100%;
-    text-align: center;
-    transition: background-color 0.3s;
-    box-sizing: border-box;
-}
-
-#ping-btn {
-    margin-top: 2px;
-}
-
-#auto-focus-btn:hover, #ping-btn:hover {
-    background: rgba(0, 255, 0, 0.2);
-}
-
-/* --- Top Right Controls --- */
-#top-right-controls {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    z-index: 5;
-}
-
-.generation-btn {
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 8px;
-    color: #fff;
-    cursor: pointer;
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
-    transition: background-color 0.3s, border-color 0.3s;
-    padding: 8px 12px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 0.9rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    justify-content: flex-start;
-}
-
-
-.generation-btn:hover {
-    background: rgba(100, 150, 255, 0.2);
-    border-color: rgba(100, 150, 255, 0.8);
-}
-
-.generation-btn.active {
-    background: rgba(100, 150, 255, 0.3);
-    border-color: rgba(100, 150, 255, 0.9);
-}
-
-
-.generation-btn:disabled {
-    cursor: not-allowed;
-    background: rgba(50, 50, 50, 0.5);
-    color: #888;
-}
-
-.generation-btn svg {
-    transition: transform 1s ease-in-out;
-}
-
-.generation-btn.loading svg {
-    animation: spin 2s linear infinite;
-}
-
-#generation-container {
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 8px;
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
-    padding: 5px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
-
-#generation-container .generation-btn {
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 6px 10px;
-    font-size: 0.8rem;
-    letter-spacing: 0.5px;
-    text-transform: none;
-    justify-content: flex-start;
-}
-
-#generation-container .generation-btn:hover {
-     background: rgba(100, 150, 255, 0.2);
-     border-color: rgba(100, 150, 255, 0.8);
-}
-
-
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-
-/* --- Save Cosmos Modal --- */
-#save-modal {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 90%;
-    max-width: 500px;
-    padding: 2rem;
-    background: rgba(10, 10, 25, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 15px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-    color: #e0e0e0;
-    z-index: 23;
-    transition: opacity 0.4s ease, transform 0.4s ease;
-}
-
-#save-modal.hidden {
-    opacity: 0;
-    pointer-events: none;
-    transform: translate(-50%, -45%);
-}
-
-#save-modal h3 {
-    text-align: center;
-    color: #a7c5ff;
-    margin-top: 0;
-}
-
-#save-modal p {
-    text-align: center;
-    color: rgba(255, 255, 255, 0.7);
-    line-height: 1.5;
-    margin-bottom: 2rem;
-}
-
-#save-modal input[type="text"] {
-    width: 100%;
-    padding: 12px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 5px;
-    color: white;
-    font-size: 1rem;
-    margin-bottom: 1.5rem;
-    box-sizing: border-box;
-}
-
-#save-modal input[type="text"]:focus {
-    outline: none;
-    border-color: rgba(100, 150, 255, 0.8);
-}
-
-#save-modal .modal-actions {
-    display: flex;
-    justify-content: flex-end;
     gap: 10px;
+    pointer-events: auto;
 }
 
-#save-modal .modal-actions button {
-    background: rgba(100, 150, 255, 0.2);
-    border: 1px solid rgba(100, 150, 255, 0.8);
-    color: #fff;
-    padding: 8px 16px;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-    font-family: sans-serif;
-    font-size: 0.9rem;
+#basic-face-container {
+    width: 60px;
+    height: 60px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 50%;
+    border: 1px solid rgba(0, 25
+
+/* --- Mission Control Panel --- */
+.mission-control-panel {
+    width: 380px;
+    max-width: 90vw;
 }
 
-#save-modal .modal-actions button:hover {
-    background: rgba(100, 150, 255, 0.4);
-}
-
-#save-modal .modal-actions button[type="button"] {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.3);
-}
-
-#save-modal .modal-actions button[type="button"]:hover {
-    background: rgba(255, 255, 255, 0.2);
-}
-
-/* --- Saved Cosmos List --- */
-#saved-cosmos-container {
-    margin-top: 10px;
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 8px;
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
-    padding: 5px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
-
-#saved-cosmos-container h4 {
-    margin: 5px 5px 8px;
-    padding-bottom: 5px;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+.mission-control-panel h3 {
+    margin-top: 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    padding-bottom: 10px;
+}
+
+.no-mission {
     text-align: center;
+    padding: 20px 0;
 }
 
-.saved-cosmos-btn {
-    position: relative;
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 6px 30px 6px 10px; /* Space for delete button */
-    font-size: 0.8rem;
-    letter-spacing: 0.5px;
-    text-transform: none;
-    color: #fff;
-    cursor: pointer;
-    width: 100%;
-    text-align: left;
-    box-sizing: border-box;
-    transition: background-color 0.3s, border-color 0.3s;
-    border-radius: 4px;
+.no-mission p {
+    color: #aaa;
+    margin-bottom: 20px;
 }
 
-.saved-cosmos-btn:hover {
-    background: rgba(100, 150, 255, 0.2);
-    border-color: rgba(100, 150, 255, 0.8);
-}
-
-.delete-cosmos-btn {
-    position: absolute;
-    right: 5px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 20px;
-    height: 20px;
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.5);
-    cursor: pointer;
-    font-size: 1.2rem;
-    line-height: 1;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.delete-cosmos-btn:hover {
-    color: #ff8a80; /* A light red for delete action */
-}
-
-
-/* --- Mission Simulation Modal --- */
-#mission-modal {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 90%;
-    max-width: 500px;
-    padding: 2rem;
-    background: rgba(10, 10, 25, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 15px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-    color: #e0e0e0;
-    z-index: 22;
-    transition: opacity 0.4s ease, transform 0.4s ease;
-}
-
-#mission-modal.hidden {
-    opacity: 0;
-    pointer-events: none;
-    transform: translate(-50%, -45%);
-}
-
-#mission-modal h3 {
-    text-align: center;
-    color: #00ffff;
-    margin-top: 0;
-    text-transform: uppercase;
-}
-
-#mission-modal p {
-    text-align: center;
-    color: rgba(255, 255, 255, 0.7);
-    line-height: 1.5;
-    margin-bottom: 2rem;
-}
-
-#mission-modal .mission-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-}
-
-#mission-modal .mission-btn {
-    background: rgba(0, 255, 255, 0.1);
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    color: #fff;
-    padding: 12px;
+.no-mission .action-button {
+    background: #4a90e2;
+    padding: 10px 20px;
     border-radius: 5px;
-    cursor: pointer;
-    transition: background-color 0.3s, border-color 0.3s;
-    font-family: sans-serif;
-    font-size: 0.9rem;
-}
-
-#mission-modal .mission-btn:hover {
-    background: rgba(0, 255, 255, 0.2);
-    border-color: rgba(0, 255, 255, 0.7);
-}
-
-#close-mission-modal-btn {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background: none;
+    transition: background 0.3s;
     border: none;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 1.8rem;
-    cursor: pointer;
-    transition: color 0.3s;
-    line-height: 1;
-}
-
-#close-mission-modal-btn:hover {
     color: white;
-}
-
-
-/* --- OLTARIS Report Panel --- */
-#oltaris-report-panel {
-    position: absolute;
-    top: 50%;
-    right: 20px;
-    transform: translate(0, -50%);
-    width: 90%;
-    max-width: 450px;
-    background: rgba(10, 20, 35, 0.7);
-    border: 1px solid rgba(0, 255, 255, 0.2);
-    border-radius: 15px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-    color: #e0e0e0;
-    z-index: 25;
-    transition: opacity 0.4s ease, transform 0.4s ease;
-    padding: 1.5rem;
-    box-sizing: border-box;
-}
-
-#oltaris-report-panel.hidden {
-    opacity: 0;
-    pointer-events: none;
-    transform: translate(20px, -50%); /* Slide out to the right */
-}
-
-#close-oltaris-report-btn {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 1.8rem;
+    font-size: 1em;
     cursor: pointer;
-    transition: color 0.3s;
-    line-height: 1;
 }
 
-#close-oltaris-report-btn:hover {
-    color: white;
+.no-mission .action-button:hover {
+    background: #5aa1f2;
 }
 
-#oltaris-report-panel .assessment-report {
-    font-family: 'Courier New', Courier, monospace;
+.mission-status h4 {
+    margin: 0 0 15px 0;
+    color: #4a90e2;
 }
 
-#oltaris-report-panel h3 {
-    text-align: center;
-    color: #00ffff;
-    margin-top: 0;
-    margin-bottom: 1.5rem;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    border-bottom: 1px solid rgba(0, 255, 255, 0.3);
-    padding-bottom: 0.5rem;
+.mission-status ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
 }
 
-#oltaris-report-panel .assessment-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.25rem 1.5rem;
-    margin-bottom: 1.5rem;
+.mission-status li {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s;
 }
 
-#oltaris-report-panel .assessment-item {
-    background: rgba(0, 255, 255, 0.05);
-    padding: 0.75rem;
-    border-radius: 4px;
-    border-left: 3px solid #00ffff;
-    border-bottom: 1px solid rgba(0, 255, 255, 0.1);
-}
-
-#oltaris-report-panel .assessment-item[style*="grid-column"] {
+.mission-status li:last-child {
     border-bottom: none;
 }
 
-#oltaris-report-panel .assessment-item .label,
-#oltaris-report-panel .mission-log-section .label {
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 0.35rem;
-    display: block;
-    text-transform: uppercase;
-}
-
-#oltaris-report-panel .assessment-item .value,
-#oltaris-report-panel .mission-log-section .value {
-    font-size: 1.2rem;
-    color: #ffffff;
-    font-weight: bold;
-    word-wrap: break-word;
-    text-shadow: 0 0 5px rgba(0, 255, 255, 0.5); /* Add a subtle glow */
-}
-
-#oltaris-report-panel .assessment-item .unit {
-    font-size: 0.9rem;
-    margin-left: 0.35rem;
-    color: rgba(255, 255, 255, 0.7);
-}
-
-#oltaris-report-panel .mission-log-section {
-    border-top: 1px solid rgba(0, 255, 255, 0.3);
-    padding-top: 1rem;
-    margin-top: 1rem;
-}
-
-#oltaris-report-panel .mission-log-section h4 {
-    color: #00ffff;
-    text-align: center;
-    margin-top: 0;
-    margin-bottom: 1rem;
-    text-transform: uppercase;
-}
-
-#oltaris-report-panel .mission-status-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem;
-    margin-bottom: 1rem;
-    text-align: center;
-}
-
-#oltaris-report-panel .value.status-success {
-    color: #00ffff;
-    text-shadow: 0 0 8px #00ffff;
-}
-#oltaris-report-panel .value.status-loss {
-    color: #ffaa00;
-    text-shadow: 0 0 8px #ffaa00;
-}
-#oltaris-report-panel .value.status-failure {
-    color: #ff4444;
-    text-shadow: 0 0 8px #ff4444;
-}
-
-#oltaris-report-panel .assessment-summary {
-    border-top: 1px solid rgba(0, 255, 255, 0.15);
-    padding-top: 1rem;
-    line-height: 1.6;
-    font-size: 0.95rem;
-}
-
-#oltaris-report-panel .assessment-summary .label {
-    font-weight: bold;
-    color: #00ffff;
-    margin-bottom: 0.5rem;
-    display: block;
-}
-
-#oltaris-report-panel .assessment-summary p {
-    margin: 0;
-}
-
-
-/* --- Probe Report Panel --- */
-#probe-report-panel {
-    position: absolute;
-    top: 50%;
-    left: 20px;
-    transform: translate(0, -50%);
-    width: 90%;
-    max-width: 450px;
-    background: rgba(10, 30, 35, 0.7);
-    border: 1px solid rgba(77, 208, 225, 0.3);
-    border-radius: 15px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-    color: #e0e0e0;
-    z-index: 24;
-    transition: opacity 0.4s ease, transform 0.4s ease;
-    padding: 1.5rem;
-    box-sizing: border-box;
-    font-family: 'Courier New', Courier, monospace;
-}
-
-#probe-report-panel.hidden {
-    opacity: 0;
-    pointer-events: none;
-    transform: translate(-110%, -50%); /* Slide out to the left */
-}
-
-#probe-report-panel h3 {
-    text-align: center;
-    color: #4dd0e1;
-    margin-top: 0;
-    margin-bottom: 1.5rem;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    border-bottom: 1px solid rgba(77, 208, 225, 0.3);
-    padding-bottom: 0.5rem;
-}
-
-#probe-report-panel .probe-report-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-
-#probe-report-panel .probe-report-item {
-    background: rgba(77, 208, 225, 0.05);
-    padding: 0.75rem;
-    border-radius: 4px;
-    border-left: 3px solid #4dd0e1;
-}
-
-#probe-report-panel .probe-report-item .label {
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 0.35rem;
-    display: block;
-    text-transform: uppercase;
-}
-
-#probe-report-panel .probe-report-item .value {
-    font-size: 1.2rem;
-    color: #ffffff;
-    font-weight: bold;
-    text-shadow: 0 0 5px rgba(77, 208, 225, 0.5);
-}
-#probe-report-panel .probe-report-item .unit {
-    font-size: 0.9rem;
-    margin-left: 0.35rem;
-    color: rgba(255, 255, 255, 0.7);
-}
-
-#probe-report-panel .value.status-success { color: #4dd0e1; }
-#probe-report-panel .value.status-failure { color: #ff6b6b; }
-#probe-report-panel .value.status-anomaly { color: #ffd700; text-shadow: 0 0 8px #ffd700; }
-
-#probe-report-panel .probe-log-section {
-    border-top: 1px solid rgba(77, 208, 225, 0.2);
-    padding-top: 1rem;
-}
-
-#probe-report-panel .probe-log-section h4 {
-    color: #4dd0e1;
-    margin-top: 0;
-    margin-bottom: 1rem;
-}
-
-#probe-report-panel .probe-log-section p {
-    margin: 0;
-    line-height: 1.6;
-    font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.85);
-}
-
-#close-probe-report-btn {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 1.8rem;
-    cursor: pointer;
-    transition: color 0.3s;
-    line-height: 1;
-}
-
-#close-probe-report-btn:hover {
-    color: white;
-}
-
-
-@media (max-width: 900px) {
-    #ccs-panel {
-       display: none; /* Hide for simplicity on mobile */
-    }
-}
-
-@media (max-width: 500px) {
-    #mission-modal .mission-actions {
-        grid-template-columns: 1fr;
-    }
-}
+.mission-status .step-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    border-radius: 50%;
+    background: rgba(255, 255, 

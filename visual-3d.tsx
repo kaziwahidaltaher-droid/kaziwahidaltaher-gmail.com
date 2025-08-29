@@ -10,7 +10,7 @@
 import {LitElement, css, html} from 'lit';
 // FIX: Replaced manual DOM query with the `@query` decorator.
 import {customElement, property, query} from 'lit/decorators.js';
-import {Analyser} from './analyser';
+import {Analyser} from './analyser.ts';
 
 import * as THREE from 'three';
 import {EXRLoader} from 'three/addons/loaders/EXRLoader.js';
@@ -19,8 +19,8 @@ import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
 import {ShaderPass} from 'three/addons/postprocessing/ShaderPass.js';
 import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {FXAAShader} from 'three/addons/shaders/FXAAShader.js';
-import {fs as backdropFS, vs as backdropVS} from './backdrop-shader';
-import {vs as sphereVS} from './sphere-shader';
+import {fs as backdropFS, vs as backdropVS} from './backdrop-shader.tsx';
+import {vs as sphereVS} from './sphere-shader.tsx';
 
 /**
  * 3D live audio visual.

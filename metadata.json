@@ -1,14 +1,7 @@
 {
   "name": "AURELION \"An Audio AI Galaxy Simulation\"",
   "requestFramePermissions": [
-    "microphone",
-    "camera",
-    "display-capture",
-    "geolocation",
-    "bluetooth",
-    "clipboard-read",
-    "serial",
-    "usb"
+    "microphone"
   ],
   "description": ""
 }

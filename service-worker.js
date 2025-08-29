@@ -11,7 +11,7 @@
 
 // Use a descriptive and versioned cache name.
 // Increment the version number ('v1', 'v2', etc.) whenever you update the cached files.
-const CACHE_NAME = 'aurelion-engine-cache-v16-galaxy';
+const CACHE_NAME = 'aurelion-engine-cache-v17-galaxy';
 
 // A list of all the essential files (the "app shell") that need to be cached.
 const urlsToCache = [
@@ -58,50 +58,50 @@ self.addEventListener('activate', event => {
           }
         })
       );
-    }).then(() => self.clients.claim()) // Take control of all open clients
+    })
   );
 });
 
 /**
- * FETCH: Intercepts network requests and serves cached content.
+ * FETCH: Serves assets from the cache.
  *
- * This event is the core of the offline experience. We use different strategies
- * for different types of requests to optimize for speed and freshness.
+ * This event fires for every request the page makes.
+ * We implement a "cache-first" strategy:
+ * 1. Check if the request is in our cache.
+ * 2. If yes, serve the cached version.
+ * 3. If no, fetch it from the network, add it to the cache, and then serve it.
  */
 self.addEventListener('fetch', event => {
-  // We only handle GET requests.
-  if (event.request.method !== 'GET') {
-    return;
-  }
-
-  // --- Caching Strategy: Network First for HTML ---
-  // For the main HTML document, we always try to get the latest version from the
-  // network first. This ensures the user gets the latest app structure.
-  // If the network is unavailable, we fall back to the cached version.
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request)
-        .catch(() => {
-          console.log('[Service Worker] Network unavailable. Serving cached HTML.');
-          return caches.match('index.html');
-        })
-    );
-    return;
-  }
-
-  // --- Caching Strategy: Cache First for Assets ---
-  // For all other assets (CSS, JS, images, etc.), we serve from the cache
-  // immediately if available. This makes the app load incredibly fast on
-  // repeat visits. If it's not in the cache, we fetch it from the network.
   event.respondWith(
     caches.match(event.request)
-      .then(cachedResponse => {
-        // Return the cached response if it exists.
-        if (cachedResponse) {
-          return cachedResponse;
+      .then(response => {
+        // Cache hit - return response
+        if (response) {
+          return response;
         }
-        // Otherwise, fetch the resource from the network.
-        return fetch(event.request);
+
+        // Not in cache - fetch from network
+        return fetch(event.request).then(
+          response => {
+            // Check if we received a valid response
+            if (!response || response.status !== 200 || response.type !== 'basic') {
+              return response;
+            }
+
+            // IMPORTANT: Clone the response. A response is a stream
+            // and because we want the browser to consume the response
+            // as well as the cache consuming the response, we need
+            // to clone it so we have two streams.
+            const responseToCache = response.clone();
+
+            caches.open(CACHE_NAME)
+              .then(cache => {
+                cache.put(event.request, responseToCache);
+              });
+
+            return response;
+          }
+        );
       })
   );
 });
