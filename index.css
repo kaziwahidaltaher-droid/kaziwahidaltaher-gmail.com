@@ -918,6 +918,119 @@ canvas#bg {
 }
 
 
+/* --- Probe Report Panel --- */
+#probe-report-panel {
+    position: absolute;
+    top: 50%;
+    left: 20px;
+    transform: translate(0, -50%);
+    width: 90%;
+    max-width: 450px;
+    background: rgba(10, 30, 35, 0.7);
+    border: 1px solid rgba(77, 208, 225, 0.3);
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    color: #e0e0e0;
+    z-index: 24;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    padding: 1.5rem;
+    box-sizing: border-box;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+#probe-report-panel.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-110%, -50%); /* Slide out to the left */
+}
+
+#probe-report-panel h3 {
+    text-align: center;
+    color: #4dd0e1;
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid rgba(77, 208, 225, 0.3);
+    padding-bottom: 0.5rem;
+}
+
+#probe-report-panel .probe-report-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+#probe-report-panel .probe-report-item {
+    background: rgba(77, 208, 225, 0.05);
+    padding: 0.75rem;
+    border-radius: 4px;
+    border-left: 3px solid #4dd0e1;
+}
+
+#probe-report-panel .probe-report-item .label {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 0.35rem;
+    display: block;
+    text-transform: uppercase;
+}
+
+#probe-report-panel .probe-report-item .value {
+    font-size: 1.2rem;
+    color: #ffffff;
+    font-weight: bold;
+    text-shadow: 0 0 5px rgba(77, 208, 225, 0.5);
+}
+#probe-report-panel .probe-report-item .unit {
+    font-size: 0.9rem;
+    margin-left: 0.35rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+#probe-report-panel .value.status-success { color: #4dd0e1; }
+#probe-report-panel .value.status-failure { color: #ff6b6b; }
+#probe-report-panel .value.status-anomaly { color: #ffd700; text-shadow: 0 0 8px #ffd700; }
+
+#probe-report-panel .probe-log-section {
+    border-top: 1px solid rgba(77, 208, 225, 0.2);
+    padding-top: 1rem;
+}
+
+#probe-report-panel .probe-log-section h4 {
+    color: #4dd0e1;
+    margin-top: 0;
+    margin-bottom: 1rem;
+}
+
+#probe-report-panel .probe-log-section p {
+    margin: 0;
+    line-height: 1.6;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+#close-probe-report-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1.8rem;
+    cursor: pointer;
+    transition: color 0.3s;
+    line-height: 1;
+}
+
+#close-probe-report-btn:hover {
+    color: white;
+}
+
+
 @media (max-width: 900px) {
     #ccs-panel {
        display: none; /* Hide for simplicity on mobile */

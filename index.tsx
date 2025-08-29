@@ -1,12 +1,12 @@
 
 import * as THREE from 'three';
-import { OrbitControls } from 
-import { EffectComposer } from 
-import { RenderPass } from 
-import { UnrealBloomPass } from 
-import { AfterimagePass } from 
-import { SMAAPass } from 
-import { ShaderPass } from 
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { AfterimagePass } from 'three/examples/jsm/postprocessing/AfterimagePass.js';
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { GoogleGenAI, Type } from '@google/genai';
 import { vs as oltarisVS, fs as oltarisFS } from './oltaris-shader.tsx';
 import { vs as galaxyPointVS, fs as galaxyPointFS } from './galaxy-point-shaders.tsx';
@@ -61,6 +61,7 @@ const SHIELDING_FADE_DURATION = 1.0; // seconds
 // --- Probe Globals ---
 let probe: THREE.Mesh | null = null;
 let probeTarget: THREE.Vector3 | null = null;
+let probeData: { designation: string, target: string, objective: string } | null = null;
 let probeAnimation: {
     state: 'fading-in' | 'traveling' | 'fading-out';
     progress: number;
@@ -147,6 +148,8 @@ const cancelSaveBtn = document.getElementById('cancel-save-btn');
 
 // OLTARIS Report Panel
 const oltarisReportPanel = document.getElementById('oltaris-report-panel');
+const probeReportPanel = document.getElementById('probe-report-panel');
+
 
 // Environment Generation Buttons
 let generationButtons: HTMLButtonElement[] = [];
@@ -980,7 +983,8 @@ function animate() {
                 probe.position.copy(probeTarget);
                 probeAnimation.state = 'fading-out';
                 probeAnimation.progress = 0;
-                showSystemMessage(`PROBE: Mission complete. Telemetry received.`);
+                showSystemMessage(`PROBE: Mission complete. Analyzing telemetry...`);
+                generateAndShowProbeReport();
             }
         } else if (probeAnimation.state === 'fading-out') {
             probeAnimation.progress += delta / FADE_DURATION;
@@ -992,6 +996,7 @@ function animate() {
                 probe = null;
                 probeTarget = null;
                 probeAnimation = null;
+                probeData = null; // Clear probe data after it's gone
             }
         }
     }
@@ -1161,7 +1166,8 @@ function onMouseClick(event: MouseEvent) {
         missionModal?.contains(event.target as Node) ||
         saveModal?.contains(event.target as Node) ||
         reactRoot?.contains(event.target as Node) ||
-        oltarisReportPanel?.contains(event.target as Node)) {
+        oltarisReportPanel?.contains(event.target as Node) ||
+        probeReportPanel?.contains(event.target as Node)) {
         return;
     }
     
@@ -1190,6 +1196,7 @@ function onMouseClick(event: MouseEvent) {
     // If nothing was clicked, hide panels
     hideResponse();
     hideOltarisReport();
+    hideProbeReport();
     missionModal?.classList.add('hidden');
     if (!ttsSettingsPanel?.classList.contains('hidden')) {
         ttsSettingsPanel?.classList.add('hidden');
@@ -1508,7 +1515,8 @@ async function summonProbe() {
     showSystemMessage("Dispatching AI probe...");
 
     try {
-        const probeData = await fetchProbeDataFromAI();
+        const fetchedProbeData = await fetchProbeDataFromAI();
+        probeData = fetchedProbeData;
         const responseMessage = `PROBE ${probeData.designation} DISPATCHED.\nTARGET: ${probeData.target}\nOBJECTIVE: ${probeData.objective}`;
         showResponse(responseMessage);
 
@@ -1562,6 +1570,24 @@ async function summonProbe() {
 }
 
 /**
+ * After probe reaches destination, generates and shows a report.
+ */
+async function generateAndShowProbeReport() {
+    if (!probeData?.objective) {
+        console.error("No probe objective found to generate report.");
+        return;
+    }
+
+    try {
+        const report = await fetchProbeReportFromAI(probeData.objective);
+        displayProbeReport(report);
+    } catch (error) {
+        console.error("Failed to generate probe report:", error);
+        showSystemMessage("Probe telemetry corrupted. Report could not be generated.");
+    }
+}
+
+/**
  * Calls Gemini for a creative probe mission profile.
  */
 async function fetchProbeDataFromAI() {
@@ -1589,6 +1615,40 @@ async function fetchProbeDataFromAI() {
             responseSchema: responseSchema,
         }
     });
+    return JSON.parse(response.text);
+}
+
+/**
+ * Calls Gemini for a mission report based on the probe's objective.
+ */
+async function fetchProbeReportFromAI(objective: string) {
+    const prompt = `You are the analysis computer for a deep space probe. The probe has just completed its mission.
+    Mission Objective: "${objective}"
+    Current Environment: The probe is inside the '${currentGalaxyConfig.name}' cosmic structure.
+
+    Generate a plausible, fictional mission report based on the objective and environment. The report should sound technical but be brief.
+    Provide a mission status ('Success', 'Anomaly Detected', 'Data Corrupted', 'Partial Success'), a mission success percentage (0-100), and a short, technical mission log detailing the findings.
+    Respond with a JSON object following the specified schema.`;
+
+    const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+            missionStatus: { type: Type.STRING },
+            successRate: { type: Type.NUMBER },
+            reportLog: { type: Type.STRING }
+        },
+        required: ["missionStatus", "successRate", "reportLog"]
+    };
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: responseSchema,
+        }
+    });
+
     return JSON.parse(response.text);
 }
 
@@ -1910,6 +1970,14 @@ function hideOltarisReport() {
 }
 
 /**
+ * Hides the probe report panel.
+ */
+function hideProbeReport() {
+    probeReportPanel?.classList.add('hidden');
+}
+
+
+/**
  * Displays the mission assessment report in its dedicated panel.
  */
 function displayAssessmentReport(report: any) {
@@ -1975,6 +2043,48 @@ function displayAssessmentReport(report: any) {
     oltarisReportPanel.querySelector('#close-oltaris-report-btn')?.addEventListener('click', hideOltarisReport);
     oltarisReportPanel.classList.remove('hidden');
 }
+
+
+/**
+ * Displays the probe's mission report in its dedicated panel.
+ */
+function displayProbeReport(report: any) {
+    if (!probeReportPanel || !probeData) return;
+
+    const getStatusClass = (status: string) => {
+        if (!status) return '';
+        const lowerStatus = status.toLowerCase();
+        if (lowerStatus.includes('success')) return 'status-success';
+        if (lowerStatus.includes('anomaly')) return 'status-anomaly';
+        if (lowerStatus.includes('corrupted')) return 'status-failure';
+        return '';
+    };
+
+    probeReportPanel.innerHTML = `
+        <button id="close-probe-report-btn" aria-label="Close probe report">&times;</button>
+        <div class="probe-report-content">
+            <h3>Probe Report: ${probeData.designation}</h3>
+            <div class="probe-report-grid">
+                <div class="probe-report-item">
+                    <span class="label">Mission Status</span>
+                    <span class="value ${getStatusClass(report.missionStatus)}">${report.missionStatus || 'UNKNOWN'}</span>
+                </div>
+                <div class="probe-report-item">
+                    <span class="label">Success Rate</span>
+                    <span class="value">${report.successRate?.toFixed(1) || 'N/A'}<span class="unit">%</span></span>
+                </div>
+            </div>
+            <div class="probe-log-section">
+                <h4>Probe Log</h4>
+                <p>${report.reportLog}</p>
+            </div>
+        </div>
+    `;
+    
+    probeReportPanel.querySelector('#close-probe-report-btn')?.addEventListener('click', hideProbeReport);
+    probeReportPanel.classList.remove('hidden');
+}
+
 
 /**
  * Updates the telemetry ticker with a new message.
