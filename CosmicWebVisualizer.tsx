@@ -145,10 +145,14 @@ export class CosmicWebVisualizer {
     }
 
 
-    update(time: number, audioAnalyser: Analyser | null) {
+    update(time: number, audioAnalyser: Analyser | null, rotationY?: number) {
         if (!this.points.visible) return;
         this.material.uniforms.time.value = time;
-        // Audio reactivity logic can be added here if needed
+        
+        if (rotationY !== undefined) {
+            // Smoothly interpolate towards the target rotation
+            this.points.rotation.y = THREE.MathUtils.lerp(this.points.rotation.y, rotationY, 0.05);
+        }
     }
 
     onWindowResize() {

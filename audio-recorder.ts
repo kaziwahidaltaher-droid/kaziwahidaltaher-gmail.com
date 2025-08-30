@@ -4,13 +4,13 @@
 */
 import { EventEmitter } from './event-emitter.ts';
 
-const RECORDER_WORKLET_PATH = './audio-recorder-worklet.ts';
+const VAD_WORKLET_PATH = './audio-recorder-worklet.ts';
 
 /**
- * Manages microphone audio input, using a worklet to record audio on demand.
+ * Manages microphone audio input, using a VAD worklet to detect speech.
  * 
  * Events:
- * - `bufferReady`: Fired when recording stops, providing the audio buffer.
+ * - `speechEnded`: Fired when the user stops speaking, providing the audio buffer.
  * - `volume`: Fired continuously with the current input volume.
  * - `error`: Fired on error.
  */
@@ -18,7 +18,7 @@ export class AudioRecorder extends EventEmitter {
     private audioContext: AudioContext | null = null;
     private mediaStream: MediaStream | null = null;
     private sourceNode: MediaStreamAudioSourceNode | null = null;
-    private recorderNode: AudioWorkletNode | null = null;
+    private vadNode: AudioWorkletNode | null = null;
     private volumeAnalyser: AnalyserNode | null = null;
     private volumeDataArray: Float32Array | null = null;
     private volumeCheckInterval: number | null = null;
@@ -33,14 +33,16 @@ export class AudioRecorder extends EventEmitter {
                 noiseSuppression: true,
             }});
 
-            // Recorder pipeline
+            // VAD pipeline
             this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
-            await this.audioContext.audioWorklet.addModule(RECORDER_WORKLET_PATH);
-            this.recorderNode = new AudioWorkletNode(this.audioContext, 'recorder-worklet-processor');
+            await this.audioContext.audioWorklet.addModule(VAD_WORKLET_PATH);
+            this.vadNode = new AudioWorkletNode(this.audioContext, 'vad-worklet-processor', {
+                processorOptions: { sampleRate: this.audioContext.sampleRate }
+            });
 
-            this.recorderNode.port.onmessage = (event) => {
-                if (event.data.type === 'audioBuffer') {
-                    this.emit('bufferReady', event.data.buffer);
+            this.vadNode.port.onmessage = (event) => {
+                if (event.data.type === 'speechEnded') {
+                    this.emit('speechEnded', event.data.buffer);
                 }
             };
 
@@ -49,7 +51,7 @@ export class AudioRecorder extends EventEmitter {
             this.volumeAnalyser.fftSize = 256;
             this.volumeDataArray = new Float32Array(this.volumeAnalyser.frequencyBinCount);
             
-            this.sourceNode.connect(this.recorderNode);
+            this.sourceNode.connect(this.vadNode);
             this.sourceNode.connect(this.volumeAnalyser);
             
             this.startVolumeCheck();
@@ -70,14 +72,6 @@ export class AudioRecorder extends EventEmitter {
         }
         this.mediaStream = null;
         this.audioContext = null;
-    }
-
-    startRecording() {
-        this.recorderNode?.port.postMessage({ type: 'start' });
-    }
-
-    stopRecording() {
-        this.recorderNode?.port.postMessage({ type: 'stop' });
     }
 
     private startVolumeCheck() {

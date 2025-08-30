@@ -12,33 +12,31 @@ const ControlTray: React.FC = () => {
     const liveApi = useContext(LiveAPIContext);
     const recorderRef = useRef<AudioRecorder | null>(null);
     const [inputVolume, setInputVolume] = useState(0);
-    const [isRecording, setIsRecording] = useState(false);
-    const [isConnecting, setIsConnecting] = useState(false);
 
-    // Effect to manage the audio recorder instance based on connection status
+    // Effect to manage the audio recorder based on connection status
     useEffect(() => {
         if (!liveApi?.connected) {
             recorderRef.current?.stop();
             recorderRef.current = null;
             setInputVolume(0);
-            setIsRecording(false);
             return;
         }
 
-        const onBufferReady = (buffer: Float32Array) => {
+        const onSpeechEnded = (buffer: Float32Array) => {
             if (buffer.length === 0) return;
             // The API may require a non-empty text part.
-            const textPart = { text: ' ' };
+            const textPart = { text: ' ' }; 
             const audioPart = createAudioPart(buffer);
             liveApi.send([audioPart, textPart]);
         };
 
         const recorder = new AudioRecorder();
         recorderRef.current = recorder;
-        recorder.on('bufferReady', onBufferReady);
+        recorder.on('speechEnded', onSpeechEnded);
         recorder.on('volume', (vol) => setInputVolume(vol));
         recorder.start().catch(err => {
             console.error("Recorder start failed:", err);
+            // We can optionally disconnect or show an error state
             liveApi.disconnect();
         });
 
@@ -46,7 +44,9 @@ const ControlTray: React.FC = () => {
             recorder.stop();
             recorderRef.current = null;
         };
-    }, [liveApi, liveApi?.connected]);
+    }, [liveApi, liveApi?.connected]); // Depend on liveApi and its connected status
+
+    const [isConnecting, setIsConnecting] = useState(false);
 
     if (!liveApi) {
         return <footer className="control-tray-container" />;
@@ -69,20 +69,6 @@ const ControlTray: React.FC = () => {
         }
     };
     
-    const handleStartRecording = () => {
-        if (recorderRef.current && connected && !isRecording) {
-            recorderRef.current.startRecording();
-            setIsRecording(true);
-        }
-    };
-
-    const handleStopRecording = () => {
-        if (recorderRef.current && connected && isRecording) {
-            recorderRef.current.stopRecording();
-            setIsRecording(false);
-        }
-    };
-
     // A simple mic visualization with a pulsating ring
     const micVisual = (
          <div className="mic-indicator-container">
@@ -93,27 +79,13 @@ const ControlTray: React.FC = () => {
                     <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/>
                 </svg>
             </div>
-            <div className={cn("recording-dot", { "is-recording": isRecording })} />
+            <div className={cn("recording-dot", { "is-recording": connected })} />
         </div>
     );
     
     return (
         <footer className="control-tray-container">
             {micVisual}
-            
-            {connected && (
-                 <button 
-                    className={cn('record-btn', { 'is-recording': isRecording })}
-                    onMouseDown={handleStartRecording}
-                    onMouseUp={handleStopRecording}
-                    onTouchStart={handleStartRecording}
-                    onTouchEnd={handleStopRecording}
-                    aria-label={isRecording ? 'Recording audio' : 'Hold to record audio'}
-                >
-                    {isRecording ? 'RECORDING' : 'HOLD TO TALK'}
-                </button>
-            )}
-
             <button 
                 onClick={handleToggleConnection} 
                 disabled={isConnecting}

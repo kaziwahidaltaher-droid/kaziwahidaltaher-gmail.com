@@ -68,6 +68,7 @@ canvas#bg {
     letter-spacing: 1px;
     display: block;
     margin-top: 4px;
+    transition: font-size 0.3s ease;
 }
 
 .header-controls {
@@ -234,49 +235,6 @@ canvas#bg {
     box-shadow: none;
     transform: none;
 }
-
-.record-btn {
-    padding: 12px 24px;
-    font-size: 1.1em;
-    font-weight: bold;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: white;
-    background: #10b981; /* Green */
-    border: none;
-    border-radius: 30px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
-    -webkit-user-select: none; /* Safari */
-    -ms-user-select: none; /* IE 10+ */
-    user-select: none; /* Standard */
-}
-
-.record-btn:hover:not(.is-recording) {
-    background: #12d495;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
-}
-
-.record-btn.is-recording {
-    background: #ef4444; /* Red */
-    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.5);
-    animation: pulse-red 1.5s infinite;
-}
-
-@keyframes pulse-red {
-    0% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.05);
-    }
-    100% {
-        transform: scale(1);
-    }
-}
-
 /* Mic Indicator */
 .mic-indicator-container {
     position: relative;
@@ -911,6 +869,220 @@ canvas#bg {
     opacity: 0.7;
 }
 
+/* --- Exoplanet Discovery Panel --- */
+.exoplanet-panel-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+}
+.exoplanet-panel {
+    background: rgba(15, 30, 50, 0.9);
+    border: 1px solid rgba(0, 192, 255, 0.3);
+    border-radius: 10px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.6);
+    width: 90%;
+    max-width: 420px;
+    color: #E0E0E0;
+    font-family: sans-serif;
+}
+.exoplanet-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(0, 192, 255, 0.2);
+}
+.exoplanet-header h3 {
+    margin: 0;
+    font-size: 1.3em;
+    color: #00c0ff;
+}
+.panel-close-btn {
+    background: none;
+    border: none;
+    color: #9cb3d9;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s, transform 0.2s;
+}
+.panel-close-btn:hover {
+    color: #ffffff;
+    transform: rotate(90deg);
+}
+.exoplanet-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+.planet-designation {
+    font-size: 1.8em;
+    font-weight: bold;
+    color: #fff;
+    margin: 0;
+    text-align: center;
+    text-shadow: 0 0 10px rgba(0, 192, 255, 0.7);
+}
+.planet-summary {
+    font-size: 0.95em;
+    color: #b0c4de;
+    line-height: 1.6;
+    text-align: center;
+    margin: -10px 0 10px 0;
+    border-bottom: 1px solid rgba(0, 192, 255, 0.1);
+    padding-bottom: 20px;
+}
+.planet-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 15px;
+}
+.stat-item {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 12px;
+    border-radius: 6px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.stat-item label {
+    font-size: 0.75em;
+    color: #9cb3d9;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.stat-item span {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #fff;
+}
+.stat-bar-container {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+.stat-bar-label, .stat-bar-value {
+    font-size: 0.8em;
+    color: #9cb3d9;
+}
+.stat-bar-track {
+    width: 100%;
+    height: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 5px;
+    border: 1px solid rgba(0, 192, 255, 0.2);
+    overflow: hidden;
+}
+.stat-bar-fill {
+    height: 100%;
+    transition: width 0.5s ease-in-out;
+}
+
+/* --- Satellite Data Panel --- */
+.satellite-data-panel {
+    position: absolute;
+    top: 80px;
+    right: 20px;
+    width: 320px;
+    max-width: 90vw;
+    background: rgba(10, 25, 41, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 192, 255, 0.3);
+    border-radius: 8px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+    transition: transform 0.4s ease-in-out, opacity 0.4s ease-in-out;
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 180px);
+}
+.satellite-data-panel.closed {
+    transform: translateX(calc(100% + 40px));
+    opacity: 0;
+    pointer-events: none;
+}
+.satellite-data-panel-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+}
+.satellite-image-container {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.satellite-image-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 6px;
+}
+.satellite-metadata-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+.satellite-metadata-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: rgba(0,0,0,0.2);
+    padding: 8px;
+    border-radius: 4px;
+}
+.satellite-metadata-item label {
+    font-size: 0.75em;
+    color: #9cb3d9;
+    text-transform: uppercase;
+}
+.satellite-metadata-item span {
+    font-size: 0.9em;
+    font-family: monospace;
+    color: #E0E0E0;
+    word-wrap: break-word;
+}
+.satellite-fetch-btn {
+    background: #3b82f6;
+    border: none;
+    border-radius: 5px;
+    color: white;
+    cursor: pointer;
+    font-size: 0.9em;
+    padding: 10px;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+.satellite-fetch-btn:hover:not(:disabled) {
+    background: #4a90e2;
+    transform: translateY(-1px);
+}
+.satellite-fetch-btn:disabled {
+    background: #555;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
 /* --- Responsive Design --- */
 @media (max-width: 768px) {
     .main-header {
@@ -918,6 +1090,9 @@ canvas#bg {
     }
     .main-header h1 {
         font-size: 1.4em;
+    }
+    .main-header .sub-title {
+        font-size: 0.45em;
     }
     .header-controls {
         gap: 10px;
@@ -950,7 +1125,7 @@ canvas#bg {
         left: 10px;
     }
 
-    .telemetry-panel {
+    .telemetry-panel, .satellite-data-panel {
         top: auto;
         bottom: 90px;
         right: 10px;
@@ -958,26 +1133,59 @@ canvas#bg {
         width: auto;
         max-width: none;
         transform: translateY(0);
+        max-height: 40vh;
     }
-    .telemetry-panel.closed {
+    .telemetry-panel.closed, .satellite-data-panel.closed {
         transform: translateY(calc(100% + 100px));
+    }
+    .telemetry-body, .satellite-data-panel-body {
+        padding: 12px;
+        gap: 16px;
     }
     .metrics-grid {
         grid-template-columns: 1fr;
     }
+    .metric-value {
+        font-size: 1.1em;
+    }
+
 
     .voice-panel,
     .modules-panel,
-    .artistic-lens-panel {
+    .artistic-lens-panel,
+    .exoplanet-panel {
         padding: 16px;
         max-height: 80vh;
+        width: calc(100% - 20px);
     }
     .voice-panel h3,
     .modules-panel h3,
-    .artistic-lens-panel h3 {
+    .artistic-lens-panel h3,
+    .exoplanet-panel h3 {
         font-size: 1.2em;
     }
+    .voice-panel li button,
+    .modules-panel li button {
+        padding: 12px;
+    }
+    .voice-panel li button h4,
+    .modules-panel li button h4 {
+        font-size: 1.0em;
+        margin-bottom: 6px;
+    }
+    .voice-panel li button p,
+    .modules-panel li button p {
+        font-size: 0.85em;
+        line-height: 1.4;
+    }
 
+    .artistic-lens-panel .panel-description {
+        font-size: 0.9em;
+        margin-bottom: 16px;
+    }
+    .artistic-lens-panel h4 {
+        font-size: 0.8em;
+    }
     .art-actions {
         flex-direction: column;
     }
@@ -988,5 +1196,9 @@ canvas#bg {
 
     .style-grid {
         grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    }
+
+    .planet-stats-grid {
+        grid-template-columns: 1fr;
     }
 }

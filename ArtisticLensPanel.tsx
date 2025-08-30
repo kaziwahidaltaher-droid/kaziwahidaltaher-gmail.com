@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-import React, { useState, useEffect, useRef, memo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ArbitraryStyleTransferNetwork } from '@magenta/image';
 import cn from 'classnames';
 
@@ -155,4 +155,4 @@ const ArtisticLensPanel = ({ isOpen, onClose }) => {
   );
 };
 
-export default memo(ArtisticLensPanel);
+export default ArtisticLensPanel;

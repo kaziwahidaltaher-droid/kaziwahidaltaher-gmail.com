@@ -187,7 +187,7 @@ export const vs = `
 
     // --- LOD: Size Attenuation & Culling ---
     float distanceFade = 1.0 - smoothstep(uCameraFarPlane * 0.70, uCameraFarPlane * 0.95, vDistToCam);
-    float sizeAtDistance = (400.0 / vDistToCam) * distanceFade;
+    float sizeAtDistance = (300.0 / vDistToCam) * distanceFade;
     float audioSizeMultiplier = 1.0 + uOverallAudio * 0.75;
     
     // Final point size is determined by LOD, audio, and its position in the filament structure.

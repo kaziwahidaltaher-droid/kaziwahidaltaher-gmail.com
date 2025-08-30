@@ -7,9 +7,6 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { Lensflare, LensflareElement } from 'three/addons/objects/Lensflare.js';
-import { WarpShader } from './warp-shader.tsx';
 
 import { Analyser } from './analyser.ts';
 import { SignalSphereVisualizer } from './SignalSphereVisualizer.tsx';
@@ -19,6 +16,11 @@ import { GameOfLifeVisualizer } from './GameOfLifeVisualizer.tsx';
 import { CosmicWebVisualizer } from './CosmicWebVisualizer.tsx';
 import { QuantumFoamVisualizer } from './QuantumFoamVisualizer.tsx';
 import { StarfieldVisualizer } from './StarfieldVisualizer.tsx';
+import { CelestialBodyVisualizer } from './CelestialBodyVisualizer.tsx';
+import { ProbeVisualizer } from './ProbeVisualizer.tsx';
+import { ShieldingVisualizer } from './ShieldingVisualizer.tsx';
+import { PhantomVisualizer } from './PhantomVisualizer.tsx';
+import { SatelliteVisualizer } from './SatelliteVisualizer.tsx';
 
 
 interface FadingVisualizer {
@@ -28,39 +30,36 @@ interface FadingVisualizer {
     setFade(fade: number): void;
 }
 
-type Visualizer = SignalSphereVisualizer | SunVisualizer | NebulaVisualizer | GameOfLifeVisualizer | CosmicWebVisualizer | QuantumFoamVisualizer;
+type Visualizer = SignalSphereVisualizer | SunVisualizer | NebulaVisualizer | GameOfLifeVisualizer | CosmicWebVisualizer | QuantumFoamVisualizer | CelestialBodyVisualizer | ProbeVisualizer | ShieldingVisualizer | PhantomVisualizer | SatelliteVisualizer;
+
+type FlareData = {
+    position: THREE.Vector3;
+    intensity: number;
+    radius: number;
+};
 
 export class AurelionEngine {
     private renderer: THREE.WebGLRenderer;
     private scene: THREE.Scene;
     private camera: THREE.PerspectiveCamera;
     private composer: EffectComposer;
-    private bloomPass: UnrealBloomPass;
-    private lensflare: Lensflare;
-    private light: THREE.PointLight;
-    private sunColor = new THREE.Color(0xffcc88);
     private controls: OrbitControls;
     private clock: THREE.Clock;
-    private warpPass: ShaderPass;
+    private starfield: StarfieldVisualizer;
 
     private visualizers: Record<string, FadingVisualizer> = {};
     private activeVisualizerKey: string | null = null;
-    private starfield: StarfieldVisualizer;
-    private audioAnalyser: Analyser | null = null;
-    
-    // Transition state
-    private isTransitioning = false;
-    private transitionFromKey: string | null = null;
-    private transitionToKey: string | null = null;
-    private transitionDuration = 1.5; // in seconds
+    private fadingOutVisualizerKey: string | null = null;
+    private transitionDuration = 1.0; // in seconds
     private transitionTime = 0;
     
     private navigationTarget: THREE.Vector3 | null = null;
     private isNavigating = false;
     private isTouring = false;
-    private isAutoRotating = false;
     private tourTime = 0;
     private aiState = 'idle';
+    private targetGalaxyRotationY = 0;
+
 
     // Animation state for AI-driven effects
     private heartbeatTime = 0;
@@ -83,33 +82,29 @@ export class AurelionEngine {
 
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
-        this.controls.dampingFactor = 0.05;
-        this.controls.screenSpacePanning = false;
-        this.controls.autoRotate = false;
-        this.controls.autoRotateSpeed = 0.2;
-        this.controls.zoomSpeed = 0.8; // Smoother zoom
+        this.controls.dampingFactor = 0.03; // Increased inertia for smoother coasting
+        this.controls.screenSpacePanning = true; // More intuitive panning
+        this.controls.minDistance = 1;
+        this.controls.maxDistance = 8000;
+        this.controls.zoomSpeed = 1.2; // Faster, more responsive zoom
+        this.controls.panSpeed = 1.1; // Slightly faster panning
         
         this.clock = new THREE.Clock();
 
+        this.starfield = new StarfieldVisualizer(this.scene);
+
         // Post-processing
         const renderPass = new RenderPass(this.scene, this.camera);
-        this.bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-        this.bloomPass.threshold = 0;
-        this.bloomPass.strength = 1.0;
-        this.bloomPass.radius = 0.5;
+        const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+        bloomPass.threshold = 0;
+        bloomPass.strength = 1.0;
+        bloomPass.radius = 0.5;
 
         this.composer = new EffectComposer(this.renderer);
         this.composer.addPass(renderPass);
-        this.composer.addPass(this.bloomPass);
+        this.composer.addPass(bloomPass);
 
-        // Add the custom warp pass for transitions
-        this.warpPass = new ShaderPass(WarpShader);
-        this.warpPass.enabled = false;
-        this.composer.addPass(this.warpPass);
-
-        this.initLensflare();
         this.initVisualizers();
-        this.starfield = new StarfieldVisualizer(this.scene);
     }
 
     private initVisualizers() {
@@ -119,56 +114,42 @@ export class AurelionEngine {
         this.visualizers['nebula_weaver'] = new NebulaVisualizer(this.scene);
         this.visualizers['game_of_life'] = new GameOfLifeVisualizer(this.scene);
         this.visualizers['quantum_foam'] = new QuantumFoamVisualizer(this.scene);
-    }
-
-    private initLensflare() {
-        this.light = new THREE.PointLight(this.sunColor, 1.2, 4000);
-        this.light.position.set(0, 0, 0); // At the sun's position
-        this.scene.add(this.light);
-
-        const textureLoader = new THREE.TextureLoader();
-        const textureFlare0 = textureLoader.load('https://threejs.org/examples/textures/lensflare/lensflare0.png');
-        const textureFlare3 = textureLoader.load('https://threejs.org/examples/textures/lensflare/lensflare3.png');
-        
-        this.lensflare = new Lensflare();
-        this.lensflare.addElement(new LensflareElement(textureFlare0, 600, 0, this.light.color));
-        this.lensflare.addElement(new LensflareElement(textureFlare3, 60, 0.6));
-        this.lensflare.addElement(new LensflareElement(textureFlare3, 70, 0.7));
-        this.lensflare.addElement(new LensflareElement(textureFlare3, 120, 0.9));
-        this.lensflare.addElement(new LensflareElement(textureFlare3, 70, 1.0));
-
-        this.light.add(this.lensflare);
+        this.visualizers['celestial_bodies'] = new CelestialBodyVisualizer(this.scene);
+        this.visualizers['probe'] = new ProbeVisualizer(this.scene);
+        this.visualizers['shielding'] = new ShieldingVisualizer(this.scene);
+        this.visualizers['phantom'] = new PhantomVisualizer(this.scene);
+        this.visualizers['satellite_stream'] = new SatelliteVisualizer(this.scene);
     }
 
     public init() {
         window.addEventListener('resize', this.onWindowResize.bind(this));
         (window as any).setActiveModule = this.setActiveModule.bind(this);
         (window as any).setVisualConfig = this.setVisualConfig.bind(this);
-        (window as any).toggleAutoRotate = this.toggleAutoRotate.bind(this);
+        (window as any).setGalaxyRotation = this.setGalaxyRotation.bind(this);
+        (window as any).toggleStarfield = this.toggleStarfield.bind(this);
+        (window as any).updateSatelliteTexture = this.updateSatelliteTexture.bind(this);
         window.addEventListener('navigatetopoint', this.handleNavigate.bind(this) as EventListener);
         window.addEventListener('aistatechange', this.handleAiStateChange.bind(this) as EventListener);
         window.addEventListener('toggletour', this.handleToggleTour.bind(this) as EventListener);
-        
-        this.initAudio().catch(err => {
-            console.error("Failed to initialize microphone:", err);
-        });
+        window.addEventListener('startsurvey', this.handleStartSurvey.bind(this) as EventListener);
         
         this.setActiveModule('cosmic_web');
-        this.updateZoomLimits('cosmic_web');
         this.animate();
     }
-
-    private async initAudio() {
-        if (this.audioAnalyser) return;
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const audioContext = new AudioContext();
-            const source = audioContext.createMediaStreamSource(stream);
-            this.audioAnalyser = new Analyser(source);
-        } catch (err) {
-            console.error("Could not get microphone input.", err);
-            throw err;
+    
+    public updateSatelliteTexture(imageUrl: string) {
+        const visualizer = this.visualizers['satellite_stream'] as SatelliteVisualizer;
+        if (visualizer) {
+            visualizer.updateTexture(imageUrl);
         }
+    }
+
+    public toggleStarfield() {
+        this.starfield.setVisible(!this.starfield.points.visible);
+    }
+
+    public setGalaxyRotation(rotationY: number) {
+        this.targetGalaxyRotationY = rotationY;
     }
 
     private handleAiStateChange(event: CustomEvent) {
@@ -206,20 +187,34 @@ export class AurelionEngine {
             this.scene.background = new THREE.Color(config.ambientColor);
         }
         if (config.sunColor) {
-            this.sunColor.set(config.sunColor);
             const sun = this.visualizers['living_star'] as SunVisualizer;
             if (sun) {
-                sun.setColor(this.sunColor);
-            }
-            if (this.light) {
-                this.light.color.set(this.sunColor);
+                sun.setColor(new THREE.Color(config.sunColor));
             }
         }
     }
-    
-    private dispatchModuleReadyEvent(key: string) {
+
+    public setActiveModule(key: string) {
+        if (this.activeVisualizerKey === key) {
+            return;
+        }
+
+        if (this.activeVisualizerKey) {
+             if (this.fadingOutVisualizerKey) {
+                this.visualizers[this.fadingOutVisualizerKey].setVisible(false);
+            }
+            this.fadingOutVisualizerKey = this.activeVisualizerKey;
+            this.transitionTime = 0;
+        }
+
+        this.activeVisualizerKey = key;
+        const activeVisualizer = this.visualizers[key];
+        activeVisualizer.setVisible(true);
+        activeVisualizer.setFade(this.fadingOutVisualizerKey ? 0 : 1);
+
+
         if (key === 'cosmic_web') {
-            const cosmicWeb = this.visualizers['cosmic_web'] as CosmicWebVisualizer;
+            const cosmicWeb = activeVisualizer as CosmicWebVisualizer;
             window.dispatchEvent(new CustomEvent('galaxyready', {
                 detail: {
                     points: cosmicWeb.getPoints(),
@@ -236,131 +231,42 @@ export class AurelionEngine {
         }
     }
 
-    public setActiveModule(key: string) {
-        if (this.isTransitioning || this.activeVisualizerKey === key) {
-            return;
-        }
-        
-        this.updateZoomLimits(key);
-
-        // --- Initial Load Case (no transition) ---
-        if (!this.activeVisualizerKey) {
-            this.activeVisualizerKey = key;
-            const visualizer = this.visualizers[key];
-            visualizer.setVisible(true);
-            visualizer.setFade(1.0);
-            this.dispatchModuleReadyEvent(key);
-            return;
-        }
-
-        // --- Standard Transition Case ---
-        this.transitionFromKey = this.activeVisualizerKey;
-        this.transitionToKey = key;
-        this.isTransitioning = true;
-        this.transitionTime = 0;
-
-        // The 'active' key is now the 'to' key for update logic
-        this.activeVisualizerKey = key;
-        
-        // Prepare the 'to' visualizer but keep it faded out
-        const toVisualizer = this.visualizers[this.transitionToKey];
-        toVisualizer.setVisible(true);
-        toVisualizer.setFade(0);
-
-        this.warpPass.enabled = true;
-        
-        this.dispatchModuleReadyEvent(key);
-    }
-
-    private updateZoomLimits(moduleKey: string) {
-        switch (moduleKey) {
-            case 'cosmic_web':
-                this.controls.minDistance = 100;
-                this.controls.maxDistance = 8000;
-                break;
-            case 'living_star':
-                this.controls.minDistance = 180; // Keep camera outside the sun's surface (radius 150)
-                this.controls.maxDistance = 3000;
-                break;
-            case 'signal_sphere':
-                this.controls.minDistance = 5;
-                this.controls.maxDistance = 2000;
-                break;
-            case 'nebula_weaver':
-                this.controls.minDistance = 100;
-                this.controls.maxDistance = 5000;
-                break;
-            case 'game_of_life':
-                this.controls.minDistance = 100;
-                this.controls.maxDistance = 2000;
-                break;
-            case 'quantum_foam':
-                // This is a 2D shader, so zoom doesn't do much. Constrain it.
-                this.controls.minDistance = 500;
-                this.controls.maxDistance = 1500;
-                break;
-            default:
-                this.controls.minDistance = 1;
-                this.controls.maxDistance = 8000;
-                break;
-        }
-        this.controls.update();
-    }
-
     private handleNavigate(event: CustomEvent) {
         const target = event.detail.target as THREE.Vector3;
-        let stateChanged = false;
-
-        if (this.isTouring) {
-            this.isTouring = false;
-            stateChanged = true;
-        }
-        if (this.isAutoRotating) {
-            this.isAutoRotating = false;
-            this.controls.autoRotate = false;
-            stateChanged = true;
-        }
-        
+        if (this.isTouring) this.isTouring = false; // Stop tour on navigation
         this.navigationTarget = target.clone();
         this.isNavigating = true;
         this.controls.enabled = false; // Disable controls during auto-navigation
-
-        if (stateChanged) {
-            window.dispatchEvent(new CustomEvent('cameracontrolchange', {
-                detail: { isTouring: this.isTouring, isAutoRotating: this.isAutoRotating }
-            }));
-        }
     }
     
-    public toggleAutoRotate() {
-        this.isAutoRotating = !this.isAutoRotating;
-        this.controls.autoRotate = this.isAutoRotating;
-    
-        if (this.isAutoRotating && this.isTouring) {
-            this.isTouring = false;
-        }
-        this.controls.enabled = !this.isTouring && !this.isNavigating;
-    
-        window.dispatchEvent(new CustomEvent('cameracontrolchange', {
-            detail: { isTouring: this.isTouring, isAutoRotating: this.isAutoRotating }
-        }));
-    }
-
     private handleToggleTour() {
         this.isTouring = !this.isTouring;
         if (this.isTouring) {
             this.isNavigating = false;
             this.navigationTarget = null;
-            if (this.isAutoRotating) {
-                this.isAutoRotating = false;
-                this.controls.autoRotate = false;
-            }
         }
         this.controls.enabled = !this.isTouring;
-        
-        window.dispatchEvent(new CustomEvent('cameracontrolchange', {
-            detail: { isTouring: this.isTouring, isAutoRotating: this.isAutoRotating }
-        }));
+    }
+
+    private handleStartSurvey() {
+        const cosmicWeb = this.visualizers['cosmic_web'] as CosmicWebVisualizer;
+        if (cosmicWeb && cosmicWeb.getPoints()) {
+            const points = cosmicWeb.getPoints();
+            const numPoints = points.length / 3;
+            const randomIndex = Math.floor(Math.random() * numPoints);
+            const target = new THREE.Vector3(
+                points[randomIndex * 3],
+                points[randomIndex * 3 + 1],
+                points[randomIndex * 3 + 2]
+            );
+            
+            const offset = new THREE.Vector3().subVectors(target, this.camera.position).normalize().multiplyScalar(200);
+            const finalTarget = new THREE.Vector3().subVectors(target, offset);
+            
+            this.navigationTarget = finalTarget;
+            this.isNavigating = true;
+            this.controls.enabled = false;
+        }
     }
 
     private onWindowResize() {
@@ -372,95 +278,67 @@ export class AurelionEngine {
         Object.values(this.visualizers).forEach(v => v.onWindowResize());
         this.starfield.onWindowResize();
     }
-
-    private updateAnimations(elapsedTime: number) {
-        // Update Heartbeat
-        if (this.aiState === 'idle') {
-            this.heartbeatTime += this.clock.getDelta();
-        }
-        const heartbeatRadius = (this.heartbeatTime % 5) * 600; // Pulse travels outwards every 5s
-        
-        // Update Flare
-        let flareIntensity = 0;
-        if (this.flare.active) {
-            const flareAge = elapsedTime - this.flare.startTime;
-            const flareDuration = 3.0; // seconds
-            if (flareAge > flareDuration) {
-                this.flare.active = false;
-            } else {
-                // A quick rise and slower fall
-                const progress = flareAge / flareDuration;
-                flareIntensity = this.flare.maxIntensity * Math.sin(progress * Math.PI);
-            }
-        }
-        
-        // Update uniforms on the active cosmic web visualizer
-        if (this.activeVisualizerKey === 'cosmic_web') {
-            const cosmicWeb = this.visualizers['cosmic_web'] as CosmicWebVisualizer;
-            cosmicWeb.updateAIState({
-                state: this.aiState,
-                heartbeatRadius: heartbeatRadius,
-                flarePosition: this.flare.position,
-                flareIntensity: flareIntensity,
-                flareRadius: this.flare.radius
-            });
-        }
-    }
     
-    private updateVisualizer(visualizer: FadingVisualizer, elapsedTime: number, audioAnalyser: Analyser | null) {
+    private updateVisualizer(visualizer: FadingVisualizer, elapsedTime: number, audioAnalyser: Analyser | null, aiState: string, heartbeat: { x: number, y: number }, flare: FlareData) {
         if (visualizer instanceof SunVisualizer) {
-            visualizer.update(elapsedTime, audioAnalyser, this.aiState);
+            visualizer.update(elapsedTime, audioAnalyser, aiState);
+        } else if (visualizer instanceof PhantomVisualizer) {
+            visualizer.update(elapsedTime, audioAnalyser, aiState);
+        } else if (visualizer instanceof CosmicWebVisualizer) {
+            visualizer.updateAIState({
+                state: aiState,
+                heartbeatRadius: heartbeat.x,
+                flarePosition: flare.position,
+                flareIntensity: flare.intensity,
+                flareRadius: flare.radius,
+            });
+            visualizer.update(elapsedTime, audioAnalyser, this.targetGalaxyRotationY);
         } else if (visualizer instanceof GameOfLifeVisualizer) {
             visualizer.update();
-        } else if (visualizer instanceof CosmicWebVisualizer ||
-                   visualizer instanceof SignalSphereVisualizer ||
-                   visualizer instanceof NebulaVisualizer ||
-                   visualizer instanceof QuantumFoamVisualizer) {
+        } else if (
+            visualizer instanceof SignalSphereVisualizer ||
+            visualizer instanceof NebulaVisualizer ||
+            visualizer instanceof QuantumFoamVisualizer ||
+            visualizer instanceof CelestialBodyVisualizer ||
+            visualizer instanceof ProbeVisualizer ||
+            visualizer instanceof ShieldingVisualizer ||
+            visualizer instanceof SatelliteVisualizer
+        ) {
             visualizer.update(elapsedTime, audioAnalyser);
         }
     }
 
-    private updatePostProcessing() {
-        if (this.bloomPass) {
-            let targetStrength = 1.0;
-            let targetRadius = 0.5;
-
-            switch(this.activeVisualizerKey) {
-                case 'cosmic_web':
-                    targetStrength = 1.2;
-                    targetRadius = 0.6;
-                    break;
-                case 'living_star':
-                    targetStrength = 0.8;
-                    targetRadius = 0.7;
-                    break;
-                case 'signal_sphere':
-                    targetStrength = 1.5;
-                    targetRadius = 0.4;
-                    break;
-            }
-            this.bloomPass.strength = THREE.MathUtils.lerp(this.bloomPass.strength, targetStrength, 0.1);
-            this.bloomPass.radius = THREE.MathUtils.lerp(this.bloomPass.radius, targetRadius, 0.1);
-        }
-        
-        if (this.lensflare) {
-            const isSunModuleActive = this.activeVisualizerKey === 'living_star';
-            const isTransitioningToOrFromSun = this.isTransitioning && (this.transitionFromKey === 'living_star' || this.transitionToKey === 'living_star');
-            this.lensflare.visible = isSunModuleActive || isTransitioningToOrFromSun;
-        }
-    }
 
     private animate() {
         requestAnimationFrame(this.animate.bind(this));
         const delta = this.clock.getDelta();
         const elapsedTime = this.clock.getElapsedTime();
-        
-        if (this.audioAnalyser) {
-            this.audioAnalyser.update();
-        }
-        this.starfield.update(elapsedTime, this.audioAnalyser);
 
-        this.updateAnimations(elapsedTime);
+        this.starfield.update(elapsedTime, null);
+        
+        // --- Calculate AI-driven state once per frame ---
+        if (this.aiState === 'idle') {
+            this.heartbeatTime += delta;
+        }
+        const heartbeat = { x: (this.heartbeatTime % 5) * 600, y: 400 };
+
+        let flareIntensity = 0;
+        if (this.flare.active) {
+            const flareAge = elapsedTime - this.flare.startTime;
+            const flareDuration = 3.0;
+            if (flareAge > flareDuration) {
+                this.flare.active = false;
+            } else {
+                const progress = flareAge / flareDuration;
+                flareIntensity = this.flare.maxIntensity * Math.sin(progress * Math.PI);
+            }
+        }
+        const flareData = {
+            position: this.flare.position,
+            intensity: flareIntensity,
+            radius: this.flare.radius
+        };
+
 
         if (this.isNavigating && this.navigationTarget) {
             this.camera.position.lerp(this.navigationTarget, 0.05);
@@ -489,47 +367,29 @@ export class AurelionEngine {
         }
 
         // Handle transition fading and updates
-        if (this.isTransitioning) {
+        if (this.fadingOutVisualizerKey) {
             this.transitionTime += delta;
             const progress = Math.min(this.transitionTime / this.transitionDuration, 1.0);
-    
-            // A 0 -> 1 -> 0 curve for the warp effect intensity
-            const warpProgress = Math.sin(progress * Math.PI);
-            this.warpPass.uniforms.uProgress.value = warpProgress;
-    
-            const fromVisualizer = this.transitionFromKey ? this.visualizers[this.transitionFromKey] : null;
-            const toVisualizer = this.transitionToKey ? this.visualizers[this.transitionToKey] : null;
-    
-            if (fromVisualizer) {
-                // Fade out the old visualizer in the first half of the transition
-                fromVisualizer.setFade(1.0 - Math.min(progress * 2, 1.0));
-                this.updateVisualizer(fromVisualizer, elapsedTime, this.audioAnalyser);
-            }
-    
-            if (toVisualizer) {
-                // Fade in the new visualizer in the second half
-                toVisualizer.setFade(Math.max(0, (progress - 0.5) * 2));
-                this.updateVisualizer(toVisualizer, elapsedTime, this.audioAnalyser);
-            }
+
+            const fadingOutVisualizer = this.visualizers[this.fadingOutVisualizerKey];
+            const activeVisualizer = this.visualizers[this.activeVisualizerKey!];
+
+            fadingOutVisualizer.setFade(1.0 - progress);
+            activeVisualizer.setFade(progress);
             
+            // Update both during transition
+            this.updateVisualizer(fadingOutVisualizer, elapsedTime, null, this.aiState, heartbeat, flareData);
+            this.updateVisualizer(activeVisualizer, elapsedTime, null, this.aiState, heartbeat, flareData);
+
             if (progress >= 1.0) {
-                if (fromVisualizer) {
-                    fromVisualizer.setVisible(false);
-                }
-                if (toVisualizer) {
-                    toVisualizer.setFade(1.0);
-                }
-                this.isTransitioning = false;
-                this.transitionFromKey = null;
-                this.transitionToKey = null;
-                this.warpPass.enabled = false;
-                this.warpPass.uniforms.uProgress.value = 0.0;
+                fadingOutVisualizer.setVisible(false);
+                activeVisualizer.setFade(1.0); // Ensure it's fully opaque
+                this.fadingOutVisualizerKey = null;
             }
-    
         } else if (this.activeVisualizerKey) {
             // Normal update when not transitioning
             const visualizer = this.visualizers[this.activeVisualizerKey];
-            this.updateVisualizer(visualizer, elapsedTime, this.audioAnalyser);
+            this.updateVisualizer(visualizer, elapsedTime, null, this.aiState, heartbeat, flareData);
         }
         
         const cameraDirection = new THREE.Vector3();
@@ -542,7 +402,6 @@ export class AurelionEngine {
             }
         }));
 
-        this.updatePostProcessing();
         this.composer.render();
     }
 }

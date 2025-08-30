@@ -8,6 +8,10 @@ import { Minimap } from './Minimap.tsx';
 import { TelemetryPanel } from './TelemetryPanel.tsx';
 import { VoiceProfileSelector } from './VoiceProfileSelector.tsx';
 import * as THREE from 'three';
+import { GoogleGenAI, Type } from '@google/genai';
+import ExoplanetDiscoveryPanel from './ExoplanetDiscoveryPanel.tsx';
+import { SatelliteDataPanel } from './SatelliteDataPanel.tsx';
+
 
 // --- Type Definitions ---
 type CameraData = {
@@ -20,23 +24,27 @@ type GalaxyData = {
 };
 
 // --- The UI Panel for selecting modules ---
-const ModulesPanel = ({ isOpen, onClose }) => {
+const ModulesPanel = ({ isOpen, onClose, onModuleSelect }) => {
     if (!isOpen) return null;
 
     const handleSelect = (moduleName) => {
-        if ((window as any).setActiveModule) {
-            (window as any).setActiveModule(moduleName);
-        }
+        onModuleSelect(moduleName);
         onClose();
     };
 
     const modules = [
         { id: 'cosmic_web', name: 'Cosmic Web', description: 'The default large-scale structure simulation.' },
+        { id: 'exoplanet_survey', name: 'Exoplanet Survey', description: 'Scan the cosmic web for undiscovered worlds using AI analysis.' },
+        { id: 'satellite_stream', name: 'Satellite Data Stream', description: 'View a live feed from the DSCOVR satellite monitoring Earth.' },
         { id: 'quantum_foam', name: 'Quantum Foam', description: 'A visualization of spacetime at the Planck scale.' },
         { id: 'signal_sphere', name: 'Signal Sphere', description: 'A celestial body reacting to cosmic transmissions.' },
         { id: 'living_star', name: 'Living Star', description: 'A central star pulsing with energy.' },
         { id: 'nebula_weaver', name: 'Nebula Weaver', description: 'Procedural, volumetric gas clouds.' },
+        { id: 'celestial_bodies', name: 'Celestial Bodies', description: 'A small planetary system with an orbiting moon.' },
         { id: 'game_of_life', name: 'Game of Life', description: 'A cellular automaton devised by John Conway.' },
+        { id: 'probe', name: 'Aurelion Probe', description: 'A lone probe exploring the cosmic void.' },
+        { id: 'shielding', name: 'Energy Shielding', description: 'Concentric spheres of protective energy.' },
+        { id: 'phantom', name: 'Oltaris, The Living Anomaly', description: 'A sentient, crystalline anomaly that morphs and pulses with the AI\'s consciousness.' },
     ];
 
     return (
@@ -62,20 +70,32 @@ const ModulesPanel = ({ isOpen, onClose }) => {
 };
 
 // --- New: Top Right Controls ---
-const TopRightControls = ({ isTelemetryOpen, onToggleTelemetry, onToggleArtLens, isTouring, onToggleTour, isAutoRotating, onToggleAutoRotate }) => {
+const TopRightControls = ({ isTelemetryOpen, onToggleTelemetry, onToggleArtLens, isTouring, onToggleTour, activeModuleId, onStartSurvey }) => {
+
     const handleTogglePhantom = () => {
         if ((window as any).togglePhantom) {
             (window as any).togglePhantom();
         }
     };
 
+    const isSurveyMode = activeModuleId === 'exoplanet_survey';
+
+    const handleActionClick = () => {
+        if (isSurveyMode) {
+            onStartSurvey();
+        } else {
+            onToggleTour();
+        }
+    };
+    
+    const actionButtonLabel = isSurveyMode ? "Start Survey" : (isTouring ? "Pause Tour" : "Start Tour");
+
     return (
         <div id="top-right-controls-react">
-             <button onClick={onToggleAutoRotate} className={cn('generation-btn', {toggled: isAutoRotating})} aria-label={isAutoRotating ? "Pause Rotation" : "Start Auto Rotation"}>
-                <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#FFFFFF"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/></svg>
-            </button>
-             <button onClick={onToggleTour} className={cn('generation-btn', {toggled: isTouring})} aria-label={isTouring ? "Pause Tour" : "Start Tour"}>
-                {isTouring ? (
+             <button onClick={handleActionClick} className={cn('generation-btn', {toggled: isTouring && !isSurveyMode})} aria-label={actionButtonLabel}>
+                {isSurveyMode ? (
+                     <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#FFFFFF"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                ) : isTouring ? (
                     <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#FFFFFF"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
                 ) : (
                     <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#FFFFFF"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M8 5v14l11-7L8 5z"/></svg>
@@ -122,13 +142,24 @@ export function App() {
   const [isModulesPanelOpen, setIsModulesPanelOpen] = useState(false);
   const [isVoicePanelOpen, setIsVoicePanelOpen] = useState(false);
   const [isTouring, setIsTouring] = useState(false);
-  const [isAutoRotating, setIsAutoRotating] = useState(false);
   const [currentAIState, setCurrentAIState] = useState('idle');
+  const [currentRotation, setCurrentRotation] = useState(0);
   const [cameraData, setCameraData] = useState<CameraData | null>(null);
   const [galaxyData, setGalaxyData] = useState<GalaxyData>({ points: null, bounds: null });
   
   const [voiceProfiles, setVoiceProfiles] = useState<any[]>([]);
   const [activePersonalityModule, setActivePersonalityModule] = useState<any>(null);
+  
+  const targetRotationRef = useRef(0);
+  const lastFrameTime = useRef(performance.now());
+
+  // --- New State ---
+  const [activeModuleId, setActiveModuleId] = useState('cosmic_web');
+  const [isDiscoveryPanelOpen, setIsDiscoveryPanelOpen] = useState(false);
+  const [discoveredPlanet, setDiscoveredPlanet] = useState(null);
+  const [isSatellitePanelOpen, setIsSatellitePanelOpen] = useState(false);
+  const [latestEarthImage, setLatestEarthImage] = useState<string | null>(null);
+
 
   useEffect(() => {
     const loadAndSetDefaultProfile = async () => {
@@ -166,46 +197,176 @@ export function App() {
   });
 
   useEffect(() => {
-    const handleStateChange = (e: CustomEvent) => setCurrentAIState(e.detail.state);
-    const handleCameraUpdate = (e: CustomEvent) => setCameraData({ position: e.detail.position, direction: e.detail.direction });
-    const handleGalaxyReady = (e: CustomEvent) => setGalaxyData({ points: e.detail.points, bounds: e.detail.bounds });
-    const handleCameraControlChange = (e: CustomEvent) => {
-        if (e.detail) {
-            setIsTouring(e.detail.isTouring);
-            setIsAutoRotating(e.detail.isAutoRotating);
-        }
+    const handleStateChange = (e: CustomEvent) => {
+        setCurrentAIState(e.detail.state);
+    };
+    const handleCameraUpdate = (e: CustomEvent) => {
+        setCameraData({ position: e.detail.position, direction: e.detail.direction });
+    };
+    const handleGalaxyReady = (e: CustomEvent) => {
+        setGalaxyData({ points: e.detail.points, bounds: e.detail.bounds });
     };
 
     window.addEventListener('aistatechange', handleStateChange as EventListener);
     window.addEventListener('cameraupdate', handleCameraUpdate as EventListener);
     window.addEventListener('galaxyready', handleGalaxyReady as EventListener);
-    window.addEventListener('cameracontrolchange', handleCameraControlChange as EventListener);
 
     return () => {
         window.removeEventListener('aistatechange', handleStateChange as EventListener);
         window.removeEventListener('cameraupdate', handleCameraUpdate as EventListener);
         window.removeEventListener('galaxyready', handleGalaxyReady as EventListener);
-        window.removeEventListener('cameracontrolchange', handleCameraControlChange as EventListener);
     };
   }, []);
+
+  // Effect for combined smooth rotation animation
+  useEffect(() => {
+      let animationFrameId: number;
+      const animateRotation = (now: number) => {
+          const delta = (now - lastFrameTime.current) / 1000; // time in seconds
+          lastFrameTime.current = now;
+          
+          // Add a very slow constant rotation to the target
+          targetRotationRef.current += 0.05 * delta;
+
+          // Smoothly interpolate the current rotation state towards the target
+          setCurrentRotation(prevRotation => {
+              const newRotation = THREE.MathUtils.lerp(prevRotation, targetRotationRef.current, 0.05);
+              // Snap to target if very close to prevent endless small updates
+              if (Math.abs(targetRotationRef.current - newRotation) < 0.00001) {
+                  return targetRotationRef.current;
+              }
+              return newRotation;
+          });
+
+          animationFrameId = requestAnimationFrame(animateRotation);
+      };
+      animationFrameId = requestAnimationFrame(animateRotation);
+      
+      return () => {
+          cancelAnimationFrame(animationFrameId);
+      };
+  }, []);
+
+  useEffect(() => {
+    if ((window as any).setGalaxyRotation) {
+        (window as any).setGalaxyRotation(currentRotation);
+    }
+  }, [currentRotation]);
+
+  // Effect to send new satellite image to the engine
+  useEffect(() => {
+    if (latestEarthImage && (window as any).updateSatelliteTexture) {
+        (window as any).updateSatelliteTexture(latestEarthImage);
+    }
+  }, [latestEarthImage]);
   
   const handleNavigate = (target: THREE.Vector3) => {
+    // Dispatch navigation event
+    if (isTouring) setIsTouring(false);
     window.dispatchEvent(new CustomEvent('navigatetopoint', { detail: { target } }));
+
+    // Calculate rotation and update state
+    if (cameraData) {
+        const navigationVector = new THREE.Vector3().subVectors(target, cameraData.position);
+        navigationVector.y = 0; // Project onto XZ plane for horizontal rotation
+        if (navigationVector.lengthSq() === 0) return; // Avoid issues if target is directly above/below
+        navigationVector.normalize();
+
+        const cameraDirection = cameraData.direction.clone();
+        cameraDirection.y = 0; // Project onto XZ plane
+        if (cameraDirection.lengthSq() === 0) return; // Avoid issues if camera looks straight up/down
+        cameraDirection.normalize();
+
+        // 'right' is perpendicular to camera direction on the XZ plane.
+        const right = new THREE.Vector3().crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0)).normalize();
+        
+        // Dot product to see how much of navigation is in the 'right' direction
+        const rightAmount = navigationVector.dot(right);
+
+        // Rotation around Y axis. Navigating left (negative rightAmount) should cause a counter-clockwise (positive) rotation.
+        // Increased sensitivity for a more responsive effect.
+        const rotationAmount = -rightAmount * 0.5; 
+        targetRotationRef.current += rotationAmount;
+    }
   };
 
   const handleToggleTour = () => {
+    setIsTouring(prev => !prev);
     window.dispatchEvent(new CustomEvent('toggletour'));
-  };
-
-  const handleToggleAutoRotate = () => {
-    if ((window as any).toggleAutoRotate) {
-        (window as any).toggleAutoRotate();
-    }
   };
 
   const handleSelectProfile = (profile: any) => {
     setActivePersonalityModule(profile);
     setIsVoicePanelOpen(false);
+  };
+  
+  const handleModuleSelect = (moduleId: string) => {
+    setActiveModuleId(moduleId);
+    setIsSatellitePanelOpen(moduleId === 'satellite_stream');
+    
+    if ((window as any).setActiveModule) {
+        // The exoplanet survey uses the cosmic web as its backdrop.
+        const visualModule = moduleId === 'exoplanet_survey' ? 'cosmic_web' : moduleId;
+        (window as any).setActiveModule(visualModule);
+    }
+  };
+
+  const fetchExoplanetData = async () => {
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: "You are AURELION, an advanced AI for cosmological analysis. You have just finished analyzing photometric data from a distant star. Generate a report for a fictional but plausible exoplanet discovery. The star is a G-type main-sequence star. Make the data sound interesting and ensure the numbers are plausible for the planet type.",
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        designation: { type: Type.STRING, description: "A plausible astronomical designation, e.g., 'AURL-24b' or 'Kepler-186f'." },
+                        planetType: { type: Type.STRING, description: "e.g., 'Super-Earth', 'Hot Jupiter', 'Gas Giant', 'Terrestrial World'." },
+                        orbitalPeriod: { type: Type.NUMBER, description: "The orbital period in Earth days." },
+                        radius: { type: Type.NUMBER, description: "The planet's radius in multiples of Earth's radius." },
+                        habitabilityIndex: { type: Type.NUMBER, description: "A score from 0.0 to 1.0 indicating potential for life." },
+                        summary: { type: Type.STRING, description: "A brief, one-sentence, engaging summary of the discovery." }
+                    },
+                    required: ["designation", "planetType", "orbitalPeriod", "radius", "habitabilityIndex", "summary"]
+                },
+            },
+        });
+        
+        const jsonStr = response.text.trim();
+        const data = JSON.parse(jsonStr);
+        return data;
+
+    } catch (error) {
+        console.error("Error fetching exoplanet data:", error);
+        return {
+            designation: 'ERR-01a',
+            planetType: 'Data Anomaly',
+            orbitalPeriod: 0,
+            radius: 0,
+            habitabilityIndex: 0,
+            summary: 'Failed to retrieve data from the deep space network. Please try again.'
+        };
+    }
+  };
+  
+  const handleStartSurvey = async () => {
+    if (isTouring) handleToggleTour(); // Stop tour if it's running
+    
+    // 1. Tell the engine to find and fly to a star
+    window.dispatchEvent(new CustomEvent('startsurvey'));
+    
+    // 2. Set AI state to thinking
+    window.dispatchEvent(new CustomEvent('aistatechange', { detail: { state: 'thinking' }}));
+
+    // 3. Fetch data from Gemini
+    const planetData = await fetchExoplanetData();
+    
+    // 4. Update state and show results
+    setDiscoveredPlanet(planetData);
+    setIsDiscoveryPanelOpen(true);
+    window.dispatchEvent(new CustomEvent('aistatechange', { detail: { state: 'idle' }}));
   };
 
   return (
@@ -237,8 +398,8 @@ export function App() {
             onToggleArtLens={() => setIsArtLensOpen(true)}
             isTouring={isTouring}
             onToggleTour={handleToggleTour}
-            isAutoRotating={isAutoRotating}
-            onToggleAutoRotate={handleToggleAutoRotate}
+            activeModuleId={activeModuleId}
+            onStartSurvey={handleStartSurvey}
           />
 
           <TelemetryPanel
@@ -248,6 +409,11 @@ export function App() {
             totalUsage={liveApi.totalUsage}
             messageCount={liveApi.messages.length}
             isConnected={liveApi.connected}
+          />
+          
+          <SatelliteDataPanel
+            isOpen={isSatellitePanelOpen}
+            onNewImage={setLatestEarthImage}
           />
           
           <div className={cn('basic-face-container', currentAIState)}>
@@ -275,6 +441,7 @@ export function App() {
           <ModulesPanel
             isOpen={isModulesPanelOpen}
             onClose={() => setIsModulesPanelOpen(false)}
+            onModuleSelect={handleModuleSelect}
           />
           <VoiceProfileSelector
             isOpen={isVoicePanelOpen}
@@ -286,6 +453,11 @@ export function App() {
           <ArtisticLensPanel
             isOpen={isArtLensOpen}
             onClose={() => setIsArtLensOpen(false)}
+          />
+          <ExoplanetDiscoveryPanel
+            isOpen={isDiscoveryPanelOpen}
+            onClose={() => setIsDiscoveryPanelOpen(false)}
+            planetData={discoveredPlanet}
           />
 
       </LiveAPIContext.Provider>

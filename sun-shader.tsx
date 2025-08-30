@@ -29,7 +29,6 @@ uniform float time;
 uniform float aiState; // 0: idle, 1: thinking, 2: speaking
 uniform float audioLevel; // Bass
 uniform float uAudioMids; // Mids
-uniform float uAudioHighs; // Highs
 uniform vec3 uColor; // Base color from AI
 uniform float uFade;
 
@@ -114,27 +113,14 @@ void main() {
     }
 
     // --- Audio Reactivity ---
-    // Bass pulses the overall brightness with a warm, reddish glow.
-    float bassPulse = audioLevel * 2.5;
-    vec3 bassColor = vec3(1.0, 0.5, 0.2);
-    finalColor += bassColor * bassPulse * 0.8;
-    
-    // Mids create swirling, bright energy patterns.
-    float midPattern = snoise(vUv * 6.0 + time * 0.3);
-    midPattern = pow(max(0.0, midPattern), 4.0); // Create sharper patterns
-    vec3 midColor = vec3(1.0, 0.9, 0.6);
-    finalColor += midColor * midPattern * uAudioMids * 2.0;
-
-    // Highs create sharp, crackling sparks of energy.
-    float highSparkle = snoise(vUv * 40.0 + time * 8.0);
-    highSparkle = pow(max(0.0, highSparkle), 15.0); // Very sharp peaks
-    vec3 highColor = vec3(1.0, 1.0, 1.0); // Bright white sparks
-    finalColor += highColor * highSparkle * uAudioHighs * 3.0;
+    float audioPulse = audioLevel * 1.5; // Pulse brightness with bass
+    vec3 midGlowColor = vec3(0.8, 1.0, 1.0); // Cyan glow for mids
+    finalColor = mix(finalColor, midGlowColor, uAudioMids * 0.3); // Mix in mid-range glow
 
     // --- Brightness & Rim ---
-    float baseBrightness = 1.0 + aiState * 0.3;
-    float speakingPulse = (aiState > 1.5) ? (0.5 * sin(time * 10.0) + 0.5) : 0.0;
-    finalColor *= baseBrightness + speakingPulse * 0.3;
+    float baseBrightness = 1.2 + aiState * 0.4;
+    float speakingPulse = (aiState > 1.5) ? (0.5 * sin(time * 10.0) + 0.5) : 0.0; // Pulse when speaking
+    finalColor *= baseBrightness + speakingPulse * 0.5 + audioPulse;
     
     float rim = 1.0 - clamp(dot(normalize(vViewPosition), vNormal), 0.0, 1.0);
     finalColor += pow(rim, 2.0) * 1.5; // Wider, brighter corona
