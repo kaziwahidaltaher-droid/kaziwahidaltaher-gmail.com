@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-// FIX: Add necessary type definitions for AudioWorklet context.
+// Add necessary type definitions for AudioWorklet context.
 interface AudioWorkletProcessor {
   readonly port: MessagePort;
   process(
@@ -21,70 +21,38 @@ declare function registerProcessor(
   processorCtor: new (options?: any) => AudioWorkletProcessor
 ): void;
 
-// Simple VAD parameters
-const ENERGY_THRESHOLD = 0.005; // RMS threshold to start/stop detection
-const SILENCE_DURATION_MS = 700; // How long to wait before considering speech ended
-const MIN_SPEECH_DURATION_MS = 300; // Minimum duration of speech to be considered valid
-
 /**
- * An AudioWorkletProcessor that performs simple Voice Activity Detection (VAD).
- * It buffers audio when speech is detected and sends the complete buffer
- * back to the main thread when speech ends.
+ * An AudioWorkletProcessor that buffers audio when instructed and sends the
+ * complete buffer back to the main thread upon request. This is used for
+ * push-to-talk recording.
  */
-class VADWorkletProcessor extends AudioWorkletProcessor {
+class RecorderWorkletProcessor extends AudioWorkletProcessor {
   private buffer: Float32Array[] = [];
-  private isSpeaking = false;
-  private silenceCounter = 0;
-  private speechCounter = 0;
-  private silenceThreshold = 0;
-  private speechThreshold = 0;
+  private isRecording = false;
 
-  constructor(options?: any) {
+  constructor() {
     super();
-    // Calculate thresholds in terms of process() calls
-    const sampleRate = options?.processorOptions?.sampleRate || 16000;
-    this.silenceThreshold = (SILENCE_DURATION_MS / 1000) * sampleRate / 128; // 128 samples per frame
-    this.speechThreshold = (MIN_SPEECH_DURATION_MS / 1000) * sampleRate / 128;
+    this.port.onmessage = (event) => {
+      if (event.data.type === 'start') {
+        this.isRecording = true;
+        this.buffer = []; // Start new buffer
+      } else if (event.data.type === 'stop') {
+        if (this.isRecording) {
+          this.isRecording = false;
+          const completeBuffer = this.concatenateBuffer();
+          this.port.postMessage({ type: 'audioBuffer', buffer: completeBuffer });
+        }
+      }
+    };
   }
 
   process(inputs: Float32Array[][]): boolean {
-    const input = inputs[0];
-    if (input && input.length > 0) {
-      const channelData = input[0];
-      
-      // Simple energy calculation (RMS)
-      let sum = 0;
-      for (let i = 0; i < channelData.length; i++) {
-        sum += channelData[i] * channelData[i];
-      }
-      const rms = Math.sqrt(sum / channelData.length);
-
-      if (rms > ENERGY_THRESHOLD) {
-        this.silenceCounter = 0;
-        if (!this.isSpeaking) {
-            this.isSpeaking = true;
-            this.buffer = []; // Start new buffer
-        }
-        this.speechCounter++;
+    if (this.isRecording) {
+      const input = inputs[0];
+      if (input && input.length > 0) {
+        const channelData = input[0];
+        // Buffer the audio data
         this.buffer.push(channelData.slice());
-      } else {
-        if (this.isSpeaking) {
-          this.silenceCounter++;
-          if (this.silenceCounter > this.silenceThreshold) {
-            if (this.speechCounter > this.speechThreshold) {
-              // End of speech detected, send buffer
-              const completeBuffer = this.concatenateBuffer();
-              this.port.postMessage({ type: 'speechEnded', buffer: completeBuffer });
-            }
-            // Reset for next utterance
-            this.isSpeaking = false;
-            this.buffer = [];
-            this.speechCounter = 0;
-          } else {
-            // Still in potential silence, keep buffering
-            this.buffer.push(channelData.slice());
-          }
-        }
       }
     }
     return true; // Keep processor alive
@@ -105,4 +73,4 @@ class VADWorkletProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('vad-worklet-processor', VADWorkletProcessor);
+registerProcessor('recorder-worklet-processor', RecorderWorkletProcessor);

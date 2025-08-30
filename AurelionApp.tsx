@@ -1,9 +1,23 @@
-import React, { useState, useEffect, StrictMode, useContext, useRef } from 'react';
+import React, { useState, useEffect, StrictMode, useRef } from 'react';
 import BasicFace from './BasicFace.tsx';
 import ControlTray from './ControlTray.tsx';
-import { useLiveApi, LiveAPIContext, Message, UsageStats } from './use-live-api.tsx';
+import { useLiveApi, LiveAPIContext, Message } from './use-live-api.tsx';
 import cn from 'classnames';
 import ArtisticLensPanel from './ArtisticLensPanel.tsx';
+import { Minimap } from './Minimap.tsx';
+import { TelemetryPanel } from './TelemetryPanel.tsx';
+import { VoiceProfileSelector } from './VoiceProfileSelector.tsx';
+import * as THREE from 'three';
+
+// --- Type Definitions ---
+type CameraData = {
+    position: THREE.Vector3;
+    direction: THREE.Vector3;
+};
+type GalaxyData = {
+    points: Float32Array | null;
+    bounds: THREE.Box3 | null;
+};
 
 // --- The UI Panel for selecting modules ---
 const ModulesPanel = ({ isOpen, onClose }) => {
@@ -48,7 +62,7 @@ const ModulesPanel = ({ isOpen, onClose }) => {
 };
 
 // --- New: Top Right Controls ---
-const TopRightControls = ({ isTelemetryOpen, onToggleTelemetry, onToggleArtLens }) => {
+const TopRightControls = ({ isTelemetryOpen, onToggleTelemetry, onToggleArtLens, isTouring, onToggleTour, isAutoRotating, onToggleAutoRotate }) => {
     const handleTogglePhantom = () => {
         if ((window as any).togglePhantom) {
             (window as any).togglePhantom();
@@ -57,6 +71,16 @@ const TopRightControls = ({ isTelemetryOpen, onToggleTelemetry, onToggleArtLens 
 
     return (
         <div id="top-right-controls-react">
+             <button onClick={onToggleAutoRotate} className={cn('generation-btn', {toggled: isAutoRotating})} aria-label={isAutoRotating ? "Pause Rotation" : "Start Auto Rotation"}>
+                <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#FFFFFF"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/></svg>
+            </button>
+             <button onClick={onToggleTour} className={cn('generation-btn', {toggled: isTouring})} aria-label={isTouring ? "Pause Tour" : "Start Tour"}>
+                {isTouring ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#FFFFFF"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#FFFFFF"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M8 5v14l11-7L8 5z"/></svg>
+                )}
+            </button>
             <button onClick={handleTogglePhantom} className="generation-btn" aria-label="Toggle Phantom">
                 <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#FFFFFF"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-2.5-9c.83 0 1.5-.67 1.5-1.5S10.33 8 9.5 8 8 8.67 8 9.5s.67 1.5 1.5 1.5zm5 0c.83 0 1.5-.67 1.5-1.5S15.33 8 14.5 8s-1.5.67-1.5 1.5.67 1.5 1.5 1.5zm-5 4c1.48 0 2.75-.81 3.45-2H8.05c.7 1.19 1.97 2 3.45 2z"/></svg>
             </button>
@@ -66,29 +90,6 @@ const TopRightControls = ({ isTelemetryOpen, onToggleTelemetry, onToggleArtLens 
              <button onClick={onToggleTelemetry} className={cn('generation-btn', {toggled: isTelemetryOpen})} aria-label="Toggle Telemetry">
                 <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#FFFFFF"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>
             </button>
-        </div>
-    );
-};
-
-// --- Telemetry Panel ---
-const TelemetryPanel = ({ lastUsage, totalUsage }) => {
-    return (
-        <div className="telemetry-panel">
-            <h4>Last Turn</h4>
-            {lastUsage ? (
-                <ul>
-                    <li><span>Prompt:</span> {lastUsage.promptTokens} tokens</li>
-                    <li><span>Response:</span> {lastUsage.responseTokens} tokens</li>
-                    <li><span>Total:</span> {lastUsage.totalTokens} tokens</li>
-                </ul>
-            ) : <p>No usage data yet.</p>}
-
-            <h4>Session Total</h4>
-             <ul>
-                <li><span>Prompt:</span> {totalUsage.promptTokens} tokens</li>
-                <li><span>Response:</span> {totalUsage.responseTokens} tokens</li>
-                <li><span>Total:</span> {totalUsage.totalTokens} tokens</li>
-            </ul>
         </div>
     );
 };
@@ -115,22 +116,97 @@ const ChatLog = ({ messages }: { messages: Message[] }) => {
 };
 
 // --- MAIN APP COMPONENT ---
-// FIX: Rename component to `App` to match the import in `index.tsx`.
 export function App() {
   const [isTelemetryOpen, setIsTelemetryOpen] = useState(false);
   const [isArtLensOpen, setIsArtLensOpen] = useState(false);
   const [isModulesPanelOpen, setIsModulesPanelOpen] = useState(false);
+  const [isVoicePanelOpen, setIsVoicePanelOpen] = useState(false);
+  const [isTouring, setIsTouring] = useState(false);
+  const [isAutoRotating, setIsAutoRotating] = useState(false);
   const [currentAIState, setCurrentAIState] = useState('idle');
-
-  const liveApi = useLiveApi({ apiKey: process.env.API_KEY || '' });
+  const [cameraData, setCameraData] = useState<CameraData | null>(null);
+  const [galaxyData, setGalaxyData] = useState<GalaxyData>({ points: null, bounds: null });
+  
+  const [voiceProfiles, setVoiceProfiles] = useState<any[]>([]);
+  const [activePersonalityModule, setActivePersonalityModule] = useState<any>(null);
 
   useEffect(() => {
-    const handleStateChange = (e: CustomEvent) => {
-        setCurrentAIState(e.detail.state);
+    const loadAndSetDefaultProfile = async () => {
+        try {
+            const response = await fetch('./voice-profiles.json');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            setVoiceProfiles(data.voiceProfiles);
+            // Set the first profile as the default
+            if (data.voiceProfiles.length > 0) {
+                setActivePersonalityModule(data.voiceProfiles[0]);
+            }
+        } catch (error) {
+            console.error("Could not load voice profiles:", error);
+        }
     };
-    window.addEventListener('aistatechange', handleStateChange as EventListener);
-    return () => window.removeEventListener('aistatechange', handleStateChange as EventListener);
+    loadAndSetDefaultProfile();
   }, []);
+
+  useEffect(() => {
+    if (activePersonalityModule && (window as any).setVisualConfig) {
+        (window as any).setVisualConfig({
+            ambientColor: activePersonalityModule.visuals.ambientColor,
+            sunColor: activePersonalityModule.visuals.sunColor,
+        });
+    }
+  }, [activePersonalityModule]);
+  
+  const systemInstruction = activePersonalityModule?.systemInstruction;
+  const liveApi = useLiveApi({ 
+      apiKey: process.env.API_KEY || '', 
+      systemInstruction 
+  });
+
+  useEffect(() => {
+    const handleStateChange = (e: CustomEvent) => setCurrentAIState(e.detail.state);
+    const handleCameraUpdate = (e: CustomEvent) => setCameraData({ position: e.detail.position, direction: e.detail.direction });
+    const handleGalaxyReady = (e: CustomEvent) => setGalaxyData({ points: e.detail.points, bounds: e.detail.bounds });
+    const handleCameraControlChange = (e: CustomEvent) => {
+        if (e.detail) {
+            setIsTouring(e.detail.isTouring);
+            setIsAutoRotating(e.detail.isAutoRotating);
+        }
+    };
+
+    window.addEventListener('aistatechange', handleStateChange as EventListener);
+    window.addEventListener('cameraupdate', handleCameraUpdate as EventListener);
+    window.addEventListener('galaxyready', handleGalaxyReady as EventListener);
+    window.addEventListener('cameracontrolchange', handleCameraControlChange as EventListener);
+
+    return () => {
+        window.removeEventListener('aistatechange', handleStateChange as EventListener);
+        window.removeEventListener('cameraupdate', handleCameraUpdate as EventListener);
+        window.removeEventListener('galaxyready', handleGalaxyReady as EventListener);
+        window.removeEventListener('cameracontrolchange', handleCameraControlChange as EventListener);
+    };
+  }, []);
+  
+  const handleNavigate = (target: THREE.Vector3) => {
+    window.dispatchEvent(new CustomEvent('navigatetopoint', { detail: { target } }));
+  };
+
+  const handleToggleTour = () => {
+    window.dispatchEvent(new CustomEvent('toggletour'));
+  };
+
+  const handleToggleAutoRotate = () => {
+    if ((window as any).toggleAutoRotate) {
+        (window as any).toggleAutoRotate();
+    }
+  };
+
+  const handleSelectProfile = (profile: any) => {
+    setActivePersonalityModule(profile);
+    setIsVoicePanelOpen(false);
+  };
 
   return (
     <StrictMode>
@@ -138,6 +214,10 @@ export function App() {
           <header className="main-header">
               <h1>AURELION <span className="sub-title">Universal Creation Engine</span></h1>
               <div className="header-controls">
+                 <button className="module-selector-btn" onClick={() => setIsVoicePanelOpen(true)}>
+                    <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    <span>Select Voice</span>
+                </button>
                  <button className="module-selector-btn" onClick={() => setIsModulesPanelOpen(true)}>
                     <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#FFFFFF"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M4 18h17v-6H4v6zM4 5v6h17V5H4z"/></svg>
                     <span>Select Module</span>
@@ -149,18 +229,28 @@ export function App() {
              <div className="left-panel">
                 <ChatLog messages={liveApi.messages} />
              </div>
-             <div className="right-panel">
-                {isTelemetryOpen && <TelemetryPanel lastUsage={liveApi.lastUsage} totalUsage={liveApi.totalUsage} />}
-             </div>
           </main>
           
           <TopRightControls
             isTelemetryOpen={isTelemetryOpen}
             onToggleTelemetry={() => setIsTelemetryOpen(prev => !prev)}
             onToggleArtLens={() => setIsArtLensOpen(true)}
+            isTouring={isTouring}
+            onToggleTour={handleToggleTour}
+            isAutoRotating={isAutoRotating}
+            onToggleAutoRotate={handleToggleAutoRotate}
+          />
+
+          <TelemetryPanel
+            isOpen={isTelemetryOpen}
+            onClose={() => setIsTelemetryOpen(false)}
+            lastUsage={liveApi.lastUsage}
+            totalUsage={liveApi.totalUsage}
+            messageCount={liveApi.messages.length}
+            isConnected={liveApi.connected}
           />
           
-          <div className="basic-face-container">
+          <div className={cn('basic-face-container', currentAIState)}>
             <div className={cn('ai-state-indicator', currentAIState)}>
                 {currentAIState.toUpperCase()}
             </div>
@@ -170,12 +260,28 @@ export function App() {
                 color="rgba(100, 150, 255, 0.5)"
             />
           </div>
+
+          {galaxyData.points && cameraData && (
+              <Minimap 
+                  galaxyPoints={galaxyData.points}
+                  galaxyBounds={galaxyData.bounds}
+                  cameraData={cameraData}
+                  onNavigate={handleNavigate}
+              />
+          )}
           
           <ControlTray />
 
           <ModulesPanel
             isOpen={isModulesPanelOpen}
             onClose={() => setIsModulesPanelOpen(false)}
+          />
+          <VoiceProfileSelector
+            isOpen={isVoicePanelOpen}
+            onClose={() => setIsVoicePanelOpen(false)}
+            profiles={voiceProfiles}
+            activeProfileId={activePersonalityModule?.id}
+            onSelect={handleSelectProfile}
           />
           <ArtisticLensPanel
             isOpen={isArtLensOpen}

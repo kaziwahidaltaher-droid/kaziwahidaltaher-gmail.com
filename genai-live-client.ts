@@ -9,6 +9,7 @@ import { decode } from './utils.tsx';
 type GenAILiveClientOptions = {
     apiKey: string;
     model?: string;
+    systemInstruction?: string;
 };
 
 /**
@@ -29,11 +30,13 @@ export class GenAILiveClient extends EventEmitter {
     private chat: Chat | null = null;
     private model: string;
     private isConnected = false;
+    private systemInstruction?: string;
 
-    constructor({ apiKey, model = 'gemini-2.5-flash' }: GenAILiveClientOptions) {
+    constructor({ apiKey, model = 'gemini-2.5-flash', systemInstruction }: GenAILiveClientOptions) {
         super();
         this.ai = new GoogleGenAI({ apiKey });
         this.model = model;
+        this.systemInstruction = systemInstruction;
     }
 
     /**
@@ -42,12 +45,18 @@ export class GenAILiveClient extends EventEmitter {
     async connect() {
         if (this.isConnected) return;
         
+        const config: any = {
+            // Explicitly request audio responses from the model.
+            responseModalities: ['AUDIO', 'TEXT'],
+        };
+
+        if (this.systemInstruction) {
+            config.systemInstruction = this.systemInstruction;
+        }
+
         this.chat = this.ai.chats.create({
             model: this.model,
-            config: {
-                // Explicitly request audio responses from the model.
-                responseModalities: ['AUDIO', 'TEXT'],
-            }
+            config
         });
 
         this.isConnected = true;

@@ -19,7 +19,8 @@ export class GameOfLifeVisualizer {
         const material = new THREE.MeshBasicMaterial({ 
             map: this.texture, 
             transparent: true, 
-            blending: THREE.AdditiveBlending // Gives a cool "hologram" look
+            blending: THREE.AdditiveBlending, // Gives a cool "hologram" look
+            opacity: 1.0,
         });
         
         this.mesh = new THREE.Mesh(geometry, material);
@@ -34,6 +35,10 @@ export class GameOfLifeVisualizer {
         } else {
             this.game.stop();
         }
+    }
+
+    setFade(fade: number) {
+        (this.mesh.material as THREE.MeshBasicMaterial).opacity = fade;
     }
 
     update() {

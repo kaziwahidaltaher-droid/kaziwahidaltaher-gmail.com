@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-// FIX: Add necessary type definitions for AudioWorklet context.
+// Add necessary type definitions for AudioWorklet context.
 interface AudioWorkletProcessor {
   readonly port: MessagePort;
   process(

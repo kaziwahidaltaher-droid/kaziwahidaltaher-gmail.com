@@ -10,7 +10,9 @@ export default defineConfig(({ mode }) => {
       },
       resolve: {
         alias: {
-          '@': path.resolve(__dirname, '.'),
+          // Fix: Replaced `path.resolve(process.cwd(), '.')` with `path.resolve('.')` to avoid a TypeScript type error.
+          // This correctly resolves to the project's root directory.
+          '@': path.resolve('.'),
         }
       }
     };

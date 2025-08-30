@@ -76,13 +76,10 @@ const ArtisticLensPanel = ({ isOpen, onClose }) => {
         if (outputCanvas) {
             outputCanvas.width = contentImg.width;
             outputCanvas.height = contentImg.height;
-            // FIX: The `stylize` method's third argument is a style strength (number), not an output canvas.
-            // It returns a new canvas with the stylized image, which we then draw onto our own.
-            const stylizedResultCanvas = await modelRef.current.stylize(contentImg, styleImg);
+            const stylizedResult = await modelRef.current.stylize(contentImg, styleImg);
             const ctx = outputCanvas.getContext('2d');
             if (ctx) {
-              // Draw the result onto our component's canvas to display it.
-              ctx.drawImage(stylizedResultCanvas, 0, 0, outputCanvas.width, outputCanvas.height);
+              ctx.putImageData(stylizedResult, 0, 0);
             }
             setOutputImage(outputCanvas.toDataURL('image/jpeg'));
         }

@@ -25,6 +25,7 @@ export class SignalSphereVisualizer {
                     resolution: { value: new THREE.Vector2(window.innerWidth * window.devicePixelRatio, window.innerHeight * window.devicePixelRatio) },
                     rand: { value: 0 },
                     time: { value: 0 }, // Added for time-based glow
+                    uFade: { value: 1.0 },
                 },
                 vertexShader: backdropVS,
                 fragmentShader: backdropFS,
@@ -42,6 +43,8 @@ export class SignalSphereVisualizer {
             roughness: 0.1,
             emissive: 0x000010,
             emissiveIntensity: 1.5,
+            transparent: true,
+            opacity: 1.0,
         });
 
         sphereMaterial.onBeforeCompile = (shader) => {
@@ -56,7 +59,6 @@ export class SignalSphereVisualizer {
             shader.fragmentShader = shader.fragmentShader.replace(
                 '#include <emissivemap_fragment>',
                 `
-                // FIX: Declare the uniforms in the fragment shader so GLSL knows what they are.
                 uniform float time;
                 uniform float shimmerIntensity;
 
@@ -81,6 +83,15 @@ export class SignalSphereVisualizer {
     setVisible(visible: boolean) {
         this.signalSphere.visible = visible;
         this.backdrop.visible = visible;
+    }
+
+    /**
+     * Sets the overall opacity of the visualizer.
+     * @param {number} fade - The opacity value from 0.0 to 1.0.
+     */
+    setFade(fade: number) {
+        (this.signalSphere.material as THREE.MeshStandardMaterial).opacity = fade;
+        (this.backdrop.material as THREE.RawShaderMaterial).uniforms.uFade.value = fade;
     }
 
     /**
@@ -130,12 +141,13 @@ export class SignalSphereVisualizer {
             shader.uniforms.inputData.value.set( (1 * audioData[0]) / 255, (0.1 * audioData[1]) / 255, (10 * audioData[2]) / 255, 0 );
             shader.uniforms.outputData.value.set( (2 * audioData[0]) / 255, (0.1 * audioData[1]) / 255, (10 * audioData[2]) / 255, 0 );
 
-            // Update shimmer with a more pronounced non-linear curve for a dynamic, peak-reactive effect.
-            const shimmerPower = 10.0; // Further increased power for sharper peak reactivity.
-            const shimmerMultiplier = 5.0; // Slightly boost the peak brightness.
+            // --- Refined Shimmer Effect ---
+            // Increased power and multiplier for a sharper, more peak-reactive shimmer.
+            const shimmerPower = 12.0; 
+            const shimmerMultiplier = 6.0; 
             const targetIntensity = Math.pow(normalizedHighs, shimmerPower) * shimmerMultiplier;
             
-            // Smoothly interpolate to the target intensity with a faster response time.
+            // Smoothly interpolate to the target intensity with a fast response time.
             const currentIntensity = shader.uniforms.shimmerIntensity.value;
             shader.uniforms.shimmerIntensity.value = THREE.MathUtils.lerp(currentIntensity, targetIntensity, 0.5);
 
@@ -153,30 +165,25 @@ export class SignalSphereVisualizer {
 
         // --- REFINED Dynamic, Audio-Reactive Animation ---
                 
-        // Scaling: More responsive, "punchy" scaling based on bass peaks.
+        // Scaling: Increased pulse amount and faster interpolation for a more "punchy" feel.
         const baseScale = 1.0;
-        const scalePulseAmount = 0.2; // A bit more visual impact
-        // Using a power curve to make it react more to strong beats
+        const scalePulseAmount = 0.25; 
         const targetScale = baseScale + (Math.pow(normalizedBass, 2.0) * scalePulseAmount);
         const scaleVector = new THREE.Vector3(targetScale, targetScale, targetScale);
-        // Faster interpolation for a more responsive feel
-        this.signalSphere.scale.lerp(scaleVector, 0.2); 
+        this.signalSphere.scale.lerp(scaleVector, 0.25); 
 
-        // Rotation: More complex, organic, and responsive wobble.
-        const baseRotationSpeed = 0.001;
-        // Make the main rotation speed also non-linear for better response to mid-range swells
-        const midRotationBoost = Math.pow(normalizedMids, 2.0) * 0.009;
-        const highWobbleAmount = Math.pow(normalizedHighs, 3.0) * 0.007; // More sensitive to sharp highs
-        const midWobbleAmount = (normalizedMids * -0.005 + Math.pow(normalizedMids, 3) * 0.003) * 1.2; // Amplify existing effect
+        // Rotation: Increased mid-range reactivity and faster response.
+        const baseRotationSpeed = 0.0015;
+        const midRotationBoost = Math.pow(normalizedMids, 2.0) * 0.015; 
+        const highWobbleAmount = Math.pow(normalizedHighs, 3.0) * 0.009;
+        const midWobbleAmount = (normalizedMids * -0.005 + Math.pow(normalizedMids, 3) * 0.003) * 1.4;
 
-        // The main rotation is now more responsive to swells in the music.
         const targetYRotationSpeed = baseRotationSpeed + midRotationBoost;
-        this.currentYRotationSpeed = THREE.MathUtils.lerp(this.currentYRotationSpeed, targetYRotationSpeed, 0.15);
+        this.currentYRotationSpeed = THREE.MathUtils.lerp(this.currentYRotationSpeed, targetYRotationSpeed, 0.25);
         this.signalSphere.rotation.y += this.currentYRotationSpeed;
 
-        // The wobbles are now more pronounced and react to peaks more sharply.
-        this.signalSphere.rotation.x = THREE.MathUtils.lerp(this.signalSphere.rotation.x, highWobbleAmount, 0.12);
-        this.signalSphere.rotation.z = THREE.MathUtils.lerp(this.signalSphere.rotation.z, midWobbleAmount, 0.12);
+        this.signalSphere.rotation.x = THREE.MathUtils.lerp(this.signalSphere.rotation.x, highWobbleAmount, 0.15);
+        this.signalSphere.rotation.z = THREE.MathUtils.lerp(this.signalSphere.rotation.z, midWobbleAmount, 0.15);
 
 
         // Update backdrop shader for twinkling stars and a slow pulsating glow

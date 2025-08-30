@@ -11,6 +11,7 @@ export const vs = `
   uniform float uOverallAudio; // Overall for size
   uniform float uCameraFarPlane; // For LOD distance calculations
   uniform float time;
+  uniform vec3 color;
   uniform vec2 uHeartbeat; // x: radius, y: thickness
   uniform vec3 uFlarePosition;
   uniform float uFlareIntensity;
@@ -34,7 +35,7 @@ export const vs = `
   }
 
   vec4 mod289(vec4 x) {
-    return x - floor(x * (1.o / 289.0)) * 289.0;
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
   }
 
   vec4 permute(vec4 x) {
@@ -161,8 +162,8 @@ export const vs = `
     vNoise = noise;
 
     // Use smoothstep to create sharp filaments from the noise field
-    float filament_threshold = 0.48; // Adjusted for new noise characteristics
-    float filament_thickness = 0.08;
+    float filament_threshold = 0.45; // Adjusted for new noise characteristics
+    float filament_thickness = 0.1;
     float filament_factor = smoothstep(filament_threshold, filament_threshold + filament_thickness, noise);
 
     // --- Audio-Reactive Color ---
@@ -186,7 +187,7 @@ export const vs = `
 
     // --- LOD: Size Attenuation & Culling ---
     float distanceFade = 1.0 - smoothstep(uCameraFarPlane * 0.70, uCameraFarPlane * 0.95, vDistToCam);
-    float sizeAtDistance = (300.0 / vDistToCam) * distanceFade;
+    float sizeAtDistance = (400.0 / vDistToCam) * distanceFade;
     float audioSizeMultiplier = 1.0 + uOverallAudio * 0.75;
     
     // Final point size is determined by LOD, audio, and its position in the filament structure.

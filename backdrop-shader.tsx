@@ -21,6 +21,7 @@ out vec4 fragmentColor;
 uniform vec2 resolution;
 uniform float rand;
 uniform float time;
+uniform float uFade;
 
 void main() {
   float aspectRatio = resolution.x / resolution.y; 
@@ -39,7 +40,7 @@ void main() {
   float glow = (sin(time * 0.0005) * 0.5 + 0.5) * 0.02; // slow pulse, very subtle brightness increase
   vec3 baseColor = mix(from, to, d) + .005 * noise;
 
-  fragmentColor = vec4(baseColor + glow, 1.);
+  fragmentColor = vec4(baseColor + glow, uFade);
 }
 `;
 

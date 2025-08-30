@@ -34,8 +34,8 @@ export type UseLiveApiResults = {
 // Create a context to provide the API results to child components
 export const LiveAPIContext = createContext<UseLiveApiResults | null>(null);
 
-export function useLiveApi({ apiKey, model }: { apiKey: string; model?: string; }): UseLiveApiResults {
-  const client = useMemo(() => new GenAILiveClient({ apiKey, model }), [apiKey, model]);
+export function useLiveApi({ apiKey, model, systemInstruction }: { apiKey: string; model?: string; systemInstruction?: string; }): UseLiveApiResults {
+  const client = useMemo(() => new GenAILiveClient({ apiKey, model, systemInstruction }), [apiKey, model, systemInstruction]);
   const audioStreamerRef = useRef<AudioStreamer | null>(null);
   
   const [outputVolume, setOutputVolume] = useState(0);
@@ -86,8 +86,6 @@ export function useLiveApi({ apiKey, model }: { apiKey: string; model?: string; 
     const onUsage = (metadata: UsageMetadata) => {
         const usage: UsageStats = {
             promptTokens: metadata.promptTokenCount ?? 0,
-            // FIX: Property 'candidatesTokenCount' may not exist on this version of the UsageMetadata type.
-            // Calculating response tokens from total and prompt tokens for better compatibility.
             responseTokens: Math.max(0, (metadata.totalTokenCount ?? 0) - (metadata.promptTokenCount ?? 0)),
             totalTokens: metadata.totalTokenCount ?? 0,
         };

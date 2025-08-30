@@ -49,6 +49,12 @@ export class NebulaVisualizer {
         this.container.visible = visible;
     }
 
+    setFade(fade: number) {
+        this.nebulae.forEach(nebula => {
+            (nebula.material as THREE.ShaderMaterial).uniforms.uFade.value = fade;
+        });
+    }
+
     update(time: number, audioAnalyser: Analyser | null) {
         if (!this.container.visible || !audioAnalyser) return;
 
