@@ -90,6 +90,7 @@ export class CosmicWebVisualizer {
                 size: { value: 5.0 },
                 uAudioLevel: { value: 0.0 },
                 uOverallAudio: { value: 0.0 },
+                uAiAudioLevel: { value: 0.0 },
                 time: { value: 0.0 },
                 uFade: { value: 1.0 },
                 color: { value: new THREE.Color(0xaaaaff) },
@@ -98,7 +99,6 @@ export class CosmicWebVisualizer {
                 uFlarePosition: { value: new THREE.Vector3() },
                 uFlareIntensity: { value: 0.0 },
                 uFlareRadius: { value: 0.0 },
-                uAiStateTimeFactor: { value: 0.0 }
             },
             vertexShader: vs,
             fragmentShader: fs,
@@ -134,20 +134,15 @@ export class CosmicWebVisualizer {
         this.material.uniforms.uFlarePosition.value.copy(params.flarePosition);
         this.material.uniforms.uFlareIntensity.value = params.flareIntensity;
         this.material.uniforms.uFlareRadius.value = params.flareRadius;
-        
-        // Smoothly transition the time factor for thinking state
-        const targetFactor = params.state === 'thinking' ? 0.1 : 0.02;
-        this.material.uniforms.uAiStateTimeFactor.value = THREE.MathUtils.lerp(
-             this.material.uniforms.uAiStateTimeFactor.value,
-             targetFactor,
-             0.05
-        );
     }
 
 
-    update(time: number, audioAnalyser: Analyser | null, rotationY?: number) {
+    update(time: number, audioAnalyser: Analyser | null, rotationY?: number, aiAudioLevel?: number) {
         if (!this.points.visible) return;
-        this.material.uniforms.time.value = time;
+        
+        const timeFactor = 0.02;
+        this.material.uniforms.time.value = time * timeFactor;
+        this.material.uniforms.uAiAudioLevel.value = aiAudioLevel ?? 0.0;
         
         if (rotationY !== undefined) {
             // Smoothly interpolate towards the target rotation

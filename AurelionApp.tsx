@@ -196,6 +196,15 @@ export function App() {
       systemInstruction 
   });
 
+  // Effect to bridge AI output volume from React to the 3D engine
+  useEffect(() => {
+    const engine = (window as any).aurelionEngine;
+    if (engine && typeof engine.setAiOutputVolume === 'function') {
+        engine.setAiOutputVolume(liveApi.outputVolume);
+    }
+  }, [liveApi.outputVolume]);
+
+
   useEffect(() => {
     const handleStateChange = (e: CustomEvent) => {
         setCurrentAIState(e.detail.state);

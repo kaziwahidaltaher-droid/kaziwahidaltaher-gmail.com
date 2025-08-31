@@ -59,6 +59,7 @@ export class AurelionEngine {
     private tourTime = 0;
     private aiState = 'idle';
     private targetGalaxyRotationY = 0;
+    private aiOutputVolume = 0;
 
 
     // Animation state for AI-driven effects
@@ -137,6 +138,10 @@ export class AurelionEngine {
         this.animate();
     }
     
+    public setAiOutputVolume(volume: number) {
+        this.aiOutputVolume = volume;
+    }
+
     public updateSatelliteTexture(imageUrl: string) {
         const visualizer = this.visualizers['satellite_stream'] as SatelliteVisualizer;
         if (visualizer) {
@@ -279,7 +284,7 @@ export class AurelionEngine {
         this.starfield.onWindowResize();
     }
     
-    private updateVisualizer(visualizer: FadingVisualizer, elapsedTime: number, audioAnalyser: Analyser | null, aiState: string, heartbeat: { x: number, y: number }, flare: FlareData) {
+    private updateVisualizer(visualizer: FadingVisualizer, elapsedTime: number, audioAnalyser: Analyser | null, aiState: string, heartbeat: { x: number, y: number }, flare: FlareData, aiAudioLevel: number) {
         if (visualizer instanceof SunVisualizer) {
             visualizer.update(elapsedTime, audioAnalyser, aiState);
         } else if (visualizer instanceof PhantomVisualizer) {
@@ -292,7 +297,7 @@ export class AurelionEngine {
                 flareIntensity: flare.intensity,
                 flareRadius: flare.radius,
             });
-            visualizer.update(elapsedTime, audioAnalyser, this.targetGalaxyRotationY);
+            visualizer.update(elapsedTime, audioAnalyser, this.targetGalaxyRotationY, aiAudioLevel);
         } else if (visualizer instanceof GameOfLifeVisualizer) {
             visualizer.update();
         } else if (
@@ -378,8 +383,8 @@ export class AurelionEngine {
             activeVisualizer.setFade(progress);
             
             // Update both during transition
-            this.updateVisualizer(fadingOutVisualizer, elapsedTime, null, this.aiState, heartbeat, flareData);
-            this.updateVisualizer(activeVisualizer, elapsedTime, null, this.aiState, heartbeat, flareData);
+            this.updateVisualizer(fadingOutVisualizer, elapsedTime, null, this.aiState, heartbeat, flareData, this.aiOutputVolume);
+            this.updateVisualizer(activeVisualizer, elapsedTime, null, this.aiState, heartbeat, flareData, this.aiOutputVolume);
 
             if (progress >= 1.0) {
                 fadingOutVisualizer.setVisible(false);
@@ -389,7 +394,7 @@ export class AurelionEngine {
         } else if (this.activeVisualizerKey) {
             // Normal update when not transitioning
             const visualizer = this.visualizers[this.activeVisualizerKey];
-            this.updateVisualizer(visualizer, elapsedTime, null, this.aiState, heartbeat, flareData);
+            this.updateVisualizer(visualizer, elapsedTime, null, this.aiState, heartbeat, flareData, this.aiOutputVolume);
         }
         
         const cameraDirection = new THREE.Vector3();

@@ -52,7 +52,6 @@ export const SatelliteDataPanel: React.FC<PanelProps> = ({ isOpen, onNewImage })
             
             const imageUrl = `https://api.nasa.gov/EPIC/archive/natural/${year}/${month}/${day}/png/${latestImage.image}.png?api_key=${NASA_API_KEY}`;
             
-            // Fix: Construct the coords object to match the SatelliteData type.
             const newData: SatelliteData = {
                 imageUrl: imageUrl,
                 caption: latestImage.caption,
@@ -103,7 +102,6 @@ export const SatelliteDataPanel: React.FC<PanelProps> = ({ isOpen, onNewImage })
                          <div className="satellite-metadata-item">
                             <label>Satellite Position (DSCOVR J2000)</label>
                             <span>
-                                {/* Fix: Correctly access nested position data. */}
                                 X: {data.coords.dscovr_j2000_position.x.toFixed(2)}<br/>
                                 Y: {data.coords.dscovr_j2000_position.y.toFixed(2)}<br/>
                                 Z: {data.coords.dscovr_j2000_position.z.toFixed(2)}

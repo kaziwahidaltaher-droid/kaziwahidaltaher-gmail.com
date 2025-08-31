@@ -9,6 +9,7 @@ export const vs = `
   uniform float size;
   uniform float uAudioLevel; // Mids for color
   uniform float uOverallAudio; // Overall for size
+  uniform float uAiAudioLevel; // AI voice volume for interaction
   uniform float uCameraFarPlane; // For LOD distance calculations
   uniform float time;
   uniform vec3 color;
@@ -28,6 +29,7 @@ export const vs = `
   varying float vNoise;
   varying float vWaveFactor;
   varying float vFlareEffect;
+  varying float vInteractionFactor;
 
   // 3D Simplex Noise
   vec3 mod289(vec3 x) {
@@ -154,6 +156,7 @@ export const vs = `
     }
 
     vWorldPosition = (modelMatrix * vec4(displacedPosition, 1.0)).xyz;
+    vec4 mvPosition = modelViewMatrix * vec4(displacedPosition, 1.0);
     
     // --- Cosmic Web Generation via FBM noise ---
     vec3 p1 = position * 0.004 + time * 0.02;
@@ -180,19 +183,23 @@ export const vs = `
     // Also additively boost the brightness to make it pulse with light.
     vColor = mixedColor + baseColor * audioIntensity * 0.5;
 
-    vec4 mvPosition = modelViewMatrix * vec4(displacedPosition, 1.0);
     
     // --- LOD: Distance Calculation ---
     vDistToCam = -mvPosition.z;
 
+    // --- AI Voice Interaction ---
+    float distToCamera = length(vWorldPosition - cameraPosition);
+    float interactionRadius = 1200.0; // Radius around camera for interaction
+    vInteractionFactor = 1.0 - smoothstep(interactionRadius * 0.5, interactionRadius, distToCamera);
+
     // --- LOD: Size Attenuation & Culling ---
     float distanceFade = 1.0 - smoothstep(uCameraFarPlane * 0.70, uCameraFarPlane * 0.95, vDistToCam);
     float sizeAtDistance = (300.0 / vDistToCam) * distanceFade;
-    float audioSizeMultiplier = 1.0 + uOverallAudio * 0.75;
+    float audioSizeMultiplier = 1.0 + uOverallAudio * 0.75 + vInteractionFactor * uAiAudioLevel * 5.0;
     
     // Final point size is determined by LOD, audio, and its position in the filament structure.
     // Points in voids (filament_factor = 0) will have their size culled to 0.
-    vPointSize = clamp(size * audioSizeMultiplier * sizeAtDistance, 0.0, 15.0) * filament_factor;
+    vPointSize = clamp(size * audioSizeMultiplier * sizeAtDistance, 0.0, 25.0) * filament_factor;
     
     gl_PointSize = vPointSize;
     gl_Position = projectionMatrix * mvPosition;
@@ -205,6 +212,7 @@ export const fs = `
   uniform float time;
   uniform float uFade;
   uniform float uCameraFarPlane;
+  uniform float uAiAudioLevel;
 
   varying vec3 vColor;
   varying float vStarId;
@@ -214,6 +222,7 @@ export const fs = `
   varying float vNoise;
   varying float vWaveFactor;
   varying float vFlareEffect;
+  varying float vInteractionFactor;
 
   void main() {
     // --- LOD: Distance-based Culling & Fading ---
@@ -252,6 +261,12 @@ export const fs = `
         finalAlpha = clamp(core * 1.5 + rays * rayBrightness + glow * 0.2, 0.0, 1.0);
     }
     
+    // --- AI Voice Interaction Color ---
+    if (vInteractionFactor > 0.01) {
+        vec3 interactionColor = vec3(0.8, 1.0, 1.0); // Bright cyan
+        finalColor.rgb = mix(finalColor.rgb, interactionColor, vInteractionFactor * uAiAudioLevel * 1.5);
+    }
+
     // --- Galactic Heartbeat Visual Effect ---
     if (vWaveFactor > 0.01) {
         vec3 waveColor = vec3(1.0, 0.85, 0.6); // Fiery gold
