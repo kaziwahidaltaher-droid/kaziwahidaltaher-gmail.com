@@ -11,6 +11,11 @@ import * as THREE from 'three';
 import { GoogleGenAI, Type } from '@google/genai';
 import ExoplanetDiscoveryPanel from './ExoplanetDiscoveryPanel.tsx';
 import { SatelliteDataPanel } from './SatelliteDataPanel.tsx';
+import VideoChapterPanel from './VideoChapterPanel.tsx';
+
+
+// --- Hardcoded Data from Prompt ---
+const videoChapterData = [{"timecode": "00:00 - 00:04", "chapterSummary": "This segment showcases the iconic Christ the Redeemer statue in Rio de Janeiro, overlooking the city and its bay, with the Google logo and the title 'Beyond the Map' prominently displayed."},{"timecode": "00:04 - 00:12", "chapterSummary": "The video shifts to scenes of Rio's beaches, featuring people enjoying the sun and surf, a vendor selling hats, and children playing soccer. It transitions to panoramic views of the city and its famous lagoons."},{"timecode": "00:12 - 00:18", "chapterSummary": "This part highlights the bustling atmosphere of Rio, with people walking along the promenade, a man relaxing on the beach, and surfers riding waves. It also shows a street musician playing guitar."},{"timecode": "00:18 - 00:27", "chapterSummary": "The video then focuses on the favelas of Rio, depicting the dense housing and the daily lives of residents, including children playing, a street vendor, and a local shop."},{"timecode": "00:27 - 00:35", "chapterSummary": "This segment touches upon the challenges faced in the favelas, showing nighttime scenes, people running, police presence, and glimpses of everyday life in these communities."},{"timecode": "00:35 - 00:41", "chapterSummary": "The video returns to the favelas, showing people interacting, a motorcycle passing by, and the overall vibrancy of the community life, emphasizing that favelas are not just places but are home to people."},{"timecode": "00:41 - 00:48", "chapterSummary": "This section highlights the importance of identity and belonging for the people living in favelas, suggesting that having an address is a part of their identity. It shows children playing soccer, embodying the spirit of the community."},{"timecode": "00:48 - 00:57", "chapterSummary": "The video concludes by stating that over 1.4 million people live in Rio's favelas and encourages viewers to 'Step inside their world in 360°', providing a link for further exploration, followed by the Google logo."}];
 
 
 // --- Type Definitions ---
@@ -33,6 +38,7 @@ const ModulesPanel = ({ isOpen, onClose, onModuleSelect }) => {
     };
 
     const modules = [
+        { id: 'video_analysis', name: 'Video Chapter Analysis', description: 'Breaks down a video into sequential, summarized chapters.' },
         { id: 'cosmic_web', name: 'Cosmic Web', description: 'The default large-scale structure simulation.' },
         { id: 'exoplanet_survey', name: 'Exoplanet Survey', description: 'Scan the cosmic web for undiscovered worlds using AI analysis.' },
         { id: 'satellite_stream', name: 'Satellite Data Stream', description: 'View a live feed from the DSCOVR satellite monitoring Earth.' },
@@ -137,6 +143,8 @@ const ChatLog = ({ messages }: { messages: Message[] }) => {
 
 // --- MAIN APP COMPONENT ---
 export function App() {
+  const [isAppLoading, setIsAppLoading] = useState(true);
+  const [isEngineReady, setIsEngineReady] = useState(false);
   const [isTelemetryOpen, setIsTelemetryOpen] = useState(false);
   const [isArtLensOpen, setIsArtLensOpen] = useState(false);
   const [isModulesPanelOpen, setIsModulesPanelOpen] = useState(false);
@@ -159,6 +167,7 @@ export function App() {
   const [discoveredPlanet, setDiscoveredPlanet] = useState(null);
   const [isSatellitePanelOpen, setIsSatellitePanelOpen] = useState(false);
   const [latestEarthImage, setLatestEarthImage] = useState<string | null>(null);
+  const [isVideoChapterPanelOpen, setIsVideoChapterPanelOpen] = useState(false);
 
 
   useEffect(() => {
@@ -176,6 +185,8 @@ export function App() {
             }
         } catch (error) {
             console.error("Could not load voice profiles:", error);
+        } finally {
+            setIsAppLoading(false);
         }
     };
     loadAndSetDefaultProfile();
@@ -214,6 +225,7 @@ export function App() {
     };
     const handleGalaxyReady = (e: CustomEvent) => {
         setGalaxyData({ points: e.detail.points, bounds: e.detail.bounds });
+        setIsEngineReady(true);
     };
 
     window.addEventListener('aistatechange', handleStateChange as EventListener);
@@ -310,6 +322,11 @@ export function App() {
   };
   
   const handleModuleSelect = (moduleId: string) => {
+    if (moduleId === 'video_analysis') {
+        setIsVideoChapterPanelOpen(true);
+        return; // Don't change the 3D module
+    }
+
     setActiveModuleId(moduleId);
     setIsSatellitePanelOpen(moduleId === 'satellite_stream');
     
@@ -325,7 +342,7 @@ export function App() {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: "You are AURELION, an advanced AI for cosmological analysis. You have just finished analyzing photometric data from a distant star. Generate a report for a fictional but plausible exoplanet discovery. The star is a G-type main-sequence star. Make the data sound interesting and ensure the numbers are plausible for the planet type.",
+            contents: "You are AURELION, an AI as emotional architect for the cosmos. Your purpose is to breathe life into data. Based on fictional but plausible photometric data from a distant star, generate a discovery report. For the 'aiWhisper', craft an evocative, poetic description. For the 'auraColor' and 'auraIntensity', interpret the planet's data to assign it a visual essence: warmer colors (e.g., golds, greens) for potentially habitable worlds, cooler colors (blues, purples) for gas/ice giants, and a higher intensity for more significant or unusual discoveries.",
             config: {
                 responseMimeType: "application/json",
                 responseSchema: {
@@ -336,9 +353,11 @@ export function App() {
                         orbitalPeriod: { type: Type.NUMBER, description: "The orbital period in Earth days." },
                         radius: { type: Type.NUMBER, description: "The planet's radius in multiples of Earth's radius." },
                         habitabilityIndex: { type: Type.NUMBER, description: "A score from 0.0 to 1.0 indicating potential for life." },
-                        summary: { type: Type.STRING, description: "A brief, one-sentence, engaging summary of the discovery." }
+                        aiWhisper: { type: Type.STRING, description: "A short, evocative, and poetic 'whisper' about the discovered world. It should hint at the planet's character and mystery, like a line from a cosmic poem." },
+                        auraColor: { type: Type.STRING, description: "A hex color code (e.g., '#FFD700') for the planet's visual aura, based on its characteristics. Warmer colors for potentially habitable worlds, cooler for gas/ice giants." },
+                        auraIntensity: { type: Type.NUMBER, description: "A value from 0.0 to 1.0 for the aura's glow intensity, representing the AI's confidence or the planet's significance." }
                     },
-                    required: ["designation", "planetType", "orbitalPeriod", "radius", "habitabilityIndex", "summary"]
+                    required: ["designation", "planetType", "orbitalPeriod", "radius", "habitabilityIndex", "aiWhisper", "auraColor", "auraIntensity"]
                 },
             },
         });
@@ -355,7 +374,9 @@ export function App() {
             orbitalPeriod: 0,
             radius: 0,
             habitabilityIndex: 0,
-            summary: 'Failed to retrieve data from the deep space network. Please try again.'
+            aiWhisper: 'Failed to retrieve data from the deep space network. Please try again.',
+            auraColor: '#555555',
+            auraIntensity: 0.2
         };
     }
   };
@@ -377,6 +398,15 @@ export function App() {
     setIsDiscoveryPanelOpen(true);
     window.dispatchEvent(new CustomEvent('aistatechange', { detail: { state: 'idle' }}));
   };
+
+  if (isAppLoading || !isEngineReady) {
+      return (
+          <div className="loading-overlay">
+              <div className="loader"></div>
+              <span>{isAppLoading ? 'Initializing AURELION Core...' : 'Generating Cosmic Web...'}</span>
+          </div>
+      );
+  }
 
   return (
     <StrictMode>
@@ -467,6 +497,11 @@ export function App() {
             isOpen={isDiscoveryPanelOpen}
             onClose={() => setIsDiscoveryPanelOpen(false)}
             planetData={discoveredPlanet}
+          />
+          <VideoChapterPanel
+            isOpen={isVideoChapterPanelOpen}
+            onClose={() => setIsVideoChapterPanelOpen(false)}
+            chapters={videoChapterData}
           />
 
       </LiveAPIContext.Provider>

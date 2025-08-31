@@ -29,6 +29,27 @@ canvas#bg {
   display: block;
 }
 
+/* --- Loading State --- */
+.loading-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    z-index: 200;
+    color: #9cb3d9;
+    gap: 20px;
+}
+
+.loading-overlay span {
+    font-size: 1.1em;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+
 /* --- React UI Layout --- */
 #aurelion-app-container {
     position: fixed;
@@ -922,7 +943,31 @@ canvas#bg {
     padding: 20px;
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 20px;
+}
+.planet-aura-container {
+    width: 100px;
+    height: 100px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+}
+.planet-aura-glow {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    transition: box-shadow 0.5s ease-in-out;
+}
+.planet-body-visual {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+    transition: background-color 0.5s ease-in-out;
 }
 .planet-designation {
     font-size: 1.8em;
@@ -938,13 +983,14 @@ canvas#bg {
     line-height: 1.6;
     text-align: center;
     margin: -10px 0 10px 0;
-    border-bottom: 1px solid rgba(0, 192, 255, 0.1);
-    padding-bottom: 20px;
 }
 .planet-stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
     gap: 15px;
+    width: 100%;
+    border-top: 1px solid rgba(0, 192, 255, 0.1);
+    padding-top: 20px;
 }
 .stat-item {
     background: rgba(0, 0, 0, 0.2);
@@ -989,6 +1035,83 @@ canvas#bg {
     height: 100%;
     transition: width 0.5s ease-in-out;
 }
+
+/* --- Video Chapter Panel --- */
+.video-chapter-panel-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+}
+.video-chapter-panel {
+    background: rgba(15, 30, 50, 0.9);
+    border: 1px solid rgba(0, 192, 255, 0.3);
+    border-radius: 10px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.6);
+    width: 90%;
+    max-width: 550px;
+    color: #E0E0E0;
+    font-family: sans-serif;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+.video-chapter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(0, 192, 255, 0.2);
+    flex-shrink: 0;
+}
+.video-chapter-header h3 {
+    margin: 0;
+    font-size: 1.3em;
+    color: #00c0ff;
+}
+.video-chapter-body {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+.video-chapter-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.video-chapter-item {
+    display: flex;
+    gap: 20px;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(0, 192, 255, 0.1);
+    align-items: flex-start;
+}
+.video-chapter-item:last-child {
+    border-bottom: none;
+}
+.video-chapter-item .timecode {
+    background-color: rgba(0, 192, 255, 0.1);
+    color: #00c0ff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9em;
+    white-space: nowrap;
+}
+.video-chapter-item .summary {
+    margin: 0;
+    color: #b0c4de;
+    line-height: 1.6;
+    font-size: 0.95em;
+    padding-top: 4px;
+}
+
 
 /* --- Satellite Data Panel --- */
 .satellite-data-panel {
@@ -1153,7 +1276,8 @@ canvas#bg {
     .voice-panel,
     .modules-panel,
     .artistic-lens-panel,
-    .exoplanet-panel {
+    .exoplanet-panel,
+    .video-chapter-panel {
         padding: 16px;
         max-height: 80vh;
         width: calc(100% - 20px);
@@ -1161,7 +1285,8 @@ canvas#bg {
     .voice-panel h3,
     .modules-panel h3,
     .artistic-lens-panel h3,
-    .exoplanet-panel h3 {
+    .exoplanet-panel h3,
+    .video-chapter-panel h3 {
         font-size: 1.2em;
     }
     .voice-panel li button,
@@ -1200,5 +1325,15 @@ canvas#bg {
 
     .planet-stats-grid {
         grid-template-columns: 1fr;
+    }
+
+    .video-chapter-item {
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+    }
+    
+    .video-chapter-item .summary {
+        padding-top: 0;
     }
 }

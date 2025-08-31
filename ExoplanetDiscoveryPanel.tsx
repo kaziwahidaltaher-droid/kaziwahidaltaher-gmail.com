@@ -10,7 +10,9 @@ type PlanetData = {
     orbitalPeriod: number;
     radius: number;
     habitabilityIndex: number;
-    summary: string;
+    aiWhisper: string;
+    auraColor: string;
+    auraIntensity: number;
 };
 
 type PanelProps = {
@@ -49,8 +51,20 @@ const ExoplanetDiscoveryPanel: React.FC<PanelProps> = ({ isOpen, onClose, planet
                     </button>
                 </div>
                 <div className="exoplanet-body">
+                    <div className="planet-aura-container">
+                        <div
+                            className="planet-aura-glow"
+                            style={{
+                                boxShadow: `0 0 ${planetData.auraIntensity * 45}px 7px ${planetData.auraColor}`
+                            }}
+                        />
+                        <div
+                            className="planet-body-visual"
+                            style={{ backgroundColor: planetData.auraColor }}
+                        />
+                    </div>
                     <h4 className="planet-designation">{planetData.designation}</h4>
-                    <p className="planet-summary">{planetData.summary}</p>
+                    <p className="planet-summary">{planetData.aiWhisper}</p>
 
                     <div className="planet-stats-grid">
                         <div className="stat-item">
