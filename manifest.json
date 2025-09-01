@@ -1,16 +1,27 @@
 {
-  "name": "Cosmic Pulse: An Audio-Reactive Galaxy",
-  "short_name": "Cosmic Pulse",
+  "name": "AURELION Exoplanet Synthesis Engine",
+  "short_name": "AXEE",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",
-  "theme_color": "#0a0a2a",
-  "description": "An interactive 3D galaxy that visually reacts to ambient audio, creating a cosmic, synesthetic experience.",
+  "theme_color": "#000000",
+  "description": "An interactive exoplanet discovery engine powered by Gemini.",
   "icons": [
     {
       "src": "icon.svg",
       "sizes": "any",
       "type": "image/svg+xml"
     }
+  ],
+  "categories": [
+    "Artificial Intelligence & Machine Learning",
+    "Coding",
+    "Data Analysis",
+    "Data Management",
+    "Data Visualization",
+    "Extrasolar Objects",
+    "Planets & Moons",
+    "Software",
+    "Space Exploration"
   ]
 }

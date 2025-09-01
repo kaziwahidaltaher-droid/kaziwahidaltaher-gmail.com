@@ -1,7 +1,5 @@
 {
-  "name": "AURELION's Exoplanet Synthesis Engine (AXEE)",
-  "requestFramePermissions": [
-    "microphone"
-  ],
-  "description": " Breathing Life into Cosmic Discovery"
+  "name": "AXEE (AURELION Exoplanet Synthesis Engine)",
+  "description": "An interactive exoplanet discovery engine powered by Gemini.",
+  "requestFramePermissions": []
 }
