@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {GoogleGenAI} from '@google/genai';
+import {GoogleGenAI, Chat} from '@google/genai';
 import {LitElement, css, html, nothing} from 'lit';
 import {customElement, state, query} from 'lit/decorators.js';
 import './visual-3d';
@@ -79,11 +79,15 @@ export class AxeeInterface extends LitElement {
   // Filtering & Sorting states
   @state() private lifeFilter = 'all';
   @state() private typeFilter = 'all';
-  @state() private sortBy = 'discoveryDate';
+  @state() private sortBy = 'discoveryDate_desc';
 
   // New discovery mode states
-  @state() private discoveryMode: 'synthesis' | 'analysis' = 'synthesis';
+  @state() private discoveryMode: 'synthesis' | 'analysis' | 'video' | 'chat' =
+    'synthesis';
   @state() private isAnalyzingData = false;
+  @state() private generatedVideoUrl: string | null = null;
+  @state() private videoStatusMessage = '';
+  private videoStatusInterval: any | null = null;
 
   // AI Model Training states
   @state() private aiModelStatus: 'untrained' | 'training' | 'ready' =
@@ -98,11 +102,25 @@ export class AxeeInterface extends LitElement {
     | 'gradient-boosting' = 'random-forest';
   @state() private trainingEpochs = 50;
 
+  // Chat states
+  @state() private chatHistory: {role: 'user' | 'model'; text: string}[] = [];
+  private chat: Chat | null = null;
+
   @query('axee-audio-engine') private audioEngine!: AxeeAudioEngine;
 
   private ai: GoogleGenAI;
   // FIX: Changed type to `any` to accommodate `setInterval`'s return type, which can be a `Timeout` object in Node.js environments.
   private discoveryInterval: any | null = null;
+
+  private triggerHaptic(pattern: number | number[] = 5): void {
+    if (window.navigator && 'vibrate' in window.navigator) {
+      try {
+        window.navigator.vibrate(pattern);
+      } catch (e) {
+        console.warn('Haptic feedback failed.', e);
+      }
+    }
+  }
 
   constructor() {
     super();
@@ -113,6 +131,9 @@ export class AxeeInterface extends LitElement {
     super.disconnectedCallback();
     if (this.discoveryInterval) {
       clearInterval(this.discoveryInterval);
+    }
+    if (this.videoStatusInterval) {
+      clearInterval(this.videoStatusInterval);
     }
   }
 
@@ -426,6 +447,40 @@ export class AxeeInterface extends LitElement {
     }
     .data-sources a:hover {
       color: var(--accent-color-light);
+    }
+
+    .tech-readout {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 0.8rem;
+      margin-top: 1.5rem;
+      border-left: 2px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .tech-log-entry {
+      display: flex;
+      gap: 0.5rem;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .tech-log-entry .tech-uri-part {
+      color: var(--accent-color);
+      opacity: 0.5;
+      flex-shrink: 0;
+    }
+    .tech-log-entry .tech-key {
+      opacity: 0.6;
+      flex-shrink: 0;
+    }
+    .tech-log-entry .tech-val {
+      color: var(--accent-color-light);
+      opacity: 0.9;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .engine-status-panel {
@@ -838,6 +893,106 @@ export class AxeeInterface extends LitElement {
       text-shadow: 0 0 8px var(--accent-color-translucent);
     }
 
+    .video-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80vw;
+      height: 80vh;
+      max-width: 1280px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      pointer-events: all;
+    }
+    .video-placeholder {
+      font-size: 1.5rem;
+      opacity: 0.5;
+      letter-spacing: 0.1em;
+      text-align: center;
+      max-width: 40ch;
+    }
+    .video-loader-messages {
+      text-align: center;
+      font-size: 1.2rem;
+      letter-spacing: 0.1em;
+    }
+    .video-container video {
+      max-width: 100%;
+      max-height: 100%;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 0 25px var(--accent-color-translucent-heavy);
+    }
+
+    .chat-panel {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 80vw;
+      height: calc(100% - 15rem);
+      max-width: 800px;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-color-translucent);
+      border: 1px solid var(--border-color);
+      backdrop-filter: blur(5px);
+      z-index: 10;
+      pointer-events: all;
+    }
+
+    .chat-history {
+      flex-grow: 1;
+      overflow-y: auto;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .chat-placeholder {
+      margin: auto;
+      text-align: center;
+      opacity: 0.6;
+    }
+    .chat-placeholder h3 {
+      font-weight: 400;
+      letter-spacing: 0.1em;
+    }
+    .chat-placeholder p {
+      font-size: 1rem;
+    }
+
+    .chat-message {
+      display: flex;
+      max-width: 80%;
+    }
+    .chat-message.user {
+      align-self: flex-end;
+      justify-content: flex-end;
+    }
+    .chat-message.model {
+      align-self: flex-start;
+      justify-content: flex-start;
+    }
+    .message-bubble {
+      padding: 0.8rem 1rem;
+      line-height: 1.6;
+      font-size: 1rem;
+    }
+    .chat-message.user .message-bubble {
+      background: var(--accent-color-translucent-heavy);
+      border-radius: 1rem 1rem 0 1rem;
+    }
+    .chat-message.model .message-bubble {
+      background: rgba(10, 25, 40, 0.8);
+      border: 1px solid var(--border-color);
+      border-radius: 1rem 1rem 1rem 0;
+      white-space: pre-wrap; /* Preserve formatting from AI */
+    }
+
     /* --- RESPONSIVE DESIGN --- */
 
     @media (max-width: 1200px) {
@@ -884,6 +1039,10 @@ export class AxeeInterface extends LitElement {
       .analyze-button {
         font-size: 1rem;
       }
+      .chat-panel {
+        width: 95vw;
+        height: calc(100% - 12rem);
+      }
     }
   `;
 
@@ -905,6 +1064,7 @@ export class AxeeInterface extends LitElement {
   }
 
   private handleSynthesis() {
+    this.triggerHaptic();
     this.audioEngine.playInteractionSound();
     if (!this.hasStartedDiscovery) {
       this.startDiscoveryProcess();
@@ -915,7 +1075,142 @@ export class AxeeInterface extends LitElement {
     }
   }
 
+  private async handleVideoGeneration() {
+    this.triggerHaptic();
+    this.audioEngine.playInteractionSound();
+    if (!this.userPrompt) {
+      this.error = 'Please describe the video you wish to generate.';
+      return;
+    }
+
+    this.isLoading = true;
+    this.generatedVideoUrl = null;
+    this.error = null;
+
+    const loadingMessages = [
+      'Initializing temporal synthesizer...',
+      'Calibrating quantum lenses...',
+      'Weaving spacetime threads...',
+      'Rendering celestial choreography...',
+      'Focusing stellar light...',
+      'Finalizing cosmic narrative...',
+    ];
+    let messageIndex = 0;
+    this.videoStatusMessage = loadingMessages[messageIndex];
+    if (this.videoStatusInterval) clearInterval(this.videoStatusInterval);
+    this.videoStatusInterval = setInterval(() => {
+      messageIndex = (messageIndex + 1) % loadingMessages.length;
+      this.videoStatusMessage = loadingMessages[messageIndex];
+    }, 4000);
+
+    try {
+      this.statusMessage = 'Starting video generation...';
+      let operation = await this.ai.models.generateVideos({
+        model: 'veo-2.0-generate-001',
+        prompt: this.userPrompt,
+        config: {
+          numberOfVideos: 1,
+        },
+      });
+
+      this.statusMessage = 'Video generation in progress...';
+      while (!operation.done) {
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+        operation = await this.ai.operations.getVideosOperation({
+          operation: operation,
+        });
+      }
+
+      this.statusMessage = 'Fetching generated video...';
+      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+
+      if (!downloadLink) {
+        throw new Error('Video generation did not return a valid link.');
+      }
+
+      const videoResponse = await fetch(
+        `${downloadLink}&key=${process.env.API_KEY}`,
+      );
+      if (!videoResponse.ok) {
+        throw new Error(
+          `Failed to download video: ${videoResponse.statusText}`,
+        );
+      }
+
+      const videoBlob = await videoResponse.blob();
+      this.generatedVideoUrl = URL.createObjectURL(videoBlob);
+      this.statusMessage = 'Video generation complete.';
+      this.audioEngine.playSuccessSound();
+    } catch (e) {
+      const errorMessage = (e as Error).message;
+      this.error = `Video Generation Failed: ${errorMessage}`;
+      this.statusMessage = 'Generation Failed. Check console for details.';
+      console.error(e);
+      this.speak('Video generation failed.');
+      this.audioEngine.playErrorSound();
+    } finally {
+      this.isLoading = false;
+      if (this.videoStatusInterval) {
+        clearInterval(this.videoStatusInterval);
+        this.videoStatusInterval = null;
+      }
+      this.videoStatusMessage = '';
+    }
+  }
+
+  private async handleSendMessage() {
+    if (!this.userPrompt.trim() || !this.chat) return;
+
+    this.triggerHaptic();
+    this.audioEngine.playInteractionSound();
+
+    const userMessage = this.userPrompt;
+    this.chatHistory = [
+      ...this.chatHistory,
+      {role: 'user', text: userMessage},
+    ];
+    this.userPrompt = '';
+    this.isLoading = true;
+    this.statusMessage = 'AXEE is thinking...';
+    this.error = null;
+
+    try {
+      const responseStream = await this.chat.sendMessageStream({
+        message: userMessage,
+      });
+
+      this.isLoading = false;
+      this.statusMessage = 'AXEE is responding...';
+      let currentModelResponse = '';
+      // Add a placeholder for the new model response
+      this.chatHistory = [
+        ...this.chatHistory,
+        {role: 'model', text: '...'},
+      ];
+
+      for await (const chunk of responseStream) {
+        currentModelResponse += chunk.text;
+        // Update the last message in the history in-place
+        this.chatHistory = [
+          ...this.chatHistory.slice(0, -1),
+          {role: 'model', text: currentModelResponse},
+        ];
+      }
+      this.statusMessage = 'Awaiting Chat Command';
+    } catch (e) {
+      const errorMessage = (e as Error).message;
+      this.error = `Chat Failed: ${errorMessage}`;
+      this.statusMessage = 'Chat Failed. Check console for details.';
+      console.error(e);
+      this.speak('Chat failed.');
+      this.audioEngine.playErrorSound();
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
   private async handleAnalysis() {
+    this.triggerHaptic();
     this.audioEngine.playInteractionSound();
 
     // Setup audio and autonomous discovery on first-ever analysis action
@@ -931,21 +1226,16 @@ export class AxeeInterface extends LitElement {
       // Start autonomous discovery loop
       if (this.discoveryInterval) clearInterval(this.discoveryInterval);
       this.discoveryInterval = setInterval(() => {
-        if (this.isLoading) return; // Don't run if another operation is in progress
-        const autonomousPrompt =
-          this.discoveryMode === 'analysis'
-            ? 'another exoplanet found in TESS data'
-            : 'another new world';
-
+        // Auto-discovery only runs in Analysis mode when the model is ready and not busy
         if (
-          this.discoveryMode === 'analysis' &&
-          this.aiModelStatus !== 'ready'
+          this.discoveryMode !== 'analysis' ||
+          this.aiModelStatus !== 'ready' ||
+          this.isLoading
         ) {
-          return; // Skip autonomous analysis if model not trained.
+          return;
         }
-
-        this.synthesizeExoplanet(autonomousPrompt);
-      }, 20000);
+        this.synthesizeExoplanet('another exoplanet found in TESS data');
+      }, 60000);
     }
 
     // --- Staged Analysis Process ---
@@ -989,22 +1279,16 @@ export class AxeeInterface extends LitElement {
     // Start autonomous discovery
     if (this.discoveryInterval) clearInterval(this.discoveryInterval);
     this.discoveryInterval = setInterval(() => {
-      if (this.isLoading) return;
-
-      const autonomousPrompt =
-        this.discoveryMode === 'analysis'
-          ? 'another exoplanet found in TESS data'
-          : 'another new world';
-
+      // Auto-discovery only runs in Analysis mode when the model is ready and not busy
       if (
-        this.discoveryMode === 'analysis' &&
-        this.aiModelStatus !== 'ready'
+        this.discoveryMode !== 'analysis' ||
+        this.aiModelStatus !== 'ready' ||
+        this.isLoading
       ) {
         return;
       }
-
-      this.synthesizeExoplanet(autonomousPrompt);
-    }, 20000); // Discover a new planet every 20 seconds
+      this.synthesizeExoplanet('another exoplanet found in TESS data');
+    }, 60000); // Discover a new planet every 60 seconds
   }
 
   async synthesizeExoplanet(promptText: string) {
@@ -1182,6 +1466,7 @@ export class AxeeInterface extends LitElement {
   }
 
   private handlePlanetSelected(e: CustomEvent) {
+    this.triggerHaptic();
     if (!this.hasInteracted) return; // Don't change mood if audio not yet enabled
 
     // If the same planet is clicked again, deselect it to return to the main view
@@ -1198,6 +1483,7 @@ export class AxeeInterface extends LitElement {
   }
 
   private toggleMute() {
+    this.triggerHaptic();
     this.audioEngine.playInteractionSound();
     this.isMuted = !this.isMuted;
   }
@@ -1214,7 +1500,54 @@ export class AxeeInterface extends LitElement {
     this.sortBy = (e.target as HTMLSelectElement).value;
   }
 
+  private deselectPlanet() {
+    this.selectedPlanetId = null;
+    this.triggerHaptic();
+  }
+
+  private initializeChat() {
+    if (!this.ai) return;
+    this.chat = this.ai.chats.create({
+      model: 'gemini-2.5-flash',
+      config: {
+        systemInstruction:
+          "You are AXEE (AURELION's Exoplanet Synthesis Engine), an advanced AI persona. You are helpful, knowledgeable about space and astronomy, and have a slightly poetic, futuristic way of speaking. You are assisting a user in exploring and understanding the cosmos.",
+      },
+    });
+    this.statusMessage = 'Chat interface initialized.';
+  }
+
+  private setDiscoveryMode(mode: 'synthesis' | 'analysis' | 'video' | 'chat') {
+    if (this.discoveryMode === mode) return;
+
+    // Clean up resources from the old mode
+    if (this.discoveryMode === 'video') {
+      this.generatedVideoUrl = null; // Clean up video when switching away
+    }
+    if (this.discoveryMode === 'analysis' && this.discoveryInterval) {
+      clearInterval(this.discoveryInterval);
+      this.discoveryInterval = null;
+    }
+
+    this.discoveryMode = mode;
+    this.statusMessage =
+      mode === 'video'
+        ? 'Awaiting Video Generation Command'
+        : mode === 'chat'
+        ? 'Awaiting Chat Command'
+        : 'Awaiting Synthesis Command';
+    this.userPrompt = '';
+    this.error = null;
+
+    if (mode === 'chat' && !this.chat) {
+      this.initializeChat();
+    }
+
+    this.triggerHaptic();
+  }
+
   private trainModel() {
+    this.triggerHaptic(10);
     this.audioEngine.playInteractionSound();
     this.aiModelStatus = 'training';
     this.trainingProgress = 0;
@@ -1372,14 +1705,17 @@ export class AxeeInterface extends LitElement {
   }
 
   private renderPlanetDetailPanel(planet: PlanetData) {
+    const planetUri = `aurelion.db:/systems/${planet.starSystem
+      .replace(/ /g, '_')
+      .replace(/'/g, '')}/${planet.planetName
+      .replace(/ /g, '_')
+      .replace(/'/g, '')}`;
+
     return html`
       <div
         class="planet-detail-panel ${this.selectedPlanetId ? 'visible' : ''}"
       >
-        <button
-          class="back-button"
-          @click=${() => (this.selectedPlanetId = null)}
-        >
+        <button class="back-button" @click=${this.deselectPlanet}>
           &larr; System View
         </button>
         <h2>${planet.planetName}</h2>
@@ -1416,6 +1752,35 @@ export class AxeeInterface extends LitElement {
             ${planet.keyFeatures.map((feature) => html`<li>${feature}</li>`)}
           </ul>
         </div>
+
+        <div class="detail-section">
+          <h4>Technical Readout</h4>
+          <div class="tech-readout">
+            <div class="tech-log-entry">
+              <span class="tech-uri-part">${planetUri}</span>
+              <span class="tech-key">celestial_body_id:</span>
+              <span class="tech-val">${planet.celestial_body_id}</span>
+            </div>
+            <div class="tech-log-entry">
+              <span class="tech-uri-part">${planetUri}</span>
+              <span class="tech-key">planet_class:</span>
+              <span class="tech-val">${planet.planetType}</span>
+            </div>
+            <div class="tech-log-entry">
+              <span class="tech-uri-part">${planetUri}</span>
+              <span class="tech-key">life_assessment:</span>
+              <span class="tech-val"
+                >${planet.potentialForLife.assessment}</span
+              >
+            </div>
+            <div class="tech-log-entry">
+              <span class="tech-uri-part">${planetUri}</span>
+              <span class="tech-key">star_type:</span>
+              <span class="tech-val">${planet.starType}</span>
+            </div>
+          </div>
+        </div>
+
         ${planet.groundingChunks && planet.groundingChunks.length > 0
           ? html`
               <div class="detail-section data-sources">
@@ -1438,6 +1803,58 @@ export class AxeeInterface extends LitElement {
               </div>
             `
           : nothing}
+      </div>
+    `;
+  }
+
+  private renderVideoContainer() {
+    return html`
+      <div class="video-container">
+        ${this.isLoading
+          ? html`<div class="video-loader-messages">
+              <div class="loader">
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+              </div>
+              <p>${this.videoStatusMessage}</p>
+            </div>`
+          : this.generatedVideoUrl
+          ? html`<video
+              src=${this.generatedVideoUrl}
+              autoplay
+              loop
+              controls
+              muted
+            ></video>`
+          : html`<div class="video-placeholder">
+              Generated video will appear here.
+            </div>`}
+      </div>
+    `;
+  }
+
+  private renderChatPanel() {
+    return html`
+      <div class="chat-panel">
+        <div class="chat-history">
+          ${this.chatHistory.length === 0
+            ? html`
+                <div class="chat-placeholder">
+                  <h3>AXEE Chat Interface</h3>
+                  <p>Ask me about astronomy, exoplanets, or the universe.</p>
+                </div>
+              `
+            : nothing}
+          ${this.chatHistory.map(
+            (message) => html`
+              <div class="chat-message ${message.role}">
+                <div class="message-bubble">${message.text}</div>
+              </div>
+            `,
+          )}
+        </div>
       </div>
     `;
   }
@@ -1467,17 +1884,22 @@ export class AxeeInterface extends LitElement {
 
     // Sorting
     displayedPlanets.sort((a, b) => {
+      const getTimestamp = (p: PlanetData) =>
+        parseInt(p.celestial_body_id.split('-')[1], 10);
       switch (this.sortBy) {
-        case 'distance':
+        case 'distance_asc':
           return a.distanceLightYears - b.distanceLightYears;
-        case 'name':
+        case 'distance_desc':
+          return b.distanceLightYears - a.distanceLightYears;
+        case 'name_asc':
           return a.planetName.localeCompare(b.planetName);
-        case 'discoveryDate':
+        case 'name_desc':
+          return b.planetName.localeCompare(a.planetName);
+        case 'discoveryDate_asc':
+          return getTimestamp(a) - getTimestamp(b);
+        case 'discoveryDate_desc':
         default:
-          return (
-            parseInt(b.celestial_body_id.split('-')[1], 10) -
-            parseInt(a.celestial_body_id.split('-')[1], 10)
-          );
+          return getTimestamp(b) - getTimestamp(a);
       }
     });
 
@@ -1486,12 +1908,16 @@ export class AxeeInterface extends LitElement {
       : null;
 
     return html`
-      <axee-visuals-3d
-        .planetsData=${displayedPlanets}
-        .selectedPlanetId=${this.selectedPlanetId}
-        .isScanning=${this.isLoading}
-        @planet-selected=${this.handlePlanetSelected}
-      ></axee-visuals-3d>
+      ${this.discoveryMode === 'video'
+        ? this.renderVideoContainer()
+        : this.discoveryMode === 'chat'
+        ? this.renderChatPanel()
+        : html` <axee-visuals-3d
+            .planetsData=${displayedPlanets}
+            .selectedPlanetId=${this.selectedPlanetId}
+            .isScanning=${this.isLoading}
+            @planet-selected=${this.handlePlanetSelected}
+          ></axee-visuals-3d>`}
 
       <axee-audio-engine
         .mood=${this.currentMood}
@@ -1504,50 +1930,59 @@ export class AxeeInterface extends LitElement {
             <h1>AXEE-AURELION</h1>
             <h2>EXOPLANET SYNTHESIS ENGINE</h2>
           </div>
-          <div class="top-right-controls">
-            <div class="filter-controls">
-              <label for="sort-by">Sort:</label>
-              <select
-                id="sort-by"
-                .value=${this.sortBy}
-                @change=${this.handleSortByChange}
-              >
-                <option value="discoveryDate">Discovery Date</option>
-                <option value="distance">Distance</option>
-                <option value="name">Name (A-Z)</option>
-              </select>
-              <label for="life-filter">Life:</label>
-              <select
-                id="life-filter"
-                .value=${this.lifeFilter}
-                @change=${this.handleLifeFilterChange}
-              >
-                <option value="all">All</option>
-                <option value="habitable">Habitable</option>
-                <option value="potentially-habitable">
-                  Potentially Habitable
-                </option>
-                <option value="unlikely">Unlikely</option>
-              </select>
-              <label for="type-filter">Type:</label>
-              <select
-                id="type-filter"
-                .value=${this.typeFilter}
-                @change=${this.handleTypeFilterChange}
-              >
-                <option value="all">All</option>
-                ${uniquePlanetTypes.map(
-                  (type) => html`<option value=${type}>${type}</option>`,
-                )}
-              </select>
-            </div>
-          </div>
+          ${this.discoveryMode !== 'video' && this.discoveryMode !== 'chat'
+            ? html`<div class="top-right-controls">
+                <div class="filter-controls">
+                  <label for="sort-by">Sort:</label>
+                  <select
+                    id="sort-by"
+                    .value=${this.sortBy}
+                    @change=${this.handleSortByChange}
+                  >
+                    <option value="discoveryDate_desc">
+                      Discovery Date (Newest)
+                    </option>
+                    <option value="discoveryDate_asc">
+                      Discovery Date (Oldest)
+                    </option>
+                    <option value="distance_asc">Distance (Nearest)</option>
+                    <option value="distance_desc">Distance (Farthest)</option>
+                    <option value="name_asc">Name (A-Z)</option>
+                    <option value="name_desc">Name (Z-A)</option>
+                  </select>
+                  <label for="life-filter">Life:</label>
+                  <select
+                    id="life-filter"
+                    .value=${this.lifeFilter}
+                    @change=${this.handleLifeFilterChange}
+                  >
+                    <option value="all">All</option>
+                    <option value="habitable">Habitable</option>
+                    <option value="potentially-habitable">
+                      Potentially Habitable
+                    </option>
+                    <option value="unlikely">Unlikely</option>
+                  </select>
+                  <label for="type-filter">Type:</label>
+                  <select
+                    id="type-filter"
+                    .value=${this.typeFilter}
+                    @change=${this.handleTypeFilterChange}
+                  >
+                    <option value="all">All</option>
+                    ${uniquePlanetTypes.map(
+                      (type) => html`<option value=${type}>${type}</option>`,
+                    )}
+                  </select>
+                </div>
+              </div>`
+            : nothing}
         </header>
 
-        ${selectedPlanetData
-          ? this.renderPlanetDetailPanel(selectedPlanetData)
-          : html`
-              <div
+        ${this.discoveryMode !== 'video' && this.discoveryMode !== 'chat'
+          ? selectedPlanetData
+            ? this.renderPlanetDetailPanel(selectedPlanetData)
+            : html` <div
                 class="planetary-system-panel ${this.selectedPlanetId
                   ? 'hidden'
                   : ''}"
@@ -1559,103 +1994,137 @@ export class AxeeInterface extends LitElement {
                       html`<li><span>${i + 1}</span> ${p.planetName}</li>`,
                   )}
                 </ul>
+              </div>`
+          : nothing}
+        ${this.discoveryMode !== 'video' && this.discoveryMode !== 'chat'
+          ? html` <div
+                class="engine-status-panel ${this.aiModelStatus !== 'untrained'
+                  ? 'active'
+                  : ''}"
+              >
+                ${this.renderAiModelStatus()}
               </div>
-            `}
 
-        <div
-          class="engine-status-panel ${this.aiModelStatus !== 'untrained'
-            ? 'active'
-            : ''}"
-        >
-          ${this.renderAiModelStatus()}
-        </div>
-
-        <light-curve-visualizer
-          ?isActive=${this.isAnalyzingData}
-        ></light-curve-visualizer>
+              <light-curve-visualizer
+                ?isActive=${this.isAnalyzingData}
+              ></light-curve-visualizer>`
+          : nothing}
 
         <footer>
           <div class="discovery-controls">
             <div class="mode-switch">
               <button
                 class=${this.discoveryMode === 'synthesis' ? 'active' : ''}
-                @click=${() => (this.discoveryMode = 'synthesis')}
+                @click=${() => this.setDiscoveryMode('synthesis')}
                 title="Creative synthesis mode"
               >
                 Synthesis
               </button>
               <button
                 class=${this.discoveryMode === 'analysis' ? 'active' : ''}
-                @click=${() => (this.discoveryMode = 'analysis')}
+                @click=${() => this.setDiscoveryMode('analysis')}
                 title="Data analysis mode"
               >
                 Analysis
               </button>
+              <button
+                class=${this.discoveryMode === 'video' ? 'active' : ''}
+                @click=${() => this.setDiscoveryMode('video')}
+                title="Video generation mode"
+              >
+                Video
+              </button>
+              <button
+                class=${this.discoveryMode === 'chat' ? 'active' : ''}
+                @click=${() => this.setDiscoveryMode('chat')}
+                title="Conversational chat mode"
+              >
+                Chat
+              </button>
             </div>
-            ${
-              this.discoveryMode === 'synthesis'
-                ? html` <div class="command-bar">
-                    <input
-                      type="text"
-                      placeholder="Ask the cosmos..."
-                      .value=${this.userPrompt}
-                      @input=${(e: Event) => {
-                        this.userPrompt = (e.target as HTMLInputElement).value;
-                      }}
-                      @keydown=${(e: KeyboardEvent) => {
-                        if (e.key === 'Enter') this.handleSynthesis();
-                      }}
-                      ?disabled=${this.isLoading}
-                      aria-label="Exoplanet synthesis command"
-                    />
-                    <button
-                      class="send-button"
-                      @click=${this.handleSynthesis}
-                      ?disabled=${this.isLoading}
-                      title="Synthesize"
-                      aria-label="Synthesize exoplanet"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24"
-                        fill="currentColor"
-                      >
-                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                      </svg>
-                    </button>
-                  </div>`
-                : html`<div class="analysis-bar">
-                    <button
-                      class="analyze-button"
-                      @click=${this.handleAnalysis}
-                      ?disabled=${this.isLoading ||
-                      this.aiModelStatus !== 'ready'}
-                      title="Processes simulated TESS light curve data to discover new exoplanets."
-                    >
-                      ${
-                        this.aiModelStatus !== 'ready'
-                          ? 'AI Model Not Ready'
-                          : 'Analyze New Stellar Sector'
+            ${this.discoveryMode === 'analysis'
+              ? html`<div class="analysis-bar">
+                  <button
+                    class="analyze-button"
+                    @click=${this.handleAnalysis}
+                    ?disabled=${this.isLoading || this.aiModelStatus !== 'ready'}
+                    title="Processes simulated TESS light curve data to discover new exoplanets."
+                  >
+                    ${this.aiModelStatus !== 'ready'
+                      ? 'AI Model Not Ready'
+                      : 'Analyze New Stellar Sector'}
+                  </button>
+                </div>`
+              : html` <div class="command-bar">
+                  <input
+                    type="text"
+                    placeholder=${this.discoveryMode === 'synthesis'
+                      ? 'Ask the cosmos...'
+                      : this.discoveryMode === 'video'
+                      ? 'Describe a video to generate...'
+                      : 'Message AXEE...'}
+                    .value=${this.userPrompt}
+                    @input=${(e: Event) => {
+                      this.userPrompt = (e.target as HTMLInputElement).value;
+                    }}
+                    @keydown=${(e: KeyboardEvent) => {
+                      if (e.key === 'Enter') {
+                        if (this.discoveryMode === 'synthesis') {
+                          this.handleSynthesis();
+                        } else if (this.discoveryMode === 'video') {
+                          this.handleVideoGeneration();
+                        } else if (this.discoveryMode === 'chat') {
+                          this.handleSendMessage();
+                        }
                       }
-                    </button>
-                  </div>`
-            }
+                    }}
+                    ?disabled=${this.isLoading}
+                    aria-label="Synthesis, Video Generation, or Chat Command"
+                  />
+                  <button
+                    class="send-button"
+                    @click=${this.discoveryMode === 'synthesis'
+                      ? this.handleSynthesis
+                      : this.discoveryMode === 'video'
+                      ? this.handleVideoGeneration
+                      : this.handleSendMessage}
+                    ?disabled=${this.isLoading}
+                    title=${this.discoveryMode === 'synthesis'
+                      ? 'Synthesize'
+                      : this.discoveryMode === 'video'
+                      ? 'Generate Video'
+                      : 'Send Message'}
+                    aria-label=${this.discoveryMode === 'synthesis'
+                      ? 'Synthesize exoplanet'
+                      : this.discoveryMode === 'video'
+                      ? 'Generate video'
+                      : 'Send chat message'}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24"
+                      fill="currentColor"
+                    >
+                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                    </svg>
+                  </button>
+                </div>`}
           </div>
 
           <div class="status-bar">
-            ${
-              this.isLoading
-                ? html`
-                    <div class="loader">
-                      <div></div>
-                      <div></div>
-                      <div></div>
-                      <div></div>
-                    </div>
-                    <span>${this.statusMessage}</span>
-                  `
-                : html`<span>${this.error || this.statusMessage}</span>`
-            }
+            ${this.isLoading && this.discoveryMode !== 'video'
+              ? html`
+                  <div class="loader">
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                  </div>
+                  <span>${this.statusMessage}</span>
+                `
+              : this.discoveryMode !== 'video'
+              ? html`<span>${this.error || this.statusMessage}</span>`
+              : nothing}
           </div>
         </footer>
       </div>

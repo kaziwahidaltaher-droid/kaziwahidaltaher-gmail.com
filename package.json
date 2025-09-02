@@ -1,0 +1,19 @@
+{
+  "name": "axee-aurelion",
+  "version": "1.0.0",
+  "description": "AURELION Exoplanet Synthesis Engine",
+  "main": "index.tsx",
+  "scripts": {
+    "start": "serve",
+    "lint": "eslint . --ext .ts,.tsx"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "@types/three": "^0.164.0",
+    "eslint": "^9.1.1",
+    "globals": "^15.1.0",
+    "serve": "^14.2.3",
+    "typescript": "^5.4.5",
+    "typescript-eslint": "^7.8.0"
+  }
+}

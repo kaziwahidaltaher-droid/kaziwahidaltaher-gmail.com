@@ -144,12 +144,15 @@ export const fs = `
 
     // Clouds layer for all types
     if (uCloudiness > 0.0) {
-      // Rotate clouds at a different speed
-      float angle = uTime * 0.2;
-      mat3 rotationMatrix = mat3(cos(angle), 0, sin(angle), 0, 1, 0, -sin(angle), 0, cos(angle));
-      vec3 cloudPos = rotationMatrix * vPosition;
-      
-      float cloudNoise = cloud_fbm(cloudPos * 4.0);
+      // Rotate clouds for movement across the surface
+      float rotationAngle = uTime * 0.05;
+      mat3 rotationMatrix = mat3(cos(rotationAngle), 0, sin(rotationAngle), 0, 1, 0, -sin(rotationAngle), 0, cos(rotationAngle));
+      vec3 rotatedPosition = rotationMatrix * vPosition;
+
+      // Add a time-based offset to the noise input to make clouds evolve and change shape
+      vec3 evolvingCloudPos = rotatedPosition * 4.0 + vec3(uTime * 0.1, 0.0, 0.0);
+
+      float cloudNoise = cloud_fbm(evolvingCloudPos);
       float cloudCoverage = smoothstep(0.5 - uCloudiness, 0.5, cloudNoise);
       finalColor = mix(finalColor, vec3(1.0), cloudCoverage);
     }
