@@ -25,7 +25,7 @@ export const fs = `
   uniform vec3 uOceanColor;
   uniform float uCloudiness; // 0.0 to 1.0
   uniform float uIceCoverage; // 0.0 to 1.0
-  uniform int uTextureType; // 1: Terrestrial, 2: Gas Giant, 3: Volcanic
+  uniform int uTextureType; // 1: Terrestrial, 2: Gas Giant, 3: Volcanic, 4: Icy
   uniform bool uIsSelected;
 
   varying vec2 vUv;
@@ -115,6 +115,18 @@ export const fs = `
         float cracks = 1.0 - smoothstep(0.0, 0.05, abs(fbm(vPosition * 10.0 + baseNoise, 2)));
         vec3 crackColor = uColor2 * 2.0; // Glowing cracks
         finalColor = mix(uColor1, crackColor, cracks);
+
+    } else if (uTextureType == 4) { // Icy
+        float baseNoise = fbm(vPosition * 5.0, 7);
+        float cracks = smoothstep(0.0, 0.08, abs(fbm(vPosition * 15.0 + baseNoise, 3)));
+        cracks = pow(cracks, 0.5);
+
+        // Mix between a base ice color and a slightly darker/bluer crack color
+        vec3 iceColor = mix(uColor1, uColor2, cracks);
+        
+        // Use iceCoverage to determine overall brightness/frostiness
+        float frost = smoothstep(0.5, 1.0, uIceCoverage + baseNoise * 0.1);
+        finalColor = mix(iceColor, vec3(0.95, 0.98, 1.0), frost);
 
     } else { // Terrestrial (default)
         // Base terrain noise

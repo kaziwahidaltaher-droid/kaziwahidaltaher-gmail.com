@@ -1,19 +1,41 @@
 {
-  "name": "axee-aurelion",
+  "name": "axee-desktop",
   "version": "1.0.0",
-  "description": "AURELION Exoplanet Synthesis Engine",
-  "main": "index.tsx",
+  "description": "Desktop version of the AURELION Exoplanet Synthesis Engine",
+  "main": "main.js",
   "scripts": {
-    "start": "serve",
-    "lint": "eslint . --ext .ts,.tsx"
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
   },
+  "author": "AURELION",
   "devDependencies": {
-    "@eslint/js": "latest",
-    "@types/three": "^0.164.0",
-    "eslint": "^9.1.1",
-    "globals": "^15.1.0",
-    "serve": "^14.2.3",
-    "typescript": "^5.4.5",
-    "typescript-eslint": "^7.8.0"
+    "electron": "^31.0.1",
+    "electron-builder": "^24.13.3",
+    "dotenv": "^16.4.5"
+  },
+  "build": {
+    "appId": "com.aurelion.axee",
+    "productName": "AXEE",
+    "files": [
+      "**/*",
+      "!node_modules/",
+      "!dist/",
+      "!.env",
+      "!eslint.config.js",
+      "!postcss.config.js",
+      "!package.json.bak",
+      "!README.md"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }

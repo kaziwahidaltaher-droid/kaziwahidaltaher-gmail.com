@@ -24,6 +24,7 @@ export class AxeeVisuals3D extends LitElement {
   @property({type: Array}) planetsData: PlanetData[] = [];
   @property({type: String}) selectedPlanetId: string | null = null;
   @property({type: Boolean}) isScanning = false;
+  @property({type: String}) viewMode: 'single' | 'quad' = 'quad';
 
   @query('#three-canvas') private canvas!: HTMLCanvasElement;
   @state() private selectedPlanetData: PlanetData | null = null;
@@ -73,11 +74,47 @@ export class AxeeVisuals3D extends LitElement {
       cursor: grabbing;
     }
 
+    .quad-view-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .quad-view-overlay::before,
+    .quad-view-overlay::after {
+      content: '';
+      position: absolute;
+      background-color: var(--border-color);
+      box-shadow: 0 0 10px var(--border-color);
+    }
+
+    /* Vertical line */
+    .quad-view-overlay::before {
+      left: 50%;
+      top: 0;
+      width: 1px;
+      height: 100%;
+      transform: translateX(-50%);
+    }
+
+    /* Horizontal line */
+    .quad-view-overlay::after {
+      top: 50%;
+      left: 0;
+      height: 1px;
+      width: 100%;
+      transform: translateY(-50%);
+    }
+
     .right-hud {
       position: absolute;
       top: 9rem;
       right: 2rem;
-      width: 280px;
+      width: clamp(240px, 22vw, 320px);
       color: var(--accent-color);
       transition: opacity 0.5s ease, transform 0.5s ease;
       opacity: 0;
@@ -199,7 +236,6 @@ export class AxeeVisuals3D extends LitElement {
 
     @media (max-width: 1200px) {
       .right-hud {
-        width: 240px;
         right: 1rem;
       }
     }
@@ -291,7 +327,8 @@ export class AxeeVisuals3D extends LitElement {
         Math.pow(Math.random(), galaxyParameters.randomnessPower) *
         (Math.random() < 0.5 ? 1 : -1) *
         galaxyParameters.randomness *
-        radius * 0.5;
+        radius *
+        0.5;
       const randomY =
         Math.pow(Math.random(), galaxyParameters.randomnessPower) *
         (Math.random() < 0.5 ? 1 : -1) *
@@ -301,7 +338,8 @@ export class AxeeVisuals3D extends LitElement {
         Math.pow(Math.random(), galaxyParameters.randomnessPower) *
         (Math.random() < 0.5 ? 1 : -1) *
         galaxyParameters.randomness *
-        radius * 0.5;
+        radius *
+        0.5;
 
       positions[i3] = Math.cos(branchAngle + spinAngle) * radius + randomX;
       positions[i3 + 1] = randomY;
@@ -446,9 +484,29 @@ export class AxeeVisuals3D extends LitElement {
     this.composer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
   };
 
+  private renderQuadrant = (
+    left: number,
+    bottom: number,
+    width: number,
+    height: number,
+  ) => {
+    const dpr = this.renderer.getPixelRatio();
+    const dprLeft = left * dpr;
+    const dprBottom = bottom * dpr;
+    const dprWidth = width * dpr;
+    const dprHeight = height * dpr;
+
+    this.renderer.setViewport(dprLeft, dprBottom, dprWidth, dprHeight);
+    this.renderer.setScissor(dprLeft, dprBottom, dprWidth, dprHeight);
+
+    this.composer.render();
+  };
+
   private runAnimationLoop = () => {
     this.animationFrameId = requestAnimationFrame(this.runAnimationLoop);
     const elapsedTime = this.clock.getElapsedTime();
+
+    // --- UPDATE LOGIC (RUNS ONCE PER FRAME) ---
 
     // Smooth camera movement, respectful of manual control
     if (!this.isManualControl) {
@@ -517,7 +575,41 @@ export class AxeeVisuals3D extends LitElement {
       }
     });
 
-    this.composer.render();
+    // --- RENDER LOGIC (HANDLES SINGLE AND QUAD VIEWS) ---
+    this.renderer.setScissorTest(false);
+    this.renderer.clear();
+    this.renderer.setScissorTest(true);
+
+    const fullWidth = this.canvas.clientWidth;
+    const fullHeight = this.canvas.clientHeight;
+
+    if (this.viewMode === 'quad') {
+      const w = fullWidth / 2;
+      const h = fullHeight / 2;
+
+      // Top-left
+      this.camera.setViewOffset(fullWidth, fullHeight, 0, 0, w, h);
+      this.renderQuadrant(0, h, w, h);
+
+      // Top-right
+      this.camera.setViewOffset(fullWidth, fullHeight, w, 0, w, h);
+      this.renderQuadrant(w, h, w, h);
+
+      // Bottom-left
+      this.camera.setViewOffset(fullWidth, fullHeight, 0, h, w, h);
+      this.renderQuadrant(0, 0, w, h);
+
+      // Bottom-right
+      this.camera.setViewOffset(fullWidth, fullHeight, w, h, w, h);
+      this.renderQuadrant(w, 0, w, h);
+
+      // Clear the view offset after rendering all quadrants
+      this.camera.clearViewOffset();
+    } else {
+      // Single view
+      if (this.camera.view) this.camera.clearViewOffset();
+      this.renderQuadrant(0, 0, fullWidth, fullHeight);
+    }
   };
 
   private createRingTexture(): THREE.CanvasTexture {
@@ -597,7 +689,7 @@ export class AxeeVisuals3D extends LitElement {
           TERRESTRIAL: 1,
           GAS_GIANT: 2,
           VOLCANIC: 3,
-          ICY: 1,
+          ICY: 4, // Added new texture type for Icy planets
         };
         const material = new THREE.ShaderMaterial({
           vertexShader: planetVs,
@@ -769,6 +861,9 @@ export class AxeeVisuals3D extends LitElement {
   render() {
     return html`
       <canvas id="three-canvas"></canvas>
+      ${this.viewMode === 'quad'
+        ? html`<div class="quad-view-overlay"></div>`
+        : nothing}
       ${this.isScanning ? html`<div class="scanning-overlay"></div>` : nothing}
       <div class="right-hud visible">
         ${

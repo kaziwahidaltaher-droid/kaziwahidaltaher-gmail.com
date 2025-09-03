@@ -21,7 +21,7 @@ export class LightCurveVisualizer extends LitElement {
       position: absolute;
       bottom: 8rem;
       right: 2rem;
-      width: 300px;
+      width: clamp(240px, 22vw, 320px);
       height: 150px;
       background: rgba(10, 25, 40, 0.7);
       border: 1px solid rgba(160, 208, 255, 0.2);
@@ -53,7 +53,6 @@ export class LightCurveVisualizer extends LitElement {
 
     @media (max-width: 1200px) {
       :host {
-        width: 240px;
         height: 120px;
         right: 1rem;
       }

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright Google LLC
  * SPDX-License-Identifier: Apache-2.0
  *
  * AURELION Exoplanet Synthesis Engine (AXEE) - Service Worker
@@ -17,13 +17,17 @@ const urlsToCache = [
   '/', // Cache the root URL
   'index.html',
   'index.css',
-  'index.tsx',
-  'visual-3d.tsx',
   'manifest.json',
   'icon.svg',
-  'LiveMotionVisualizer.tsx',
-  'atmosphere-shader.tsx',
+  'index.tsx',
+  'visual-3d.tsx',
+  'audio-engine.tsx',
   'light-curve-visualizer.tsx',
+  'ControlTray.tsx',
+  'atmosphere-shader.tsx',
+  'planet-shader.tsx',
+  'starfield-shaders.tsx',
+  'shader-lab-visualizer.tsx',
 ];
 
 /**
