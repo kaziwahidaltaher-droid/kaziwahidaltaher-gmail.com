@@ -1854,7 +1854,7 @@ export class AxeeInterface extends LitElement {
 
       const prompt =
         this.discoveryMode === 'analysis'
-          ? `${analysisPreamble}\n${jsonStructure}`
+          ? `${analysisPreamble}\n${jsonStructure}\n\nAnalysis Task: "${promptText.trim()}"`
           : `${synthesisPreamble}\n${jsonStructure}\n\nUser Request: "${promptText.trim()}"`;
 
       const response = await this.ai.models.generateContent({
