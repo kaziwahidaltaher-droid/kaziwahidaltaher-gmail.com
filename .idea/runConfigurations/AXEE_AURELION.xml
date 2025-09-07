@@ -1,0 +1,17 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="AXEE-AURELION" type="Application" factoryName="Application" singleton="false" show_console_on_std_err="true" show_console_on_std_out="true">
+    <option name="ALTERNATIVE_JRE_PATH" value="Android API 36.0, extension level 17 Platform" />
+    <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="true" />
+    <option name="UNNAMED_CLASS_CONFIGURATION" value="true" />
+    <option name="INCLUDE_PROVIDED_SCOPE" value="true" />
+    <module name="kaziwahidaltaher-gmail.com" />
+    <option name="PROGRAM_PARAMETERS" value="$MODULE_WORKING_DIR$" />
+    <option name="REDIRECT_INPUT" value="true" />
+    <option name="INPUT_FILE" value="https://aistudio.google.com/apps/drive/1GQS8-1I-OPt4jcQSHPwQAqioLAmD7Tgz?showPreview=true&amp;showAssistant=true" />
+    <shortenClasspath name="MANIFEST" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+      <option name="LaunchBrowser.Before.Run" />
+    </method>
+  </configuration>
+</component>

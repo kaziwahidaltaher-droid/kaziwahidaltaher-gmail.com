@@ -1714,29 +1714,10 @@ export class AxeeInterface extends LitElement {
     this.triggerHaptic();
     this.audioEngine.playInteractionSound();
 
-    // Setup audio and autonomous discovery on first-ever analysis action
+    // On first run, initialize the engine but don't synthesize immediately.
+    // The staged process below will handle the first synthesis.
     if (!this.hasStartedDiscovery) {
-      if (!this.hasInteracted) {
-        this.hasInteracted = true;
-        this.currentMood = 'galaxy';
-      }
-      this.hasStartedDiscovery = true;
-      this.statusMessage =
-        'Cosmic Data Engine Initialized. Stand by for analysis.';
-
-      // Start autonomous discovery loop
-      if (this.discoveryInterval) clearInterval(this.discoveryInterval);
-      this.discoveryInterval = setInterval(() => {
-        // Auto-discovery only runs in Analysis mode when the model is ready and not busy
-        if (
-          this.discoveryMode !== 'analysis' ||
-          this.aiModelStatus !== 'ready' ||
-          this.isLoading
-        ) {
-          return;
-        }
-        this.synthesizeExoplanet('another exoplanet found in TESS data');
-      }, 60000);
+      this.startDiscoveryProcess(false);
     }
 
     // --- Staged Analysis Process ---
@@ -1759,7 +1740,7 @@ export class AxeeInterface extends LitElement {
     );
   }
 
-  private startDiscoveryProcess() {
+  private startDiscoveryProcess(synthesizeImmediately = true) {
     if (this.hasStartedDiscovery) return;
 
     if (!this.hasInteracted) {
@@ -1770,14 +1751,16 @@ export class AxeeInterface extends LitElement {
     this.hasStartedDiscovery = true;
     this.statusMessage = 'Cosmic Data Engine Initialized. Stand by.';
 
-    // Initial, user-guided discovery
-    const initialPrompt =
-      this.discoveryMode === 'analysis'
-        ? 'a new exoplanet discovered via transit method'
-        : this.userPrompt || 'a world at the edge of a nebula';
-    this.synthesizeExoplanet(initialPrompt);
+    // Optionally perform an initial, user-guided discovery
+    if (synthesizeImmediately) {
+      const initialPrompt =
+        this.discoveryMode === 'analysis'
+          ? 'a new exoplanet discovered via transit method'
+          : this.userPrompt || 'a world at the edge of a nebula';
+      this.synthesizeExoplanet(initialPrompt);
+    }
 
-    // Start autonomous discovery
+    // Start autonomous discovery, clearing any previous interval
     if (this.discoveryInterval) clearInterval(this.discoveryInterval);
     this.discoveryInterval = setInterval(() => {
       // Auto-discovery only runs in Analysis mode when the model is ready and not busy
