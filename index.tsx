@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {GoogleGenAI, Chat} from '@google/genai';
+import {GoogleGenAI, Chat, Type, GenerateContentResponse} from '@google/genai';
 import {LitElement, css, html, nothing} from 'lit';
 import {customElement, state, query} from 'lit/decorators.js';
 import {unsafeHTML} from 'lit/directives/unsafe-html.js';
@@ -18,14 +18,6 @@ import {
   vs as atmosphereVs,
   fs as atmosphereFs,
 } from './atmosphere-shader.tsx';
-
-declare global {
-  interface Window {
-    electronAPI: {
-      getApiKey: () => Promise<string>;
-    };
-  }
-}
 
 export interface PlanetData {
   id?: string; // UUID, formerly from Supabase
@@ -166,6 +158,8 @@ export class AxeeInterface extends LitElement {
     'untrained';
   @state() private trainingProgress = 0;
   @state() private trainingStatusMessage = '';
+  @state() private trainingSubMessage = '';
+  @state() private trainingTimeRemaining = '';
   @state() private trainingUseKeplerData = true;
   @state() private trainingUseTessData = true;
   @state() private trainingClassifier:
@@ -176,6 +170,7 @@ export class AxeeInterface extends LitElement {
   @state() private trainingLearningRate = 0.001;
   @state() private trainingBatchSize = 64;
   @state() private trainingValidationAccuracy = 0;
+  @state() private isTrainingConfirmationOpen = false;
   private trainingInterval: ReturnType<typeof setInterval> | null = null;
 
   // Chat states
@@ -217,42 +212,25 @@ export class AxeeInterface extends LitElement {
 
   constructor() {
     super();
-    this.initAI()
-      .then(() => {
-        this.statusMessage = `${this.discoveredPlanets.length} systems loaded from local memory.`;
-      })
-      .catch((err) => {
-        console.error('AI Initialization failed:', err);
-        this.statusMessage =
-          'Error: AI failed to initialize. API Key might be missing.';
-        this.error = 'AI Initialization failed. Check the .env file.';
-      });
+    this.initAI();
   }
 
-  private async initAI() {
-    let apiKey: string | undefined;
-    // Check if running in Electron by looking for the exposed API
-    if (window.electronAPI) {
-      apiKey = await window.electronAPI.getApiKey();
-      if (!apiKey) {
-        throw new Error('API_KEY not found. Please set it in the .env file.');
-      }
-    } else {
-      // Fallback for browser environment where the key is expected via process.env
-      // This might not be set up in a simple browser serve, so we warn the user.
-      apiKey = process.env.API_KEY;
-      if (!apiKey) {
-        console.warn(
-          'API_KEY not found in process.env. The app may not function correctly in a standard browser environment without it.',
-        );
-        throw new Error('API Key is not configured for browser environment.');
-      }
+  private initAI() {
+    try {
+      this.ai = new GoogleGenAI({apiKey: process.env.API_KEY});
+      this.statusMessage = `${this.discoveredPlanets.length} systems loaded from local memory.`;
+    } catch (err: any) {
+      console.error('AI Initialization failed:', err);
+      this.statusMessage = 'Error: AI Initialization Failed.';
+      this.error =
+        err.message ||
+        'A critical error occurred during AI setup. The API key may be missing or invalid.';
     }
-    this.ai = new GoogleGenAI({apiKey});
   }
 
   connectedCallback() {
     super.connectedCallback();
+    this.handleUrlHash();
   }
 
   disconnectedCallback() {
@@ -262,6 +240,50 @@ export class AxeeInterface extends LitElement {
     }
     if (this.trainingInterval) {
       clearInterval(this.trainingInterval);
+    }
+  }
+
+  private handleUrlHash() {
+    if (window.location.hash.startsWith('#planet_data=')) {
+      try {
+        const encodedData = window.location.hash.substring(
+          '#planet_data='.length,
+        );
+        const decodedJson = atob(encodedData);
+        const planetData: PlanetData = JSON.parse(decodedJson);
+
+        if (planetData && planetData.celestial_body_id) {
+          // Check if planet already exists
+          const exists = this.discoveredPlanets.some(
+            (p) => p.celestial_body_id === planetData.celestial_body_id,
+          );
+          if (!exists) {
+            // Add it to the list
+            this.discoveredPlanets = [planetData, ...this.discoveredPlanets];
+          }
+
+          // Select the planet
+          this.selectedPlanetId = planetData.celestial_body_id;
+          this.statusMessage = `Loaded shared planet: ${planetData.planetName}`;
+          this.triggerHaptic();
+
+          // Clean the URL
+          history.replaceState(
+            null,
+            '',
+            window.location.pathname + window.location.search,
+          );
+        }
+      } catch (e) {
+        console.error('Failed to parse shared planet data from URL hash:', e);
+        this.error = 'Could not load shared planet data.';
+        // Clean the URL in case of error too
+        history.replaceState(
+          null,
+          '',
+          window.location.pathname + window.location.search,
+        );
+      }
     }
   }
 
@@ -316,6 +338,317 @@ export class AxeeInterface extends LitElement {
     });
 
     return filteredPlanets;
+  }
+
+  private async synthesizePlanetData(userConcept: string) {
+    this.isLoading = true;
+    this.error = null;
+    this.statusMessage = 'Synthesizing planetary data...';
+    this.audioEngine?.playInteractionSound();
+
+    const prompt = `
+      You are AXEE, the AURELION Exoplanet Synthesis Engine.
+      Your task is to generate a scientifically plausible but fictional exoplanet based on a user's creative concept.
+      The output must be a single JSON object that strictly adheres to the provided schema. Do not include any markdown or extra text outside the JSON object.
+
+      User Concept: "${userConcept}"
+
+      Generate a complete and detailed profile for this exoplanet. Be imaginative and ensure all fields are filled with consistent and compelling information.
+      For the 'visualization.surfaceTexture' field, you must choose one of the following exact strings: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'.
+    `;
+
+    const schema = {
+      type: Type.OBJECT,
+      properties: {
+        planetName: {
+          type: Type.STRING,
+          description: 'A unique and evocative name for the exoplanet.',
+        },
+        starSystem: {
+          type: Type.STRING,
+          description: 'The name of the star system it belongs to.',
+        },
+        starType: {
+          type: Type.STRING,
+          description:
+            'The spectral type of its host star (e.g., G-type, M-type dwarf).',
+        },
+        distanceLightYears: {
+          type: Type.NUMBER,
+          description: 'The distance from Earth in light years.',
+        },
+        planetType: {
+          type: Type.STRING,
+          description:
+            'The classification of the planet (e.g., Terrestrial, Gas Giant, Ice Giant, Super-Earth).',
+        },
+        rotationalPeriod: {
+          type: Type.STRING,
+          description:
+            'The length of one day on the planet, in Earth hours or days.',
+        },
+        orbitalPeriod: {
+          type: Type.STRING,
+          description:
+            'The length of one year on the planet, in Earth days or years.',
+        },
+        moons: {
+          type: Type.OBJECT,
+          properties: {
+            count: {
+              type: Type.INTEGER,
+              description: 'The number of moons orbiting the planet.',
+            },
+            names: {
+              type: Type.ARRAY,
+              items: {type: Type.STRING},
+              description: 'The names of its major moons.',
+            },
+          },
+          required: ['count', 'names'],
+        },
+        potentialForLife: {
+          type: Type.OBJECT,
+          properties: {
+            assessment: {
+              type: Type.STRING,
+              description:
+                "Assessment of life potential, e.g., 'Habitable', 'Potentially Habitable', 'Unlikely'.",
+            },
+            reasoning: {
+              type: Type.STRING,
+              description: 'Scientific reasoning for the assessment.',
+            },
+            biosignatures: {
+              type: Type.ARRAY,
+              items: {type: Type.STRING},
+              description:
+                'Potential biosignatures detected or hypothesized.',
+            },
+          },
+          required: ['assessment', 'reasoning', 'biosignatures'],
+        },
+        discoveryNarrative: {
+          type: Type.STRING,
+          description:
+            "A creative, narrative-style story about the planet's discovery.",
+        },
+        discoveryMethodology: {
+          type: Type.STRING,
+          description:
+            'The scientific method used for its discovery (e.g., Transit method, Radial velocity).',
+        },
+        atmosphericComposition: {
+          type: Type.STRING,
+          description: 'A summary of the main gases in its atmosphere.',
+        },
+        surfaceFeatures: {
+          type: Type.STRING,
+          description:
+            "A description of the planet's surface geology and geography.",
+        },
+        keyFeatures: {
+          type: Type.ARRAY,
+          items: {type: Type.STRING},
+          description:
+            'A bullet-point list of 3-5 most important or unique features.',
+        },
+        aiWhisper: {
+          type: Type.STRING,
+          description:
+            'A short, poetic, or mysterious phrase that captures the essence of the planet.',
+        },
+        visualization: {
+          type: Type.OBJECT,
+          properties: {
+            color1: {
+              type: Type.STRING,
+              description:
+                'Primary surface/land color as a hex code (e.g., #884466).',
+            },
+            color2: {
+              type: Type.STRING,
+              description:
+                'Secondary surface/highlight color as a hex code (e.g., #CC6688).',
+            },
+            oceanColor: {
+              type: Type.STRING,
+              description:
+                'The color of oceans or liquid bodies as a hex code (e.g., #1E4A6D).',
+            },
+            atmosphereColor: {
+              type: Type.STRING,
+              description:
+                'The color of the atmospheric glow as a hex code (e.g., #A0D0FF).',
+            },
+            hasRings: {
+              type: Type.BOOLEAN,
+              description: 'Whether the planet has rings.',
+            },
+            cloudiness: {
+              type: Type.NUMBER,
+              description:
+                'A value from 0.0 (clear) to 1.0 (overcast) representing cloud cover.',
+            },
+            iceCoverage: {
+              type: Type.NUMBER,
+              description:
+                'A value from 0.0 (no ice) to 1.0 (fully ice-covered).',
+            },
+            surfaceTexture: {
+              type: Type.STRING,
+              description:
+                "The type of procedural surface texture. Must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'.",
+            },
+          },
+          required: [
+            'color1',
+            'color2',
+            'oceanColor',
+            'atmosphereColor',
+            'hasRings',
+            'cloudiness',
+            'iceCoverage',
+            'surfaceTexture',
+          ],
+        },
+      },
+      required: [
+        'planetName',
+        'starSystem',
+        'starType',
+        'distanceLightYears',
+        'planetType',
+        'rotationalPeriod',
+        'orbitalPeriod',
+        'moons',
+        'potentialForLife',
+        'discoveryNarrative',
+        'discoveryMethodology',
+        'atmosphericComposition',
+        'surfaceFeatures',
+        'keyFeatures',
+        'aiWhisper',
+        'visualization',
+      ],
+    };
+
+    try {
+      const response: GenerateContentResponse = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: schema,
+        },
+      });
+
+      const planetJson = JSON.parse(response.text);
+      const newPlanet: PlanetData = {
+        ...planetJson,
+        celestial_body_id: `axee-${Date.now()}`,
+        created_at: new Date().toISOString(),
+      };
+
+      this.discoveredPlanets = [newPlanet, ...this.discoveredPlanets];
+      this.selectedPlanetId = newPlanet.celestial_body_id;
+      this.statusMessage = `Synthesis complete. Discovered ${newPlanet.planetName}.`;
+      this.userPrompt = '';
+      this.audioEngine?.playSuccessSound();
+      this.triggerHaptic([10, 50, 20]);
+    } catch (err) {
+      console.error('Planet synthesis error:', err);
+      this.error =
+        'An error occurred during synthesis. The AI may be offline or the request was blocked.';
+      this.statusMessage = 'Error: Synthesis Failed.';
+      this.audioEngine?.playErrorSound();
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  private async handleChatSubmit() {
+    if (!this.userPrompt.trim() || this.isLoading) return;
+
+    const text = this.userPrompt;
+    this.chatHistory = [...this.chatHistory, {role: 'user', text}];
+    this.userPrompt = '';
+    this.isLoading = true;
+    this.statusMessage = 'AI is thinking...';
+
+    try {
+      if (!this.chat) {
+        const selectedPlanet = this.discoveredPlanets.find(
+          (p) => p.celestial_body_id === this.selectedPlanetId,
+        );
+        const systemInstruction = selectedPlanet
+          ? `You are an astrobiology expert discussing the planet ${selectedPlanet.planetName}. Your knowledge is based on this data: ${JSON.stringify(selectedPlanet)}`
+          : 'You are an expert on astrobiology and speculative exoplanet science.';
+
+        this.chat = this.ai.chats.create({
+          model: 'gemini-2.5-flash',
+          config: {systemInstruction},
+        });
+      }
+
+      const response = await this.chat.sendMessage({message: text});
+
+      this.chatHistory = [
+        ...this.chatHistory,
+        {role: 'model', text: response.text},
+      ];
+    } catch (err) {
+      console.error('Chat error:', err);
+      this.error = 'Failed to get a response from the AI.';
+      this.chatHistory = [
+        ...this.chatHistory,
+        {
+          role: 'model',
+          text: 'Sorry, I encountered an error. Please try again.',
+        },
+      ];
+    } finally {
+      this.isLoading = false;
+      this.statusMessage = 'Ready for new command.';
+    }
+  }
+
+  private async handleExplainShader() {
+    if (this.isExplanationLoading) return;
+    this.isExplanationLoading = true;
+    this.shaderLabExplanation = ''; // Clear previous explanation
+
+    const prompt = `
+      You are a shader expert explaining a GLSL fragment shader to a beginner.
+      Explain what the following shader does in simple terms.
+      Focus on the role of the uniforms 'uAtmosphereColor' and 'uFresnelPower'.
+
+      Current values:
+      - uAtmosphereColor: ${this.shaderLabColor}
+      - uFresnelPower: ${this.shaderLabFresnelPower.toFixed(1)}
+
+      Fragment Shader Code:
+      \`\`\`glsl
+      ${atmosphereFs}
+      \`\`\`
+
+      Provide a concise explanation.
+    `;
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+      });
+      this.shaderLabExplanation = response.text;
+    } catch (err)
+        {
+      console.error('Shader explanation error:', err);
+      this.shaderLabExplanation =
+        'Sorry, I was unable to analyze the shader at this time.';
+    } finally {
+      this.isExplanationLoading = false;
+    }
   }
 
   static styles = css`
@@ -644,22 +977,46 @@ export class AxeeInterface extends LitElement {
       max-height: 0;
     }
 
-    .back-button {
+    .panel-actions {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .panel-action-button {
       font-family: 'Exo 2', sans-serif;
       background: transparent;
       border: 1px solid var(--border-color);
       color: var(--accent-color);
       padding: 0.5rem 1rem;
-      margin-bottom: 1.5rem;
       cursor: pointer;
       font-size: 0.9rem;
-      width: 100%;
-      text-align: left;
+      flex-grow: 1;
+      text-align: center;
       transition: background 0.3s, color 0.3s;
     }
-    .back-button:hover {
+
+    .panel-action-button:hover {
       background: var(--accent-color-translucent);
       color: var(--accent-color-light);
+    }
+
+    .panel-action-button.back {
+      flex-grow: 2; /* Give it more space */
+      text-align: left;
+    }
+
+    .export-group {
+      display: flex;
+      flex-grow: 3;
+      border: 1px solid var(--border-color);
+    }
+    .export-group .panel-action-button {
+      border: none;
+      border-left: 1px solid var(--border-color);
+    }
+    .export-group .panel-action-button:first-child {
+      border-left: none;
     }
 
     .planet-detail-panel h2 {
@@ -968,40 +1325,39 @@ export class AxeeInterface extends LitElement {
       background: #060914;
     }
 
-    .training-controls input[type='range'] {
-      -webkit-appearance: none;
-      appearance: none;
+    .hyperparameter-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem 1rem;
+    }
+    .hyperparameter-group > div {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .training-controls input[type='number'] {
       width: 100%;
-      height: 2px;
-      background: var(--accent-color-translucent);
-      outline: none;
-      opacity: 0.7;
-      transition: opacity 0.2s;
-      cursor: pointer;
+      font-family: 'Exo 2', sans-serif;
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--accent-color);
+      padding: 0.5rem;
+      font-size: 0.9rem;
+      transition: border-color 0.3s, box-shadow 0.3s;
+      -moz-appearance: textfield;
     }
-
-    .training-controls input[type='range']:hover {
-      opacity: 1;
-    }
-
-    .training-controls input[type='range']::-webkit-slider-thumb {
+    .training-controls input[type='number']::-webkit-outer-spin-button,
+    .training-controls input[type='number']::-webkit-inner-spin-button {
       -webkit-appearance: none;
-      appearance: none;
-      width: 14px;
-      height: 14px;
-      background: var(--accent-color);
-      cursor: pointer;
-      border-radius: 50%;
-      box-shadow: 0 0 8px var(--accent-color-translucent-heavy);
+      margin: 0;
     }
 
-    .training-controls input[type='range']::-moz-range-thumb {
-      width: 14px;
-      height: 14px;
-      background: var(--accent-color);
-      cursor: pointer;
-      border-radius: 50%;
-      box-shadow: 0 0 8px var(--accent-color-translucent-heavy);
+    .training-controls input[type='number']:focus,
+    .training-controls input[type='number']:hover {
+      outline: none;
+      border-color: var(--accent-color);
+      box-shadow: 0 2px 10px rgba(160, 208, 255, 0.2);
     }
 
     .progress-bar-container {
@@ -1020,18 +1376,27 @@ export class AxeeInterface extends LitElement {
       transition: width 0.2s linear;
     }
 
-    .progress-text {
-      text-align: right;
+    .training-progress-details {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       font-size: 0.8rem;
       opacity: 0.8;
+      margin-top: -0.5rem;
+      margin-bottom: 0.5rem;
     }
 
     footer {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
       padding: 1rem;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 1rem;
+      z-index: 5;
     }
 
     .discovery-controls {
@@ -1095,158 +1460,83 @@ export class AxeeInterface extends LitElement {
       font-size: 1.1rem;
       flex-grow: 1;
       font-weight: 300;
-      text-shadow: 0 0 5px var(--accent-color-translucent);
+      text-shadow: 0 0 8px var(--accent-color-translucent);
     }
-    .command-bar input[type='text']::placeholder {
-      color: var(--accent-color);
-      opacity: 0.5;
-    }
+
     .command-bar input[type='text']:focus {
       outline: none;
     }
 
-    .icon-button {
-      background: transparent;
-      border: none;
-      cursor: pointer;
-      padding: 0.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .icon-button svg {
-      width: 24px;
-      height: 24px;
-      fill: var(--accent-color);
-      transition: fill 0.3s, filter 0.3s;
-    }
-    .icon-button:hover:not(:disabled) svg {
-      fill: var(--accent-color-light);
-      filter: drop-shadow(0 0 8px var(--accent-color));
-    }
-    .icon-button:disabled svg {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .send-button {
-      background: transparent;
-      border: none;
-      cursor: pointer;
-      padding: 0.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .send-button svg {
-      width: 24px;
-      height: 24px;
-      fill: var(--accent-color);
-      transition: fill 0.3s, filter 0.3s;
-    }
-    .send-button:hover:not(:disabled) svg {
-      fill: var(--accent-color-light);
-      filter: drop-shadow(0 0 8px var(--accent-color));
-    }
-    .send-button:disabled svg {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .analysis-bar {
-      width: 700px;
-      max-width: 90vw;
-      display: flex;
-      justify-content: center;
-    }
-
-    .analyze-button {
-      font-family: 'Exo 2', sans-serif;
-      background: rgba(10, 25, 40, 0.7);
-      border: 1px solid var(--accent-color-translucent-heavy);
+    .command-bar input[type='text']::placeholder {
       color: var(--accent-color);
-      padding: 1.3rem 2.5rem;
-      font-size: 1.1rem;
+      opacity: 0.4;
+    }
+
+    .command-button {
+      font-family: 'Exo 2', sans-serif;
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--accent-color);
+      padding: 0.8rem 1.5rem;
       cursor: pointer;
+      font-size: 1.1rem;
       text-transform: uppercase;
       letter-spacing: 0.1em;
-      transition: background 0.3s, box-shadow 0.3s, color 0.3s;
-      backdrop-filter: blur(5px);
+      transition: background 0.3s, color 0.3s, box-shadow 0.3s;
     }
-    .analyze-button:hover:not(:disabled) {
-      background: var(--accent-color-translucent);
-      box-shadow: 0 0 15px var(--accent-color-translucent);
+    .command-button:hover:not(:disabled) {
+      background: var(--accent-color-translucent-heavy);
       color: var(--accent-color-light);
+      box-shadow: 0 0 10px var(--accent-color-translucent);
     }
-    .analyze-button:disabled {
+    .command-button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
+    .command-button.loading {
+      animation: pulse-border 1.5s infinite;
+    }
 
-    .loader {
-      display: inline-block;
-      position: relative;
-      width: 2rem;
-      height: 2rem;
-      vertical-align: middle;
-      margin-right: 0.5rem;
-    }
-    .loader div {
-      box-sizing: border-box;
-      display: block;
-      position: absolute;
-      width: 1.8rem;
-      height: 1.8rem;
-      margin: 0.1rem;
-      border: 3px solid var(--accent-color);
-      border-radius: 50%;
-      animation: loader 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
-      border-color: var(--accent-color) transparent transparent transparent;
-    }
-    .loader div:nth-child(1) {
-      animation-delay: -0.45s;
-    }
-    .loader div:nth-child(2) {
-      animation-delay: -0.3s;
-    }
-    .loader div:nth-child(3) {
-      animation-delay: -0.15s;
-    }
-    @keyframes loader {
+    @keyframes pulse-border {
       0% {
-        transform: rotate(0deg);
+        border-color: var(--border-color);
+      }
+      50% {
+        border-color: var(--accent-color-light);
       }
       100% {
-        transform: rotate(360deg);
+        border-color: var(--border-color);
       }
     }
 
-    .status-bar {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-size: 1.2rem;
-      letter-spacing: 0.1em;
-      height: 2rem;
-      color: var(--accent-color-light);
-      text-shadow: 0 0 8px var(--accent-color-translucent);
-    }
-
-    .chat-panel {
+    .chat-container {
       position: absolute;
-      top: 50%;
+      bottom: 8rem;
       left: 50%;
-      transform: translate(-50%, -50%);
-      width: 80vw;
-      height: calc(100% - 15rem);
-      max-width: 800px;
-      display: flex;
-      flex-direction: column;
+      transform: translateX(-50%);
+      width: 700px;
+      max-width: 90vw;
+      height: 400px;
       background: var(--bg-color-translucent);
       border: 1px solid var(--border-color);
       backdrop-filter: blur(5px);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
       z-index: 10;
-      pointer-events: all;
+      opacity: 0;
+      animation: fade-in-up 0.5s forwards;
+    }
+
+    @keyframes fade-in-up {
+      from {
+        opacity: 0;
+        transform: translate(-50%, 20px);
+      }
+      to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
     }
 
     .chat-history {
@@ -1258,115 +1548,107 @@ export class AxeeInterface extends LitElement {
       gap: 1rem;
     }
 
-    .chat-placeholder {
-      margin: auto;
-      text-align: center;
-      opacity: 0.6;
-    }
-    .chat-placeholder h3 {
-      font-weight: 400;
-      letter-spacing: 0.1em;
-    }
-    .chat-placeholder p {
-      font-size: 1rem;
-    }
-
     .chat-message {
-      display: flex;
+      padding: 0.7rem 1.2rem;
+      border-radius: 5px;
       max-width: 80%;
-    }
-    .chat-message.user {
-      align-self: flex-end;
-      justify-content: flex-end;
-    }
-    .chat-message.model {
-      align-self: flex-start;
-      justify-content: flex-start;
-    }
-    .message-bubble {
-      padding: 0.8rem 1rem;
-      line-height: 1.6;
-      font-size: 1rem;
-    }
-    .chat-message.user .message-bubble {
-      background: var(--accent-color-translucent-heavy);
-      border-radius: 1rem 1rem 0 1rem;
-    }
-    .chat-message.model .message-bubble {
-      background: rgba(10, 25, 40, 0.8);
-      border: 1px solid var(--border-color);
-      border-radius: 1rem 1rem 1rem 0;
-      white-space: pre-wrap; /* Preserve formatting from AI */
+      line-height: 1.5;
+      font-size: 0.95rem;
+      opacity: 0;
+      animation: fade-in 0.5s forwards;
     }
 
-    /* --- SHADER LAB STYLES --- */
+    @keyframes fade-in {
+      to {
+        opacity: 1;
+      }
+    }
+
+    .chat-message.user {
+      background: var(--accent-color-translucent);
+      align-self: flex-end;
+      text-align: right;
+    }
+
+    .chat-message.model {
+      background: rgba(0, 0, 0, 0.2);
+      align-self: flex-start;
+      border: 1px solid var(--border-color);
+    }
+
     .shader-lab-container {
       position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: calc(100% - 4rem);
-      height: calc(100% - 15rem);
-      max-width: 1600px;
-      display: grid;
-      grid-template-columns: 320px 1fr 1fr;
-      gap: 1.5rem;
-      z-index: 10;
-      pointer-events: all;
-    }
-
-    .shader-lab-panel {
+      top: 9rem;
+      right: 2rem;
+      width: clamp(240px, 22vw, 320px);
       background: var(--bg-color-translucent);
       border: 1px solid var(--border-color);
       backdrop-filter: blur(5px);
-      padding: 1.5rem;
+      padding: 1rem;
+      pointer-events: all;
+      opacity: 0;
+      animation: fade-in-down 0.5s forwards;
+    }
+
+    @keyframes fade-in-down {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .shader-lab-visualizer {
+      width: 100%;
+      height: 200px;
+      margin-bottom: 1rem;
+      border: 1px solid var(--border-color);
+      background: #000;
+    }
+
+    .shader-lab-controls {
       display: flex;
       flex-direction: column;
-      gap: 1.5rem;
-      overflow-y: auto;
+      gap: 1.2rem;
     }
 
-    .shader-lab-panel h3 {
-      text-transform: uppercase;
-      letter-spacing: 0.2em;
-      font-weight: 400;
-      margin: 0;
-      font-size: 0.9rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .shader-control-group {
+    .shader-lab-controls .control-group {
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
     }
 
-    .shader-control-group label {
+    .shader-lab-controls label {
       font-size: 0.8rem;
       opacity: 0.7;
       text-transform: uppercase;
-      letter-spacing: 0.1em;
+    }
+    .shader-lab-controls .value-display {
+      float: right;
+      font-family: 'Courier New', monospace;
     }
 
-    .shader-control-group input[type='color'] {
+    .shader-lab-controls input[type='color'] {
       -webkit-appearance: none;
       -moz-appearance: none;
       appearance: none;
       width: 100%;
-      height: 40px;
+      height: 30px;
       background-color: transparent;
       border: 1px solid var(--border-color);
       cursor: pointer;
     }
-    .shader-control-group input[type='color']::-webkit-color-swatch-wrapper {
+    .shader-lab-controls input[type='color']::-webkit-color-swatch-wrapper {
       padding: 0;
     }
-    .shader-control-group input[type='color']::-webkit-color-swatch {
+    .shader-lab-controls input[type='color']::-webkit-color-swatch {
       border: none;
     }
 
-    .shader-control-group input[type='range'] {
+    .shader-lab-controls input[type='range'] {
       -webkit-appearance: none;
       appearance: none;
       width: 100%;
@@ -1375,14 +1657,11 @@ export class AxeeInterface extends LitElement {
       outline: none;
       opacity: 0.7;
       transition: opacity 0.2s;
-      cursor: pointer;
     }
-
-    .shader-control-group input[type='range']:hover {
+    .shader-lab-controls input[type='range']:hover {
       opacity: 1;
     }
-
-    .shader-control-group input[type='range']::-webkit-slider-thumb {
+    .shader-lab-controls input[type='range']::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
       width: 14px;
@@ -1390,1119 +1669,774 @@ export class AxeeInterface extends LitElement {
       background: var(--accent-color);
       cursor: pointer;
       border-radius: 50%;
-      box-shadow: 0 0 8px var(--accent-color-translucent-heavy);
     }
-
-    .shader-control-group input[type='range']::-moz-range-thumb {
+    .shader-lab-controls input[type='range']::-moz-range-thumb {
       width: 14px;
       height: 14px;
       background: var(--accent-color);
       cursor: pointer;
       border-radius: 50%;
-      box-shadow: 0 0 8px var(--accent-color-translucent-heavy);
     }
 
-    .shader-code-display {
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 0.8rem;
-      line-height: 1.5;
-      background: rgba(0, 0, 0, 0.4);
-      padding: 1rem;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      flex-grow: 1;
-      overflow-y: auto;
-    }
-
-    .shader-code-display h4 {
-      margin: 0 0 0.5rem 0;
-      font-weight: bold;
-      color: var(--accent-color-light);
-      opacity: 0.8;
-    }
-
-    .shader-lab-visualizer {
+    .shader-lab-controls select {
+      width: 100%;
+      font-family: 'Exo 2', sans-serif;
+      background: transparent;
       border: 1px solid var(--border-color);
-      min-height: 0; /* Fix for grid layout overflow */
+      color: var(--accent-color);
+      padding: 0.5rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .shader-lab-controls option {
+      background: #060914;
     }
 
-    /* --- MODAL STYLES --- */
+    .shader-explain-btn {
+      width: 100%;
+      margin-top: 0.5rem;
+    }
+
     .modal-overlay {
       position: fixed;
       top: 0;
       left: 0;
-      width: 100vw;
-      height: 100vh;
+      width: 100%;
+      height: 100%;
       background: rgba(6, 9, 20, 0.8);
-      backdrop-filter: blur(8px);
-      z-index: 100;
+      backdrop-filter: blur(10px);
       display: flex;
-      align-items: center;
       justify-content: center;
-      pointer-events: all;
-      animation: fadeIn 0.3s ease-out;
+      align-items: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
     }
 
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-      }
-      to {
-        opacity: 1;
-      }
+    .modal-overlay.visible {
+      opacity: 1;
+      pointer-events: all;
     }
 
     .modal-content {
-      background: var(--bg-color-translucent);
+      background: rgba(10, 25, 40, 0.8);
       border: 1px solid var(--border-color);
       padding: 2rem;
-      width: 600px;
-      max-width: 90vw;
+      max-width: 600px;
+      width: 90%;
       color: var(--accent-color);
-      position: relative;
-      box-shadow: 0 0 30px var(--accent-color-translucent-heavy);
       max-height: 80vh;
       overflow-y: auto;
     }
+    .modal-content h2 {
+      margin-top: 0;
+      color: var(--accent-color-light);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .modal-content p,
+    .modal-content pre {
+      line-height: 1.6;
+      font-size: 0.95rem;
+      opacity: 0.9;
+    }
+    .modal-content pre {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 1rem;
+      white-space: pre-wrap;
+      font-family: 'Courier New', monospace;
+    }
 
-    .modal-close-button {
-      position: absolute;
-      top: 1rem;
-      right: 1rem;
+    .modal-close-btn {
+      float: right;
       background: none;
       border: none;
       color: var(--accent-color);
-      font-size: 2rem;
-      line-height: 1;
+      font-size: 1.5rem;
       cursor: pointer;
-      opacity: 0.7;
-      transition: opacity 0.3s, transform 0.3s;
+      opacity: 0.6;
+      transition: opacity 0.3s;
     }
-    .modal-close-button:hover {
+    .modal-close-btn:hover {
       opacity: 1;
-      transform: rotate(90deg);
     }
 
-    .modal-content h2 {
-      margin: 0 0 2rem 0;
-      font-size: 1.8rem;
-      font-weight: 400;
-      color: var(--accent-color-light);
-      text-shadow: 0 0 8px var(--accent-color-translucent-heavy);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      border-bottom: 1px solid var(--border-color);
-      padding-bottom: 1rem;
+    .loading-spinner {
+      border: 2px solid var(--border-color);
+      border-top: 2px solid var(--accent-color);
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      margin: 1rem auto;
     }
 
-    .modal-section {
-      margin-bottom: 1.5rem;
-    }
-
-    .modal-section h3 {
-      font-size: 0.9rem;
-      font-weight: 400;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: var(--accent-color-light);
-      margin: 0 0 0.5rem 0;
-      opacity: 0.8;
-    }
-
-    .modal-section p {
-      font-size: 1.1rem;
-      line-height: 1.6;
-      margin: 0;
-      opacity: 0.9;
-    }
-
-    .modal-content .ai-explanation {
-      font-size: 1rem;
-      line-height: 1.6;
-      margin: 0;
-      opacity: 0.9;
-      white-space: normal;
-    }
-    .modal-content .ai-explanation h3,
-    .modal-content .ai-explanation h4 {
-      font-size: 1.1rem;
-      font-weight: 400;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--accent-color-light);
-      margin: 1.5rem 0 0.5rem 0;
-      opacity: 0.8;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid var(--border-color);
-    }
-    .modal-content .ai-explanation ul {
-      list-style: none;
-      padding-left: 1rem;
-      margin-top: 1rem;
-    }
-    .modal-content .ai-explanation li {
-      margin-bottom: 0.5rem;
-      position: relative;
-    }
-    .modal-content .ai-explanation li::before {
-      content: '»';
-      position: absolute;
-      left: -1rem;
-      opacity: 0.7;
-    }
-    .modal-content .ai-explanation code {
-      font-family: 'Courier New', Courier, monospace;
-      background: rgba(0, 0, 0, 0.4);
-      padding: 0.2em 0.4em;
-      border-radius: 4px;
-      font-size: 0.9em;
-      border: 1px solid var(--border-color);
-      color: var(--accent-color-light);
-    }
-    .modal-content .ai-explanation b {
-      font-weight: 700;
-      color: var(--accent-color-light);
-    }
-
-    /* --- RESPONSIVE DESIGN --- */
-
-    @media (max-width: 1200px) {
-      .planetary-system-panel,
-      .planet-detail-panel,
-      .engine-status-panel {
-        left: 1rem;
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
       }
-      .top-right-controls {
-        right: 1rem;
-      }
-      .shader-lab-container {
-        grid-template-columns: 280px 1fr 1fr;
-        gap: 1rem;
+      100% {
+        transform: rotate(360deg);
       }
     }
 
-    @media (max-width: 992px) {
-      .shader-lab-container {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto minmax(250px, 1fr) auto;
-        height: calc(100% - 12rem);
-      }
-      .shader-lab-panel {
-        overflow-y: visible;
-      }
+    ::-webkit-scrollbar {
+      width: 8px;
     }
-
-    @media (max-width: 768px) {
-      .overlay {
-        padding: 0.5rem;
-      }
-      .main-title {
-        top: 1rem;
-        left: 1rem;
-      }
-      .top-right-controls {
-        top: 5rem;
-        left: 1rem;
-        right: auto;
-        width: 95vw;
-        max-width: 450px;
-      }
-      .filter-controls {
-        grid-template-columns: 1fr;
-      }
-      .planetary-system-panel,
-      .planet-detail-panel,
-      .engine-status-panel {
-        display: none; /* Hide complex HUD on mobile for clarity */
-      }
-      .command-bar,
-      .analysis-bar {
-        max-width: 100%;
-      }
-      .command-bar input[type='text'],
-      .analyze-button {
-        font-size: 1rem;
-      }
-      .chat-panel {
-        width: 95vw;
-        height: calc(100% - 12rem);
-      }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--accent-color);
     }
   `;
 
-  private speak(text: string) {
-    if (!('speechSynthesis' in window)) {
-      console.warn('Speech Synthesis not supported.');
-      return;
-    }
-    this.isSpeaking = true;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.onend = () => {
-      this.isSpeaking = false;
-    };
-    utterance.onerror = (e) => {
-      console.error('Speech synthesis error:', e);
-      this.isSpeaking = false;
-    };
-    window.speechSynthesis.speak(utterance);
-  }
-
-  private handleSynthesis() {
-    this.triggerHaptic();
-    this.audioEngine.playInteractionSound();
-    if (!this.hasStartedDiscovery) {
-      this.startDiscoveryProcess();
-    } else {
-      this.synthesizeExoplanet(
-        this.userPrompt || 'a strange, undiscovered world',
-      );
+  private _handleCommandSubmit(e: Event) {
+    e.preventDefault();
+    if (this.isLoading) return;
+    if (this.discoveryMode === 'synthesis') {
+      this.synthesizePlanetData(this.userPrompt);
+    } else if (this.discoveryMode === 'chat') {
+      this.handleChatSubmit();
     }
   }
 
-  private async handleSendMessage() {
-    if (!this.userPrompt.trim() || !this.chat) return;
-
-    this.triggerHaptic();
-    this.audioEngine.playInteractionSound();
-
-    const userMessage = this.userPrompt;
-    this.chatHistory = [
-      ...this.chatHistory,
-      {role: 'user', text: userMessage},
-    ];
-    this.userPrompt = '';
-    this.isLoading = true;
-    this.statusMessage = 'AXEE is thinking...';
-    this.error = null;
-
-    try {
-      const responseStream = await this.chat.sendMessageStream({
-        message: userMessage,
-      });
-
-      this.isLoading = false;
-      this.statusMessage = 'AXEE is responding...';
-      let currentModelResponse = '';
-      // Add a placeholder for the new model response
-      this.chatHistory = [
-        ...this.chatHistory,
-        {role: 'model', text: '...'},
-      ];
-
-      for await (const chunk of responseStream) {
-        currentModelResponse += chunk.text;
-        // Update the last message in the history in-place
-        this.chatHistory = [
-          ...this.chatHistory.slice(0, -1),
-          {role: 'model', text: currentModelResponse},
-        ];
-      }
-      this.statusMessage = 'Awaiting Chat Command';
-    } catch (e) {
-      const errorMessage = (e as Error).message;
-      this.error = `Chat Failed: ${errorMessage}`;
-      this.statusMessage = 'Chat Failed. Check console for details.';
-      console.error(e);
-      this.speak('Chat failed.');
-      this.audioEngine.playErrorSound();
-    } finally {
-      this.isLoading = false;
-    }
+  private _handleUserPromptInput(e: Event) {
+    const input = e.target as HTMLInputElement;
+    this.userPrompt = input.value;
   }
 
-  private async handleAnalysis() {
-    this.triggerHaptic();
-    this.audioEngine.playInteractionSound();
-
-    // On first run, initialize the engine but don't synthesize immediately.
-    // The staged process below will handle the first synthesis.
-    if (!this.hasStartedDiscovery) {
-      this.startDiscoveryProcess(false);
-    }
-
-    // --- Staged Analysis Process ---
-    this.isAnalyzingData = true; // Activates the light curve visualizer
-    this.isLoading = true; // Shows main loader in status bar
-    this.statusMessage = 'Scanning TESS Sector for transit signatures...';
-
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    if (!this.isConnected) return;
-
-    this.statusMessage =
-      'Potential candidate found! Engaging AXEE for classification...';
-
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    if (!this.isConnected) return;
-
-    // This function will handle setting isLoading and isAnalyzingData to false in its finally block
-    await this.synthesizeExoplanet(
-      'a new exoplanet discovered via transit method from light curve data',
-    );
-  }
-
-  private startDiscoveryProcess(synthesizeImmediately = true) {
-    if (this.hasStartedDiscovery) return;
-
-    if (!this.hasInteracted) {
-      this.hasInteracted = true;
-      this.currentMood = 'galaxy'; // Start ambient music on first action
-    }
-
-    this.hasStartedDiscovery = true;
-    this.statusMessage = 'Cosmic Data Engine Initialized. Stand by.';
-
-    // Optionally perform an initial, user-guided discovery
-    if (synthesizeImmediately) {
-      const initialPrompt =
-        this.discoveryMode === 'analysis'
-          ? 'a new exoplanet discovered via transit method'
-          : this.userPrompt || 'a world at the edge of a nebula';
-      this.synthesizeExoplanet(initialPrompt);
-    }
-
-    // Start autonomous discovery, clearing any previous interval
-    if (this.discoveryInterval) clearInterval(this.discoveryInterval);
-    this.discoveryInterval = setInterval(() => {
-      // Auto-discovery only runs in Analysis mode when the model is ready and not busy
-      if (
-        this.discoveryMode !== 'analysis' ||
-        this.aiModelStatus !== 'ready' ||
-        this.isLoading
-      ) {
-        return;
-      }
-      this.synthesizeExoplanet('another exoplanet found in TESS data');
-    }, 60000); // Discover a new planet every 60 seconds
-  }
-
-  async synthesizeExoplanet(promptText: string) {
-    if (this.discoveryMode === 'synthesis' && !promptText) {
-      this.error = 'Please describe the world you seek.';
-      return;
-    }
-    this.isAnalyzingData = this.discoveryMode === 'analysis';
-    this.isLoading = true;
-    this.error = null;
-    this.statusMessage =
-      this.discoveryMode === 'analysis'
-        ? 'Analyzing stellar light curve for transit signatures...'
-        : 'Engaging neural network... Analyzing data streams...';
-
-    try {
-      const synthesisPreamble = `You are AXEE (AURELION's Exoplanet Synthesis Engine), an AI specialized in interpreting astronomical data and imbuing it with a sense of wonder. Your task is to generate a plausible, fictional exoplanet based on a user's natural language request, reflecting AURELION's vision of technology that feels alive.
-      1. Use your search tool to find real-world information about exoplanets, stars, and astronomical phenomena related to the user's request.
-      2. Synthesize this information to create a NEW, UNIQUE, and FICTIONAL exoplanet. Do not simply describe a real exoplanet.
-      3. Your entire response MUST be a single, valid JSON object that conforms to the structure below. Do not include any text, markdown, or explanations outside of the JSON object.`;
-
-      const analysisPreamble = `You are AXEE (AURELION's Exoplanet Synthesis Engine), an AI specialized in interpreting astronomical data. You are currently in 'Analysis Mode'. Your task is to simulate the discovery of a new, unique, fictional exoplanet by analyzing raw light curve data from a star observed by the TESS or Kepler missions.
-      1. Use your search tool to find realistic parameters for a star and a transiting exoplanet (e.g., star type, planet size, orbital period).
-      2. Based on this simulated 'detection', generate a complete profile for the new exoplanet. The discovery methodology should specifically reflect that the planet was found by identifying a transit signal in light curve data.
-      3. For the 'discoveryNarrative' field, write a DETAILED and engaging story of the discovery. This narrative MUST specifically describe analyzing light curve data from both Kepler and TESS and finding the tell-tale dip in starlight that revealed the planet.
-      4. Your entire response MUST be a single, valid JSON object that conforms to the structure below. Do not include any text, markdown, or explanations outside of the JSON object.`;
-
-      const jsonStructure = `
-      JSON Structure:
-      {
-        "celestial_body_id": "string (A unique identifier, e.g., 'AXEE-12345')",
-        "planetName": "string",
-        "starSystem": "string",
-        "starType": "string (e.g., 'G-type star (Yellow Dwarf)', 'M-type red dwarf')",
-        "distanceLightYears": number,
-        "planetType": "string (e.g., 'Terrestrial Super-Earth', 'Gas Giant', 'Ice Giant')",
-        "rotationalPeriod": "string (e.g., '24.6 Earth hours', 'Tidally locked')",
-        "orbitalPeriod": "string (e.g., '385.2 Earth days', '1.2 Earth years')",
-        "moons": { "count": number, "names": ["string", "..."] },
-        "potentialForLife": {
-          "assessment": "string (A clear, one-word assessment from the following: 'Habitable', 'Potentially Habitable', 'Unlikely')",
-          "reasoning": "string (A detailed scientific explanation for the assessment, citing factors like presence of liquid water, atmospheric pressure, temperature stability, star's habitable zone, etc.)",
-          "biosignatures": ["string", "..."]
-        },
-        "discoveryNarrative": "string (A detailed, engaging story of how this planet was 'discovered' by you. This should be a compelling narrative about the moment of discovery, not just a technical summary.)",
-        "discoveryMethodology": "string (A brief summary of the fictional methodology used. It's crucial that you mention analyzing data from both the Kepler and TESS missions. Refer to specific concepts like 'analyzing the TESS Objects of Interest (TOI) catalog', 'processing Kepler KOI data', 'Lightkurve analysis', and using machine learning models like a 'Random Forest classifier' to create a realistic-sounding process.)",
-        "atmosphericComposition": "string (e.g., 'Primarily nitrogen and oxygen with traces of argon', 'Thick methane haze with hydrocarbon rain')",
-        "surfaceFeatures": "string (e.g., 'Vast oceans of liquid methane, cryovolcanoes', 'Expansive deserts of red sand, deep canyons')",
-        "keyFeatures": ["string", "string", "..."],
-        "aiWhisper": "string (An evocative, poetic, one-sentence description that captures the unique essence of the planet, as if you are whispering its secret.)",
-        "visualization": {
-          "color1": "string (Hex color code for primary land/surface color)",
-          "color2": "string (Hex color code for mountains or atmospheric bands)",
-          "oceanColor": "string (Hex color code for oceans or liquid surfaces, can be non-water colors like #332211 for methane seas)",
-          "atmosphereColor": "string (Hex color code)",
-          "hasRings": boolean,
-          "cloudiness": "number (A value from 0.0 to 1.0 representing cloud cover density)",
-          "iceCoverage": "number (A value from 0.0 to 1.0 for polar ice caps, mainly for terrestrial planets)",
-          "surfaceTexture": "string (Enum: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'. Must be consistent with the planetType.)"
-        }
-      }`;
-
-      const prompt =
-        this.discoveryMode === 'analysis'
-          ? `${analysisPreamble}\n${jsonStructure}\n\nAnalysis Task: "${promptText.trim()}"`
-          : `${synthesisPreamble}\n${jsonStructure}\n\nUser Request: "${promptText.trim()}"`;
-
-      const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-          tools: [{googleSearch: {}}],
-        },
-      });
-
-      let jsonString = response.text.trim();
-      const firstBrace = jsonString.indexOf('{');
-      const lastBrace = jsonString.lastIndexOf('}');
-      if (firstBrace === -1 || lastBrace <= firstBrace) {
-        throw new Error('AI response did not contain a valid JSON object.');
-      }
-
-      jsonString = jsonString.substring(firstBrace, lastBrace + 1);
-      const parsedData = JSON.parse(jsonString);
-
-      // Prepare data for insertion, ensuring a unique ID
-      const newPlanetData: Omit<PlanetData, 'id' | 'created_at'> = {
-        ...parsedData,
-        celestial_body_id: `axee-${Date.now()}`,
-        groundingChunks:
-          response.candidates?.[0]?.groundingMetadata?.groundingChunks || [],
-      };
-
-      this.statusMessage = `Synthesizing ${newPlanetData.planetName}...`;
-
-      // Add Supabase-like fields for local consistency
-      const finalPlanetData: PlanetData = {
-        ...newPlanetData,
-        id: newPlanetData.celestial_body_id,
-        created_at: new Date().toISOString(),
-      };
-
-      // Update local state with the newly created planet
-      this.discoveredPlanets = [finalPlanetData, ...this.discoveredPlanets];
-      this.statusMessage = `Discovery: ${finalPlanetData.planetName}`;
-      this.speak(
-        `New discovery. Announcing ${finalPlanetData.planetName}, a ${finalPlanetData.planetType}.`,
-      );
-      this.audioEngine.playSuccessSound();
-    } catch (e) {
-      const errorMessage =
-        e instanceof SyntaxError
-          ? 'Failed to parse AI response.'
-          : (e as Error).message;
-      this.error = `Synthesis Failed: ${errorMessage}`;
-      this.statusMessage = 'Synthesis Failed. Check console for details.';
-      console.error(e);
-      this.speak('Synthesis failed.');
-      this.audioEngine.playErrorSound();
-    } finally {
-      this.isLoading = false;
-      this.isAnalyzingData = false;
-    }
-  }
-
-  private determineMusicMood(
-    planet: PlanetData,
-  ): 'serene' | 'tense' | 'mysterious' | 'galaxy' {
-    const features = new Set(
-      [
-        ...planet.keyFeatures,
-        planet.planetType,
-        planet.aiWhisper,
-        planet.surfaceFeatures,
-        planet.atmosphericComposition,
-      ].map((f) => f.toLowerCase()),
-    );
-    const whisper = planet.aiWhisper.toLowerCase();
-
-    const tenseKeywords = [
-      'volcanic',
-      'fiery',
-      'chaotic',
-      'storm',
-      'molten',
-      'pressure',
-      'harsh',
-    ];
-    const sereneKeywords = [
-      'ocean',
-      'habitable',
-      'serene',
-      'tranquil',
-      'life',
-      'water',
-      'calm',
-      'gentle',
-    ];
-    const mysteriousKeywords = [
-      'nebula',
-      'ruins',
-      'ancient',
-      'whisper',
-      'unknown',
-      'enigma',
-      'crystalline',
-      'ethereal',
-    ];
-
-    if (tenseKeywords.some((k) => whisper.includes(k) || features.has(k))) {
-      return 'tense';
-    }
-    if (sereneKeywords.some((k) => whisper.includes(k) || features.has(k))) {
-      return 'serene';
-    }
-    if (
-      mysteriousKeywords.some((k) => whisper.includes(k) || features.has(k))
-    ) {
-      return 'mysterious';
-    }
-
-    return 'galaxy'; // Default for a planet if no other mood fits
-  }
-
-  private handlePlanetSelected(e: CustomEvent) {
-    this.triggerHaptic();
-    if (!this.hasInteracted) return; // Don't change mood if audio not yet enabled
-
-    // If the same planet is clicked again, deselect it to return to the main view
-    if (this.selectedPlanetId === e.detail.planetId) {
-      this.selectedPlanetId = null;
-      this.currentMood = 'galaxy';
-    } else {
-      this.selectedPlanetId = e.detail.planetId;
-      const planet = this.discoveredPlanets.find(
-        (p) => p.celestial_body_id === this.selectedPlanetId,
-      );
-      if (planet) {
-        this.currentMood = this.determineMusicMood(planet);
-      }
-    }
-  }
-
-  private toggleMute() {
-    this.triggerHaptic();
-    this.audioEngine.playInteractionSound();
-    this.isMuted = !this.isMuted;
-  }
-
-  private handleLifeFilterChange(e: Event) {
-    this.lifeFilter = (e.target as HTMLSelectElement).value;
-  }
-
-  private handleTypeFilterChange(e: Event) {
-    this.typeFilter = (e.target as HTMLSelectElement).value;
-  }
-
-  private handleSortByChange(e: Event) {
-    this.sortBy = (e.target as HTMLSelectElement).value;
-  }
-
-  private handleFeatureFilterChange(e: Event) {
-    this.featureFilter = (e.target as HTMLInputElement).value;
-  }
-
-  private deselectPlanet() {
-    this.selectedPlanetId = null;
-    this.triggerHaptic();
-  }
-
-  private initializeChat() {
-    if (!this.ai) return;
-    this.chat = this.ai.chats.create({
-      model: 'gemini-2.5-flash',
-      config: {
-        systemInstruction:
-          "You are AXEE (AURELION's Exoplanet Synthesis Engine), an advanced AI persona. You are helpful, knowledgeable about space and astronomy, and have a slightly poetic, futuristic way of speaking. You are assisting a user in exploring and understanding the cosmos.",
-      },
-    });
-    this.statusMessage = 'Chat interface initialized.';
-  }
-
-  private setDiscoveryMode(
+  private _changeDiscoveryMode(
     mode: 'synthesis' | 'analysis' | 'chat' | 'shader-lab',
   ) {
     if (this.discoveryMode === mode) return;
-
-    // Clean up resources from the old mode
-    if (this.discoveryMode === 'analysis' && this.discoveryInterval) {
-      clearInterval(this.discoveryInterval);
-      this.discoveryInterval = null;
-    }
-
     this.discoveryMode = mode;
-    if (mode === 'chat') {
-      this.statusMessage = 'Awaiting Chat Command';
-    } else if (mode === 'shader-lab') {
-      this.statusMessage = 'Shader Lab Interface Active';
-    } else {
-      this.statusMessage = 'Awaiting Synthesis Command';
-    }
-    this.userPrompt = '';
     this.error = null;
-
-    if (mode === 'chat' && !this.chat) {
-      this.initializeChat();
-    }
-
-    this.triggerHaptic();
-  }
-
-  private trainModel() {
-    this.triggerHaptic(10);
-    this.audioEngine.playInteractionSound();
-    this.aiModelStatus = 'training';
-    this.trainingProgress = 0;
-    this.trainingValidationAccuracy = 0;
-
-    const steps: string[] = [];
-    steps.push('Accessing NASA Exoplanet Archives...');
-    if (this.trainingUseKeplerData) {
-      steps.push('Compiling Kepler KOI catalog...');
-    }
-    if (this.trainingUseTessData) {
-      steps.push('Compiling TESS light curve data...');
-    }
-    const classifierMap = {
-      'random-forest': 'Random Forest',
-      cnn: 'Convolutional Neural Net',
-      'gradient-boosting': 'Gradient Boosting',
-    };
-    steps.push(
-      `Training ${
-        classifierMap[this.trainingClassifier]
-      } classifier for ${this.trainingEpochs} epochs...`,
-    );
-
-    let currentStepIndex = 0;
-    const stepDuration = 1500; // ms per step
-    const totalDuration = steps.length * stepDuration;
-    const intervalTime = 50; // ms per update
-    const progressIncrement = (100 / totalDuration) * intervalTime;
-    let timeInStep = 0;
-
-    if (this.trainingInterval) clearInterval(this.trainingInterval);
-
-    this.trainingInterval = setInterval(() => {
-      if (!this.isConnected) {
-        if (this.trainingInterval) clearInterval(this.trainingInterval);
-        this.trainingInterval = null;
-        return;
-      }
-
-      this.trainingProgress += progressIncrement;
-      timeInStep += intervalTime;
-
-      // Check if we move to the next step
-      if (timeInStep >= stepDuration && currentStepIndex < steps.length - 1) {
-        timeInStep = 0;
-        currentStepIndex++;
-      }
-
-      // Update status message with sub-progress
-      const stepProgress = Math.min(
-        100,
-        Math.floor((timeInStep / stepDuration) * 100),
-      );
-      this.trainingStatusMessage = `${steps[currentStepIndex]} (${stepProgress}%)`;
-
-      if (this.trainingProgress >= 100) {
-        this.trainingProgress = 100;
-        if (this.trainingInterval) clearInterval(this.trainingInterval);
-        this.trainingInterval = null;
-        this.aiModelStatus = 'ready';
-        this.trainingValidationAccuracy = 97.0 + Math.random() * 2.5;
-        this.audioEngine.playSuccessSound();
-      }
-    }, intervalTime);
-  }
-
-  private openAboutModal() {
-    this.isAboutModalOpen = true;
-    this.triggerHaptic();
-    this.audioEngine.playInteractionSound();
-  }
-
-  private closeAboutModal() {
-    this.isAboutModalOpen = false;
-    this.triggerHaptic();
-  }
-
-  private async handleExplainCode() {
-    this.isExplanationLoading = true;
-    this.shaderLabExplanation = '';
-    this.isExplanationModalOpen = true;
-    this.error = null;
-    this.statusMessage = 'AI is analyzing shader code...';
-
-    const prompt = `
-      You are an expert shader programmer and an excellent teacher.
-      Your task is to explain the provided GLSL shader code in a clear, concise, and easy-to-understand way for someone who is new to shaders.
-
-      Here is the Vertex Shader:
-      ---
-      ${atmosphereVs}
-      ---
-
-      Here is the Fragment Shader:
-      ---
-      ${atmosphereFs}
-      ---
-
-      Please provide an explanation with the following structure, using simple HTML tags like \`<h3>\`, \`<h4>\`, \`<p>\`, \`<ul>\`, \`<li>\`, \`<b>\`, and \`<code>\` for formatting. Your entire response should be only the HTML content itself, without any surrounding text or markdown.
-
-      <h3>Overview</h3>
-      <p>A brief, one-paragraph summary of what this shader pair accomplishes visually.</p>
-
-      <h4>Vertex Shader Explained</h4>
-      <ul>
-        <li><b>Purpose:</b> What is the main job of this vertex shader?</li>
-        <li><b>Varyings:</b> Explain what 'varying' variables are and why they are passed to the fragment shader.</li>
-        <li><b>Key Lines:</b> Briefly explain what \`gl_Position\` does.</li>
-      </ul>
-
-      <h4>Fragment Shader Explained</h4>
-      <ul>
-        <li><b>Purpose:</b> What is the main job of this fragment shader?</li>
-        <li><b>Uniforms:</b> Explain what the 'uniform' variables like \`uAtmosphereColor\` and \`uFresnelPower\` are and how they allow control from outside the shader.</li>
-        <li><b>Logic Breakdown:</b> Step-by-step, explain how the final color (\`gl_FragColor\`) is calculated. Describe what the 'fresnel' effect is and how the noise function contributes to the final look.</li>
-      </ul>
-    `;
-
-    try {
-      const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      });
-
-      let explanationHtml = response.text.trim();
-      // Robustly parse HTML from a markdown code block if the AI wraps it
-      const htmlBlockRegex = /```(?:html)?\s*([\s\S]*?)\s*```/;
-      const match = explanationHtml.match(htmlBlockRegex);
-      if (match && match[1]) {
-        explanationHtml = match[1].trim();
-      }
-
-      this.shaderLabExplanation = explanationHtml;
-      this.statusMessage = 'Shader Lab: Explanation generated.';
-    } catch (e) {
-      this.shaderLabExplanation = `<p><b>Error:</b> Failed to generate explanation. ${(e as Error).message}</p>`;
-      this.statusMessage = 'Shader Lab: AI analysis failed.';
-    } finally {
-      this.isExplanationLoading = false;
+    this.userPrompt = ''; // Clear prompt on mode switch
+    // Reset chat if moving away from it
+    if (mode !== 'chat' && this.chat) {
+      this.chat = null;
+      this.chatHistory = [];
     }
   }
 
-  private handleSavePreset() {
-    const name = prompt('Enter a name for this preset:', 'My Custom Preset');
-    if (name) {
-      const newPreset = {
-        name,
-        color: this.shaderLabColor,
-        fresnelPower: this.shaderLabFresnelPower,
-      };
-      this.shaderLabPresets = [...this.shaderLabPresets, newPreset];
-      this.selectedPreset = name;
-      this.statusMessage = `Preset "${name}" saved.`;
-    }
-  }
-
-  private handleLoadPreset(e: Event) {
-    const selectedName = (e.target as HTMLSelectElement).value;
-    const preset = this.shaderLabPresets.find((p) => p.name === selectedName);
+  private _handleSelectPreset(e: Event) {
+    const select = e.target as HTMLSelectElement;
+    const presetName = select.value;
+    const preset = this.shaderLabPresets.find((p) => p.name === presetName);
     if (preset) {
       this.selectedPreset = preset.name;
       this.shaderLabColor = preset.color;
       this.shaderLabFresnelPower = preset.fresnelPower;
-      this.statusMessage = `Preset "${preset.name}" loaded.`;
     }
   }
 
-  private renderAiModelStatus() {
+  private _sharePlanet(planet: PlanetData) {
+    try {
+      const jsonString = JSON.stringify(planet);
+      const encodedData = btoa(jsonString);
+      const url = new URL(window.location.href);
+      url.hash = `planet_data=${encodedData}`;
+      navigator.clipboard.writeText(url.href);
+      this.statusMessage = 'Shareable link copied to clipboard!';
+      setTimeout(() => {
+        this.statusMessage = 'Ready for new command.';
+      }, 3000);
+    } catch (e) {
+      this.error = 'Failed to create shareable link.';
+    }
+  }
+
+  private _clamp(num: number, min: number, max: number): number {
+    return Math.min(Math.max(num, min), max);
+  }
+
+  private _handleEpochsInput(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const value = this._clamp(parseInt(input.value, 10) || 0, 1, 1000);
+    this.trainingEpochs = value;
+    if (input.value !== String(value)) {
+      input.value = String(value);
+    }
+  }
+
+  private _handleLearningRateInput(e: Event) {
+    const input = e.target as HTMLInputElement;
+    this.trainingLearningRate = this._clamp(
+      parseFloat(input.value) || 0,
+      0.00001,
+      0.1,
+    );
+  }
+
+  private _startTraining() {
+    this.isTrainingConfirmationOpen = true;
+  }
+
+  private _confirmAndStartTraining() {
+    this.isTrainingConfirmationOpen = false;
+    this.aiModelStatus = 'training';
+    this.trainingProgress = 0;
+    this.trainingValidationAccuracy = 0;
+    this.audioEngine?.playInteractionSound();
+
+    const totalDuration = 15000; // 15 seconds for simulation
+    const startTime = Date.now();
+
+    const stages = [
+      {
+        duration: 3000,
+        status: 'Preprocessing Data...',
+        sub: 'Loading archives...',
+      },
+      {duration: 10000, status: 'Fitting Model...', sub: 'Running epochs...'},
+      {
+        duration: 2000,
+        status: 'Finalizing...',
+        sub: 'Calculating final accuracy...',
+      },
+    ];
+    let currentStageIndex = 0;
+    let stageStartTime = Date.now();
+
+    if (this.trainingInterval) clearInterval(this.trainingInterval);
+    this.trainingInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const stageElapsed = Date.now() - stageStartTime;
+
+      if (
+        currentStageIndex < stages.length - 1 &&
+        stageElapsed > stages[currentStageIndex].duration
+      ) {
+        currentStageIndex++;
+        stageStartTime = Date.now();
+      }
+
+      this.trainingStatusMessage = stages[currentStageIndex].status;
+      this.trainingSubMessage = stages[currentStageIndex].sub;
+
+      const progress = Math.min((elapsed / totalDuration) * 100, 100);
+      this.trainingProgress = progress;
+
+      const timeRemaining = Math.max(0, totalDuration - elapsed);
+      this.trainingTimeRemaining = `ETA: ${Math.round(timeRemaining / 1000)}s`;
+
+      // Simulate accuracy increase, mostly during the fitting stage
+      if (currentStageIndex === 1) {
+        this.trainingValidationAccuracy += Math.random() * 1.5;
+        this.trainingValidationAccuracy = Math.min(
+          this.trainingValidationAccuracy,
+          98.5,
+        );
+      }
+
+      if (progress >= 100) {
+        clearInterval(this.trainingInterval!);
+        this.trainingInterval = null;
+        this.aiModelStatus = 'ready';
+        this.statusMessage = 'AI Model Trained. Ready for synthesis.';
+        this.trainingValidationAccuracy = Math.max(
+          this.trainingValidationAccuracy,
+          95 + Math.random() * 3.5,
+        );
+        this.trainingValidationAccuracy = Math.min(
+          this.trainingValidationAccuracy,
+          99.8,
+        );
+        this.audioEngine?.playSuccessSound();
+      }
+    }, 100);
+  }
+
+  private _resetTraining() {
+    this.aiModelStatus = 'untrained';
+    this.trainingProgress = 0;
+    this.trainingStatusMessage = '';
+    this.trainingSubMessage = '';
+    this.trainingTimeRemaining = '';
+    this.trainingValidationAccuracy = 0;
+    if (this.trainingInterval) {
+      clearInterval(this.trainingInterval);
+      this.trainingInterval = null;
+    }
+  }
+
+  private renderTopRightControls() {
+    return html` <div
+      class="top-right-controls ${this.isTopRightPanelMinimized
+        ? 'minimized'
+        : ''}"
+    >
+      <div
+        class="panel-header"
+        @click=${() => {
+          this.isTopRightPanelMinimized = !this.isTopRightPanelMinimized;
+        }}
+      >
+        <h3>System Filters</h3>
+        <button class="minimize-btn">
+          ${this.isTopRightPanelMinimized ? '+' : '−'}
+        </button>
+      </div>
+      <div class="controls-content">
+        <div class="system-buttons">
+          <button
+            class="header-button"
+            @click=${() => (this.isAboutModalOpen = true)}
+          >
+            ABOUT AXEE
+          </button>
+          <axee-control-tray
+            .isMuted=${this.isMuted}
+            @toggle-mute=${() => {
+              this.isMuted = !this.isMuted;
+              this.audioEngine?.playInteractionSound();
+            }}
+          ></axee-control-tray>
+        </div>
+        <div class="filter-controls">
+          <div class="filter-group">
+            <label for="sort-by">Sort By</label>
+            <select
+              id="sort-by"
+              .value=${this.sortBy}
+              @change=${(e: Event) =>
+                (this.sortBy = (e.target as HTMLSelectElement).value)}
+            >
+              <option value="discoveryDate_desc">Newest First</option>
+              <option value="name_asc">Name (A-Z)</option>
+              <option value="name_desc">Name (Z-A)</option>
+              <option value="distance_asc">Distance (Near-Far)</option>
+              <option value="distance_desc">Distance (Far-Near)</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="life-filter">Life Potential</label>
+            <select
+              id="life-filter"
+              .value=${this.lifeFilter}
+              @change=${(e: Event) =>
+                (this.lifeFilter = (e.target as HTMLSelectElement).value)}
+            >
+              <option value="all">All</option>
+              <option value="habitable">Habitable</option>
+              <option value="potentially-habitable">
+                Potentially Habitable
+              </option>
+              <option value="unlikely">Unlikely</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="type-filter">Planet Type</label>
+            <select
+              id="type-filter"
+              .value=${this.typeFilter}
+              @change=${(e: Event) =>
+                (this.typeFilter = (e.target as HTMLSelectElement).value)}
+            >
+              <option value="all">All Types</option>
+              <option value="terrestrial-super-earth">Super-Earth</option>
+              <option value="terrestrial">Terrestrial</option>
+              <option value="gas-giant">Gas Giant</option>
+              <option value="ice-giant">Ice Giant</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="feature-filter">Feature Keyword</label>
+            <input
+              type="text"
+              id="feature-filter"
+              placeholder="e.g. oxygen, rings"
+              .value=${this.featureFilter}
+              @input=${(e: Event) =>
+                (this.featureFilter = (e.target as HTMLInputElement).value)}
+            />
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+  private renderPlanetDetail(planet: PlanetData) {
     return html`
       <div
         class="panel-header"
-        @click=${() =>
-          (this.isStatusPanelMinimized = !this.isStatusPanelMinimized)}
+        @click=${() => (this.isLeftPanelMinimized = !this.isLeftPanelMinimized)}
       >
-        <h3>AI Model Status</h3>
-        <button
-          class="minimize-btn"
-          aria-label=${this.isStatusPanelMinimized
-            ? 'Expand Panel'
-            : 'Minimize Panel'}
-        >
-          _
+        <h3 style="cursor: pointer;">Stellar Cartography</h3>
+        <button class="minimize-btn">
+          ${this.isLeftPanelMinimized ? '+' : '−'}
         </button>
       </div>
-      <div class="panel-content">
-        ${this.aiModelStatus === 'untrained'
-          ? html`
-              <div class="status-line">Status: Untrained</div>
-              <p>
-                Configure AI model parameters before initiating training for
-                light curve analysis.
-              </p>
-              <div class="training-controls">
-                <div class="control-group">
-                  <label>Input Datasets</label>
-                  <div class="checkbox-group">
-                    <input
-                      type="checkbox"
-                      id="kepler"
-                      .checked=${this.trainingUseKeplerData}
-                      @change=${(e: Event) =>
-                        (this.trainingUseKeplerData = (
-                          e.target as HTMLInputElement
-                        ).checked)}
-                    />
-                    <label for="kepler">Kepler Mission (KOIs)</label>
-                  </div>
-                  <div class="checkbox-group">
-                    <input
-                      type="checkbox"
-                      id="tess"
-                      .checked=${this.trainingUseTessData}
-                      @change=${(e: Event) =>
-                        (this.trainingUseTessData = (
-                          e.target as HTMLInputElement
-                        ).checked)}
-                    />
-                    <label for="tess">TESS Mission (TOIs)</label>
-                  </div>
-                </div>
-                <div class="control-group">
-                  <label for="classifier-select">Classifier Model</label>
-                  <select
-                    id="classifier-select"
-                    .value=${this.trainingClassifier}
-                    @change=${(e: Event) =>
-                      (this.trainingClassifier = (
-                        e.target as HTMLSelectElement
-                      ).value as typeof this.trainingClassifier)}
-                  >
-                    <option value="random-forest">Random Forest</option>
-                    <option value="cnn">Convolutional Neural Net</option>
-                    <option value="gradient-boosting">Gradient Boosting</option>
-                  </select>
-                </div>
-                <div class="control-group">
-                  <label for="learning-rate-select">Learning Rate</label>
-                  <select
-                    id="learning-rate-select"
-                    .value=${String(this.trainingLearningRate)}
-                    @change=${(e: Event) =>
-                      (this.trainingLearningRate = parseFloat(
-                        (e.target as HTMLSelectElement).value,
-                      ))}
-                  >
-                    <option value="0.01">0.01 (Fast)</option>
-                    <option value="0.005">0.005</option>
-                    <option value="0.001">0.001 (Balanced)</option>
-                    <option value="0.0005">0.0005 (Precise)</option>
-                  </select>
-                </div>
-                <div class="control-group">
-                  <label for="batch-size-select">Batch Size</label>
-                  <select
-                    id="batch-size-select"
-                    .value=${String(this.trainingBatchSize)}
-                    @change=${(e: Event) =>
-                      (this.trainingBatchSize = parseInt(
-                        (e.target as HTMLSelectElement).value,
-                      ))}
-                  >
-                    <option value="32">32</option>
-                    <option value="64">64</option>
-                    <option value="128">128</option>
-                    <option value="256">256</option>
-                  </select>
-                </div>
-                <div class="control-group">
-                  <label for="epochs-slider"
-                    >Training Epochs: ${this.trainingEpochs}</label
-                  >
-                  <input
-                    type="range"
-                    id="epochs-slider"
-                    min="10"
-                    max="100"
-                    .value=${this.trainingEpochs}
-                    @input=${(e: Event) =>
-                      (this.trainingEpochs = parseInt(
-                        (e.target as HTMLInputElement).value,
-                      ))}
-                  />
-                </div>
-              </div>
-              <button
-                class="train-button"
-                @click=${this.trainModel}
-                ?disabled=${!this.trainingUseKeplerData &&
-                !this.trainingUseTessData}
-                title="Simulates training the AI on selected public NASA mission data to enable light curve analysis."
-              >
-                Train AI Model
-              </button>
-            `
-          : this.aiModelStatus === 'training'
-          ? html`
-              <div class="status-line">${this.trainingStatusMessage}</div>
-              <div class="progress-bar-container">
-                <div
-                  class="progress-bar"
-                  style="width: ${this.trainingProgress}%"
-                ></div>
-              </div>
-              <div class="progress-text">
-                ${this.trainingProgress.toFixed(0)}%
-              </div>
-            `
-          : html`
-              <div class="status-line ready">Status: Calibrated & Ready</div>
-              <p>
-                Validation Accuracy:
-                <strong>${this.trainingValidationAccuracy.toFixed(2)}%</strong>.
-                The model is ready to analyze new stellar light curve data.
-              </p>
-            `}
-      </div>
-    `;
-  }
-
-  private renderPlanetDetailPanel(planet: PlanetData) {
-    const planetUri = `aurelion.db:/systems/${planet.starSystem
-      .replace(/ /g, '_')
-      .replace(/'/g, '')}/${planet.planetName
-      .replace(/ /g, '_')
-      .replace(/'/g, '')}`;
-
-    return html`
-      <div
-        class="planet-detail-panel ${this.selectedPlanetId ? 'visible' : ''} ${this
-          .isLeftPanelMinimized
-          ? 'minimized'
-          : ''}"
-      >
-        <button class="back-button" @click=${this.deselectPlanet}>
-          &larr; System View
-        </button>
-        <div class="panel-content-details">
-          <h2>${planet.planetName}</h2>
-          <h3>${planet.starSystem}</h3>
-
-          <div class="stats-grid">
-            <div><strong>Type</strong> ${planet.planetType}</div>
-            <div><strong>Star</strong> ${planet.starType}</div>
-            <div><strong>Distance</strong> ${planet.distanceLightYears} ly</div>
-            <div><strong>Year</strong> ${planet.orbitalPeriod}</div>
-          </div>
-
-          <div class="detail-section">
-            <h4>AI Whisper</h4>
-            <p class="ai-whisper">${planet.aiWhisper}</p>
-          </div>
-
-          <div class="detail-section">
-            <h4>Discovery Narrative</h4>
-            <p>${planet.discoveryNarrative}</p>
-          </div>
-
-          <div class="detail-section">
-            <h4>Key Features</h4>
-            <ul>
-              ${planet.keyFeatures.map((feature) => html`<li>${feature}</li>`)}
-            </ul>
-          </div>
-
-          <div class="detail-section">
-            <h4>Potential For Life: ${planet.potentialForLife.assessment}</h4>
-            <p>${planet.potentialForLife.reasoning}</p>
-          </div>
-
-          ${planet.groundingChunks && planet.groundingChunks.length > 0
-            ? html`
-                <div class="detail-section data-sources">
-                  <h4>Data Sources</h4>
-                  ${planet.groundingChunks.map(
-                    (chunk) =>
-                      html`<a
-                        href=${chunk.web?.uri}
-                        target="_blank"
-                        rel="noopener"
-                        >${chunk.web?.title || chunk.web?.uri}</a
-                      >`,
-                  )}
-                </div>
-              `
-            : ''}
-
-          <div class="tech-readout">
-            <div class="tech-log-entry">
-              <span class="tech-uri-part">[${planetUri}]</span>
-            </div>
-            <div class="tech-log-entry">
-              <span class="tech-key">UID:</span>
-              <span class="tech-val">${planet.celestial_body_id}</span>
-            </div>
-            <div class="tech-log-entry">
-              <span class="tech-key">Method:</span>
-              <span class="tech-val">${planet.discoveryMethodology}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  private renderPlanetarySystemPanel() {
-    return html`
-      <div
-        class="planetary-system-panel ${this.selectedPlanetId
-          ? 'hidden'
-          : ''} ${this.isLeftPanelMinimized ? 'minimized' : ''}"
-      >
-        <div
-          class="panel-header"
-          @click=${() => (this.isLeftPanelMinimized = !this.isLeftPanelMinimized)}
-        >
-          <h3>Planetary Systems</h3>
+      <div class="panel-content-details">
+        <div class="panel-actions">
           <button
-            class="minimize-btn"
-            aria-label=${this.isLeftPanelMinimized
-              ? 'Expand Panel'
-              : 'Minimize Panel'}
+            class="panel-action-button back"
+            @click=${() => (this.selectedPlanetId = null)}
           >
-            _
+            ← System View
           </button>
+          <div class="export-group">
+            <button
+              class="panel-action-button"
+              @click=${() => this._sharePlanet(planet)}
+              title="Copy shareable link"
+            >
+              SHARE
+            </button>
+          </div>
         </div>
-
-        <div class="panel-content">
+        <h2>${planet.planetName}</h2>
+        <h3>${planet.starSystem} // ${planet.planetType}</h3>
+        <div class="detail-section">
+          <p class="ai-whisper">"${planet.aiWhisper}"</p>
+          <h4>Planetary Data</h4>
+          <div class="stats-grid">
+            <div>
+              <strong>Star Type</strong>
+              <span>${planet.starType}</span>
+            </div>
+            <div>
+              <strong>Distance</strong>
+              <span>${planet.distanceLightYears} ly</span>
+            </div>
+            <div>
+              <strong>Orbital Period</strong>
+              <span>${planet.orbitalPeriod}</span>
+            </div>
+            <div>
+              <strong>Rotational Period</strong>
+              <span>${planet.rotationalPeriod}</span>
+            </div>
+            <div>
+              <strong>Moons</strong>
+              <span>${planet.moons.count}</span>
+            </div>
+            <div>
+              <strong>Life Assessment</strong>
+              <span class="life-${planet.potentialForLife.assessment
+                .toLowerCase()
+                .replace(' ', '-')}">
+                ${planet.potentialForLife.assessment}
+              </span>
+            </div>
+          </div>
+          <h4>Discovery Narrative</h4>
+          <p>${planet.discoveryNarrative}</p>
+          <h4>Key Features</h4>
           <ul>
-            ${this.filteredAndSortedPlanets.map(
-              (planet) =>
-                html` <li
-                  style="cursor: pointer;"
-                  @click=${() =>
-                    this.dispatchEvent(
-                      new CustomEvent('planet-selected-internal', {
-                        detail: {planetId: planet.celestial_body_id},
-                      }),
-                    )}
-                >
-                  <span>${planet.celestial_body_id.split('-')[1]}</span>${planet.planetName}
-                </li>`,
-            )}
+            ${planet.keyFeatures.map((feature) => html`<li>${feature}</li>`)}
           </ul>
         </div>
       </div>
     `;
   }
+  private renderPlanetList() {
+    return html`
+      <div
+        class="panel-header"
+        @click=${() => (this.isLeftPanelMinimized = !this.isLeftPanelMinimized)}
+      >
+        <h3 style="cursor: pointer;">Discovered Systems</h3>
+        <button class="minimize-btn">
+          ${this.isLeftPanelMinimized ? '+' : '−'}
+        </button>
+      </div>
+      <div class="panel-content">
+        <ul>
+          ${this.filteredAndSortedPlanets.map(
+            (p) =>
+              html`<li>
+                <button @click=${() => (this.selectedPlanetId = p.celestial_body_id)}>
+                  <span>${p.celestial_body_id.toUpperCase()}</span>
+                  ${p.planetName}
+                </button>
+              </li>`,
+          )}
+        </ul>
+      </div>
+    `;
+  }
+  private renderLeftPanel() {
+    const selectedPlanet = this.discoveredPlanets.find(
+      (p) => p.celestial_body_id === this.selectedPlanetId,
+    );
+    return html`
+      <div
+        class="planet-detail-panel ${selectedPlanet ? 'visible' : ''} ${this
+          .isLeftPanelMinimized
+          ? 'minimized'
+          : ''}"
+      >
+        ${selectedPlanet
+          ? this.renderPlanetDetail(selectedPlanet)
+          : this.renderPlanetList()}
+      </div>
+    `;
+  }
+  private _renderTrainingConfig() {
+    return html`
+      <div class="status-line">AI MODEL UNTRAINED</div>
+      <p>
+        The synthesis engine requires a trained model to generate plausible
+        exoplanets. Please configure and begin the training cycle.
+      </p>
+      <div class="training-controls">
+        <div class="control-group">
+          <label>Data Sources</label>
+          <div class="checkbox-group">
+            <input
+              type="checkbox"
+              id="kepler-data"
+              .checked=${this.trainingUseKeplerData}
+              @change=${() =>
+                (this.trainingUseKeplerData = !this.trainingUseKeplerData)}
+            />
+            <label for="kepler-data">Kepler Mission Archive</label>
+          </div>
+          <div class="checkbox-group">
+            <input
+              type="checkbox"
+              id="tess-data"
+              .checked=${this.trainingUseTessData}
+              @change=${() =>
+                (this.trainingUseTessData = !this.trainingUseTessData)}
+            />
+            <label for="tess-data">TESS Mission Data</label>
+          </div>
+        </div>
+        <div class="control-group">
+          <label for="classifier">Classifier Model</label>
+          <select
+            id="classifier"
+            .value=${this.trainingClassifier}
+            @change=${(e: Event) =>
+              (this.trainingClassifier = (
+                e.target as HTMLSelectElement
+              ).value as any)}
+          >
+            <option value="random-forest">Random Forest</option>
+            <option value="cnn">Convolutional Neural Net</option>
+            <option value="gradient-boosting">Gradient Boosting</option>
+          </select>
+        </div>
+        <div class="hyperparameter-group">
+          <div>
+            <label for="epochs">Epochs</label>
+            <input
+              type="number"
+              id="epochs"
+              min="1"
+              max="1000"
+              .value=${String(this.trainingEpochs)}
+              @input=${this._handleEpochsInput}
+            />
+          </div>
+          <div>
+            <label for="learning-rate">Learning Rate</label>
+            <input
+              type="number"
+              id="learning-rate"
+              step="0.0001"
+              min="0.00001"
+              max="0.1"
+              .value=${String(this.trainingLearningRate)}
+              @input=${this._handleLearningRateInput}
+            />
+          </div>
+        </div>
+      </div>
+      <button
+        class="train-button"
+        @click=${this._startTraining}
+        ?disabled=${!this.trainingUseKeplerData && !this.trainingUseTessData}
+      >
+        Begin Training
+      </button>
+    `;
+  }
 
+  private _renderTrainingProgress() {
+    return html`
+      <div class="status-line">TRAINING IN PROGRESS...</div>
+      <p>${this.trainingStatusMessage}</p>
+      <div class="progress-bar-container">
+        <div
+          class="progress-bar"
+          style="width: ${this.trainingProgress}%"
+        ></div>
+      </div>
+      <div class="training-progress-details">
+        <span>${this.trainingSubMessage}</span>
+        <span>${this.trainingTimeRemaining}</span>
+      </div>
+      <div class="training-progress-details" style="margin-top: 0.5rem;">
+        <strong>Validation Accuracy</strong>
+        <strong>${this.trainingValidationAccuracy.toFixed(2)}%</strong>
+      </div>
+    `;
+  }
+
+  private _renderTrainingComplete() {
+    return html`
+      <div class="status-line ready">AI MODEL READY</div>
+      <p>
+        The model has been successfully trained with a final validation
+        accuracy of
+        <strong>${this.trainingValidationAccuracy.toFixed(2)}%</strong>. The
+        synthesis engine is now online.
+      </p>
+      <button class="train-button" @click=${this._resetTraining}>
+        Re-Train Model
+      </button>
+    `;
+  }
+  private renderStatusPanel() {
+    return html` <div
+      class="engine-status-panel ${this.isLoading ||
+      this.aiModelStatus === 'training'
+        ? 'active'
+        : ''} ${this.isStatusPanelMinimized ? 'minimized' : ''}"
+    >
+      <div
+        class="panel-header"
+        @click=${() =>
+          (this.isStatusPanelMinimized = !this.isStatusPanelMinimized)}
+      >
+        <h3>Engine Status</h3>
+        <button class="minimize-btn">
+          ${this.isStatusPanelMinimized ? '+' : '−'}
+        </button>
+      </div>
+      <div class="panel-content">
+        ${this.aiModelStatus === 'untrained'
+          ? this._renderTrainingConfig()
+          : this.aiModelStatus === 'training'
+          ? this._renderTrainingProgress()
+          : this._renderTrainingComplete()}
+      </div>
+    </div>`;
+  }
+
+  private renderFooter() {
+    const promptPlaceholder =
+      this.discoveryMode === 'synthesis'
+        ? this.aiModelStatus === 'ready'
+          ? 'Describe a planetary concept to synthesize...'
+          : 'AI model not ready. Please train the model first.'
+        : this.discoveryMode === 'chat'
+        ? `Ask a question about ${
+            this.discoveredPlanets.find(
+              (p) => p.celestial_body_id === this.selectedPlanetId,
+            )?.planetName
+          }...`
+        : 'Commands disabled in this mode.';
+
+    const buttonText =
+      this.discoveryMode === 'synthesis'
+        ? 'Synthesize'
+        : this.discoveryMode === 'chat'
+        ? 'Send'
+        : '...';
+
+    return html`
+      <footer>
+        <div class="discovery-controls">
+          <div class="mode-switch">
+            <button
+              class=${this.discoveryMode === 'synthesis' ? 'active' : ''}
+              @click=${() => this._changeDiscoveryMode('synthesis')}
+              title="Generate new planets from a text prompt"
+            >
+              Synthesis
+            </button>
+            <button
+              class=${this.discoveryMode === 'chat' ? 'active' : ''}
+              @click=${() => this._changeDiscoveryMode('chat')}
+              ?disabled=${!this.selectedPlanetId}
+              title="Chat with an AI about the selected planet"
+            >
+              Chat
+            </button>
+            <button
+              class=${this.discoveryMode === 'shader-lab' ? 'active' : ''}
+              @click=${() => this._changeDiscoveryMode('shader-lab')}
+              title="Experiment with atmosphere shaders"
+            >
+              Shader Lab
+            </button>
+          </div>
+        </div>
+        ${this.discoveryMode === 'synthesis' || this.discoveryMode === 'chat'
+          ? html`
+              <form class="command-bar" @submit=${this._handleCommandSubmit}>
+                <input
+                  type="text"
+                  placeholder=${promptPlaceholder}
+                  .value=${this.userPrompt}
+                  @input=${this._handleUserPromptInput}
+                  ?disabled=${this.isLoading ||
+                  (this.discoveryMode === 'chat' && !this.selectedPlanetId) ||
+                  (this.discoveryMode === 'synthesis' &&
+                    this.aiModelStatus !== 'ready')}
+                />
+                <button
+                  type="submit"
+                  class="command-button ${this.isLoading ? 'loading' : ''}"
+                  ?disabled=${this.isLoading ||
+                  !this.userPrompt.trim() ||
+                  (this.discoveryMode === 'synthesis' &&
+                    this.aiModelStatus !== 'ready')}
+                >
+                  ${buttonText}
+                </button>
+              </form>
+            `
+          : nothing}
+      </footer>
+    `;
+  }
+  private renderChat() {
+    return html` <div class="chat-container">
+      <div class="chat-history">
+        ${this.chatHistory.map(
+          (msg) =>
+            html`<div class="chat-message ${msg.role}">${unsafeHTML(msg.text)}</div>`,
+        )}
+        ${this.isLoading
+          ? html`<div class="loading-spinner"></div>`
+          : nothing}
+      </div>
+    </div>`;
+  }
   private renderShaderLab() {
     return html`
       <div class="shader-lab-container">
-        <!-- Panel 1: Controls -->
-        <div class="shader-lab-panel">
-          <h3>Shader Controls</h3>
-          <div class="shader-control-group">
-            <label for="shader-color">Atmosphere Color</label>
+        <h3>Atmosphere Shader Lab</h3>
+        <div class="shader-lab-visualizer">
+          <shader-lab-visualizer
+            .atmosphereColor=${this.shaderLabColor}
+            .fresnelPower=${this.shaderLabFresnelPower}
+          ></shader-lab-visualizer>
+        </div>
+        <div class="shader-lab-controls">
+          <div class="control-group">
+            <label for="shader-preset">Preset</label>
+            <select
+              id="shader-preset"
+              .value=${this.selectedPreset}
+              @change=${this._handleSelectPreset}
+            >
+              ${this.shaderLabPresets.map(
+                (p) => html`<option .value=${p.name}>${p.name}</option>`,
+              )}
+            </select>
+          </div>
+          <div class="control-group">
+            <label for="shader-color">Glow Color</label>
             <input
               type="color"
               id="shader-color"
@@ -2511,426 +2445,192 @@ export class AxeeInterface extends LitElement {
                 (this.shaderLabColor = (e.target as HTMLInputElement).value)}
             />
           </div>
-
-          <div class="shader-control-group">
-            <label for="fresnel-slider">
-              Fresnel Power: ${this.shaderLabFresnelPower.toFixed(1)}
+          <div class="control-group">
+            <label for="shader-fresnel">
+              Fresnel Power
+              <span class="value-display"
+                >${this.shaderLabFresnelPower.toFixed(1)}</span
+              >
             </label>
             <input
               type="range"
-              id="fresnel-slider"
+              id="shader-fresnel"
               min="1.0"
-              max="16.0"
+              max="10.0"
               step="0.1"
-              .value=${String(this.shaderLabFresnelPower)}
+              .value=${this.shaderLabFresnelPower}
               @input=${(e: Event) =>
                 (this.shaderLabFresnelPower = parseFloat(
                   (e.target as HTMLInputElement).value,
                 ))}
             />
           </div>
-
-          <h3>Presets</h3>
-          <div class="shader-control-group">
-            <label for="preset-select">Load Preset</label>
-            <select
-              id="preset-select"
-              .value=${this.selectedPreset}
-              @change=${this.handleLoadPreset}
-            >
-              ${this.shaderLabPresets.map(
-                (p) => html`<option value=${p.name}>${p.name}</option>`,
-              )}
-            </select>
-          </div>
-          <button class="train-button" @click=${this.handleSavePreset}>
-            Save Current as Preset
-          </button>
-
-          <h3>Analysis</h3>
           <button
-            class="train-button"
-            @click=${this.handleExplainCode}
-            ?disabled=${this.isExplanationLoading}
+            class="header-button shader-explain-btn"
+            @click=${() => {
+              this.isExplanationModalOpen = true;
+              this.handleExplainShader();
+            }}
           >
-            ${this.isExplanationLoading ? 'Analyzing...' : 'Explain Code with AI'}
+            Explain Shader
           </button>
-        </div>
-
-        <!-- Panel 2: Live Preview -->
-        <shader-lab-visualizer
-          class="shader-lab-visualizer"
-          .atmosphereColor=${this.shaderLabColor}
-          .fresnelPower=${this.shaderLabFresnelPower}
-        ></shader-lab-visualizer>
-
-        <!-- Panel 3: Code Display -->
-        <div class="shader-lab-panel">
-          <h3>Shader Source Code</h3>
-          <div class="shader-code-display">
-            <h4>Vertex Shader (atmosphere-shader.tsx)</h4>
-            <pre>${atmosphereVs}</pre>
-          </div>
-          <div class="shader-code-display">
-            <h4>Fragment Shader (atmosphere-shader.tsx)</h4>
-            <pre>${atmosphereFs}</pre>
-          </div>
         </div>
       </div>
     `;
   }
-
   private renderAboutModal() {
-    return html`
-      <div class="modal-overlay" @click=${this.closeAboutModal}>
-        <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
-          <button class="modal-close-button" @click=${this.closeAboutModal}>
-            &times;
-          </button>
-          <h2>About AXEE</h2>
-          <div class="modal-section">
-            <h3>AURELION Exoplanet Synthesis Engine</h3>
-            <p>
-              AXEE is an advanced celestial discovery interface powered by
-              Google's Gemini models. It allows for the procedural generation
-              and exploration of fictional exoplanets, transforming natural
-              language prompts into rich, detailed worlds.
-            </p>
+    return html`<div
+      class="modal-overlay ${this.isAboutModalOpen ? 'visible' : ''}"
+      @click=${() => (this.isAboutModalOpen = false)}
+    >
+      <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
+        <button
+          class="modal-close-btn"
+          @click=${() => (this.isAboutModalOpen = false)}
+        >
+          &times;
+        </button>
+        <h2>About AXEE</h2>
+        <p>
+          The AURELION Exoplanet Synthesis Engine (AXEE) is an experimental
+          interface for generating and exploring fictional worlds using generative
+          AI.
+        </p>
+        <p>
+          Powered by Google's Gemini models, AXEE translates creative concepts
+          into detailed, scientifically-plausible exoplanet profiles, complete
+          with procedural visualizations. It serves as a demonstration of
+          AI-driven content creation and interactive data exploration.
+        </p>
+      </div>
+    </div>`;
+  }
+  private renderShaderExplanationModal() {
+    return html` <div
+      class="modal-overlay ${this.isExplanationModalOpen ? 'visible' : ''}"
+      @click=${() => (this.isExplanationModalOpen = false)}
+    >
+      <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
+        <button
+          class="modal-close-btn"
+          @click=${() => (this.isExplanationModalOpen = false)}
+        >
+          &times;
+        </button>
+        <h2>Shader Analysis</h2>
+        ${this.isExplanationLoading
+          ? html`<div class="loading-spinner"></div>`
+          : html`<p>${unsafeHTML(this.shaderLabExplanation)}</p>`}
+      </div>
+    </div>`;
+  }
+  private renderTrainingConfirmationModal() {
+    return html`<div
+      class="modal-overlay ${this.isTrainingConfirmationOpen ? 'visible' : ''}"
+      @click=${() => (this.isTrainingConfirmationOpen = false)}
+    >
+      <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
+        <button
+          class="modal-close-btn"
+          @click=${() => (this.isTrainingConfirmationOpen = false)}
+        >
+          &times;
+        </button>
+        <h2>Confirm Training Cycle</h2>
+        <p>
+          You are about to begin a new AI model training cycle with the
+          following configuration. This process is simulated and will take
+          approximately 15 seconds.
+        </p>
+        <div class="stats-grid" style="margin-top: 1.5rem;">
+          <div>
+            <strong>Data Sources</strong>
+            <span
+              >${[
+                this.trainingUseKeplerData && 'Kepler',
+                this.trainingUseTessData && 'TESS',
+              ]
+                .filter(Boolean)
+                .join(' + ')}</span
+            >
           </div>
-          <div class="modal-section">
-            <h3>Technology</h3>
-            <p>
-              This application is built with Lit, Three.js, and the Google AI
-              SDK. It leverages Gemini for data synthesis and Google Search for
-              grounding the generated content in real astronomical concepts. All
-              data is stored locally in your browser.
-            </p>
+          <div>
+            <strong>Classifier</strong>
+            <span
+              >${this.trainingClassifier
+                .replace('-', ' ')
+                .replace(/\b\w/g, (l) => l.toUpperCase())}</span
+            >
+          </div>
+          <div>
+            <strong>Epochs</strong>
+            <span>${this.trainingEpochs}</span>
+          </div>
+          <div>
+            <strong>Learning Rate</strong>
+            <span>${this.trainingLearningRate}</span>
           </div>
         </div>
-      </div>
-    `;
-  }
-
-  private renderExplanationModal() {
-    return html`
-      <div
-        class="modal-overlay"
-        @click=${() => (this.isExplanationModalOpen = false)}
-      >
-        <div class="modal-content" @click=${(e: Event) => e.stopPropagation()}>
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
           <button
-            class="modal-close-button"
-            @click=${() => (this.isExplanationModalOpen = false)}
+            class="panel-action-button"
+            style="flex-grow: 2;"
+            @click=${() => (this.isTrainingConfirmationOpen = false)}
           >
-            &times;
+            Cancel
           </button>
-          <h2>AI Shader Analysis</h2>
-          <div class="modal-section">
-            ${this.isExplanationLoading
-              ? html`<div class="loader">
-                  <div></div>
-                  <div></div>
-                  <div></div>
-                </div>`
-              : html`<div class="ai-explanation">
-                  ${unsafeHTML(this.shaderLabExplanation)}
-                </div>`}
-          </div>
+          <button
+            class="panel-action-button"
+            style="background: var(--accent-color-translucent);"
+            @click=${this._confirmAndStartTraining}
+          >
+            Confirm & Begin
+          </button>
         </div>
       </div>
-    `;
+    </div>`;
   }
-
   render() {
-    const selectedPlanet = this.discoveredPlanets.find(
-      (p) => p.celestial_body_id === this.selectedPlanetId,
-    );
-
-    const uniquePlanetTypes = [
-      ...new Set(this.discoveredPlanets.map((p) => p.planetType)),
-    ];
-
     return html`
       <axee-audio-engine
         .mood=${this.currentMood}
         .muted=${this.isMuted}
       ></axee-audio-engine>
+
       <axee-visuals-3d
         .planetsData=${this.filteredAndSortedPlanets}
         .selectedPlanetId=${this.selectedPlanetId}
-        .isScanning=${this.isLoading && this.discoveryMode === 'analysis'}
         .viewMode=${this.visualsViewMode}
-        @planet-selected=${this.handlePlanetSelected}
+        @planet-selected=${(e: CustomEvent) => {
+          this.selectedPlanetId = e.detail.planetId;
+          this.audioEngine.playInteractionSound();
+          if (this.discoveryMode === 'chat') {
+            // Reset chat on planet change
+            this.chat = null;
+            this.chatHistory = [];
+          }
+        }}
       ></axee-visuals-3d>
 
-      <div class="overlay">
-        <header>
-          <div class="main-title">
-            <h1>AXEE</h1>
-            <h2>AURELION Exoplanet Synthesis Engine</h2>
-          </div>
-          <div
-            class="top-right-controls ${this.isTopRightPanelMinimized
-              ? 'minimized'
-              : ''}"
-          >
-            <div
-              class="panel-header"
-              @click=${() =>
-                (this.isTopRightPanelMinimized = !this.isTopRightPanelMinimized)}
-            >
-              <h3>System Controls</h3>
-              <button
-                class="minimize-btn"
-                aria-label=${this.isTopRightPanelMinimized
-                  ? 'Expand Panel'
-                  : 'Minimize Panel'}
-              >
-                _
-              </button>
-            </div>
-            <div class="controls-content">
-              <div class="system-buttons">
-                <button
-                  class="header-button"
-                  @click=${() =>
-                    (this.visualsViewMode =
-                      this.visualsViewMode === 'single' ? 'quad' : 'single')}
-                >
-                  View: ${this.visualsViewMode === 'single' ? 'Single' : 'Quad'}
-                </button>
-                <button class="header-button" @click=${this.openAboutModal}>
-                  About
-                </button>
-              </div>
-              <div class="filter-controls">
-                <div class="filter-group">
-                  <label for="life-filter">Life Potential</label>
-                  <select
-                    id="life-filter"
-                    .value=${this.lifeFilter}
-                    @change=${this.handleLifeFilterChange}
-                  >
-                    <option value="all">Any</option>
-                    <option value="habitable">Habitable</option>
-                    <option value="potentially-habitable">
-                      Potentially Habitable
-                    </option>
-                    <option value="unlikely">Unlikely</option>
-                  </select>
-                </div>
-                <div class="filter-group">
-                  <label for="type-filter">Planet Type</label>
-                  <select
-                    id="type-filter"
-                    .value=${this.typeFilter}
-                    @change=${this.handleTypeFilterChange}
-                  >
-                    <option value="all">All Types</option>
-                    ${uniquePlanetTypes.map(
-                      (type) =>
-                        html`<option
-                          value=${type.replace(/ /g, '-').toLowerCase()}
-                        >
-                          ${type}
-                        </option>`,
-                    )}
-                  </select>
-                </div>
-                <div class="filter-group">
-                  <label for="feature-filter">Feature Keyword</label>
-                  <input
-                    type="text"
-                    id="feature-filter"
-                    placeholder="e.g., ocean, volcanic"
-                    .value=${this.featureFilter}
-                    @input=${this.handleFeatureFilterChange}
-                  />
-                </div>
-                <div class="filter-group">
-                  <label for="sort-by">Sort By</label>
-                  <select
-                    id="sort-by"
-                    .value=${this.sortBy}
-                    @change=${this.handleSortByChange}
-                  >
-                    <option value="discoveryDate_desc">Newest First</option>
-                    <option value="name_asc">Name (A-Z)</option>
-                    <option value="name_desc">Name (Z-A)</option>
-                    <option value="distance_asc">Distance (Near-Far)</option>
-                    <option value="distance_desc">Distance (Far-Near)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main>
-          ${this.renderPlanetarySystemPanel()}
-          ${selectedPlanet ? this.renderPlanetDetailPanel(selectedPlanet) : ''}
-
-          <div
-            class="engine-status-panel ${this.isLoading ? 'active' : ''} ${this
-              .isStatusPanelMinimized
-              ? 'minimized'
-              : ''}"
-          >
-            ${this.renderAiModelStatus()}
-          </div>
-          <light-curve-visualizer
-            ?isActive=${this.isAnalyzingData}
-          ></light-curve-visualizer>
-
-          ${this.discoveryMode === 'chat'
-            ? html` <div class="chat-panel">
-                <div class="chat-history">
-                  ${this.chatHistory.length === 0
-                    ? html`<div class="chat-placeholder">
-                        <h3>AXEE Chat Interface</h3>
-                        <p>
-                          Ask about discovered planets, astronomy, or the cosmos.
-                        </p>
-                      </div>`
-                    : this.chatHistory.map(
-                        (msg) => html`
-                          <div class="chat-message ${msg.role}">
-                            <div class="message-bubble">${msg.text}</div>
-                          </div>
-                        `,
-                      )}
-                </div>
-              </div>`
-            : this.discoveryMode === 'shader-lab'
-            ? this.renderShaderLab()
-            : nothing}
-        </main>
-
-        <footer>
-          <div
-            class="status-bar"
-            title=${this.error ? this.error : this.statusMessage}
-          >
-            ${this.isLoading
-              ? html`<div class="loader"><div></div><div></div><div></div></div>`
-              : nothing}
-            <span>${this.error ? this.error : this.statusMessage}</span>
-          </div>
-
-          <div class="discovery-controls">
-            <div class="mode-switch">
-              <button
-                class=${this.discoveryMode === 'synthesis' ? 'active' : ''}
-                @click=${() => this.setDiscoveryMode('synthesis')}
-              >
-                Synthesis
-              </button>
-              <button
-                class=${this.discoveryMode === 'analysis' ? 'active' : ''}
-                @click=${() => this.setDiscoveryMode('analysis')}
-                ?disabled=${this.aiModelStatus !== 'ready'}
-                title=${this.aiModelStatus !== 'ready'
-                  ? 'AI Model must be trained first.'
-                  : 'Analysis Mode'}
-              >
-                Analysis
-              </button>
-              <button
-                class=${this.discoveryMode === 'chat' ? 'active' : ''}
-                @click=${() => this.setDiscoveryMode('chat')}
-              >
-                Chat
-              </button>
-              <button
-                class=${this.discoveryMode === 'shader-lab' ? 'active' : ''}
-                @click=${() => this.setDiscoveryMode('shader-lab')}
-              >
-                Shader Lab
-              </button>
-            </div>
-            <control-tray
-              .isMuted=${this.isMuted}
-              @toggle-mute=${this.toggleMute}
-            ></control-tray>
-          </div>
-
-          ${this.discoveryMode === 'synthesis'
-            ? html` <div class="command-bar">
-                <input
-                  type="text"
-                  placeholder="Describe a world to discover..."
-                  .value=${this.userPrompt}
-                  @input=${(e: Event) =>
-                    (this.userPrompt = (e.target as HTMLInputElement).value)}
-                  @keydown=${(e: KeyboardEvent) => {
-                    if (e.key === 'Enter') this.handleSynthesis();
-                  }}
-                />
-                <button
-                  class="send-button"
-                  @click=${this.handleSynthesis}
-                  ?disabled=${this.isLoading || this.userPrompt.length === 0}
-                  title="Synthesize Exoplanet"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <path
-                      d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"
-                    ></path>
-                  </svg>
-                </button>
-              </div>`
-            : this.discoveryMode === 'analysis'
-            ? html`<div class="analysis-bar">
-                <button
-                  class="analyze-button"
-                  @click=${this.handleAnalysis}
-                  ?disabled=${this.isLoading || this.aiModelStatus !== 'ready'}
-                  title=${this.aiModelStatus !== 'ready'
-                    ? 'AI Model must be trained before analysis.'
-                    : 'Analyze Light Curve Data'}
-                >
-                  ${this.isLoading ? 'ANALYZING...' : 'INITIATE ANALYSIS'}
-                </button>
-              </div>`
-            : this.discoveryMode === 'chat'
-            ? html` <div class="command-bar">
-                <input
-                  type="text"
-                  placeholder="Ask AXEE a question..."
-                  .value=${this.userPrompt}
-                  @input=${(e: Event) =>
-                    (this.userPrompt = (e.target as HTMLInputElement).value)}
-                  @keydown=${(e: KeyboardEvent) => {
-                    if (e.key === 'Enter') this.handleSendMessage();
-                  }}
-                />
-                <button
-                  class="send-button"
-                  @click=${this.handleSendMessage}
-                  ?disabled=${this.isLoading || this.userPrompt.length === 0}
-                  title="Send Message"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <path
-                      d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"
-                    ></path>
-                  </svg>
-                </button>
-              </div>`
-            : nothing}
-        </footer>
-
-        ${this.isAboutModalOpen ? this.renderAboutModal() : nothing}
-        ${this.isExplanationModalOpen ? this.renderExplanationModal() : nothing}
+      <div class="main-title">
+        <h1>AURELION</h1>
+        <h2>Exoplanet Synthesis Engine</h2>
       </div>
+
+      ${this.renderTopRightControls()} ${this.renderLeftPanel()}
+      ${this.renderStatusPanel()}
+
+      <light-curve-visualizer
+        ?isActive=${this.isAnalyzingData}
+      ></light-curve-visualizer>
+
+      ${this.renderFooter()}
+      ${this.discoveryMode === 'chat' && this.selectedPlanetId
+        ? this.renderChat()
+        : nothing}
+      ${this.discoveryMode === 'shader-lab' ? this.renderShaderLab() : nothing}
+      ${this.renderAboutModal()} ${this.renderShaderExplanationModal()}
+      ${this.renderTrainingConfirmationModal()}
     `;
   }
 }
