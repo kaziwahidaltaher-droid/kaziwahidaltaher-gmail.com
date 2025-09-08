@@ -168,10 +168,17 @@ export class AxeeInterface extends LitElement {
     | 'gradient-boosting' = 'random-forest';
   @state() private trainingEpochs = 50;
   @state() private trainingLearningRate = 0.001;
-  @state() private trainingBatchSize = 64;
   @state() private trainingValidationAccuracy = 0;
   @state() private isTrainingConfirmationOpen = false;
   private trainingInterval: ReturnType<typeof setInterval> | null = null;
+
+  // New state for advanced training options
+  @state() private trainingModelArch:
+    | 'stellar-cartography'
+    | 'astro-poetics'
+    | 'hard-science' = 'stellar-cartography';
+  @state() private trainingCreativity = 0.8; // Simulated temperature (0.1 to 1.5)
+  @state() private trainingDetailLevel = 0.7; // Simulated narrative detail (0.1 to 1.0)
 
   // Chat states
   @state() private chatHistory: {role: 'user' | 'model'; text: string}[] = [];
@@ -1235,6 +1242,26 @@ export class AxeeInterface extends LitElement {
       cursor: not-allowed;
     }
 
+    .reset-button {
+      font-family: 'Exo 2', sans-serif;
+      background: transparent;
+      border: none;
+      color: var(--accent-color);
+      padding: 0.6rem 1rem;
+      width: 100%;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-size: 0.8rem;
+      transition: background 0.3s, opacity 0.3s;
+      opacity: 0.7;
+      margin-top: 0.5rem;
+    }
+    .reset-button:hover {
+      background: var(--accent-color-translucent);
+      opacity: 1;
+    }
+
     .training-controls {
       display: flex;
       flex-direction: column;
@@ -1358,6 +1385,41 @@ export class AxeeInterface extends LitElement {
       outline: none;
       border-color: var(--accent-color);
       box-shadow: 0 2px 10px rgba(160, 208, 255, 0.2);
+    }
+
+    .training-controls .value-display {
+      float: right;
+      font-family: 'Courier New', monospace;
+    }
+
+    .training-controls input[type='range'] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 2px;
+      background: var(--accent-color-translucent);
+      outline: none;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    .training-controls input[type='range']:hover {
+      opacity: 1;
+    }
+    .training-controls input[type='range']::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--accent-color);
+      cursor: pointer;
+      border-radius: 50%;
+    }
+    .training-controls input[type='range']::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      background: var(--accent-color);
+      cursor: pointer;
+      border-radius: 50%;
     }
 
     .progress-bar-container {
@@ -1626,7 +1688,8 @@ export class AxeeInterface extends LitElement {
       opacity: 0.7;
       text-transform: uppercase;
     }
-    .shader-lab-controls .value-display {
+    .shader-lab-controls .value-display,
+    .training-controls .value-display {
       float: right;
       font-family: 'Courier New', monospace;
     }
@@ -1648,7 +1711,8 @@ export class AxeeInterface extends LitElement {
       border: none;
     }
 
-    .shader-lab-controls input[type='range'] {
+    .shader-lab-controls input[type='range'],
+    .training-controls input[type='range'] {
       -webkit-appearance: none;
       appearance: none;
       width: 100%;
@@ -1658,10 +1722,12 @@ export class AxeeInterface extends LitElement {
       opacity: 0.7;
       transition: opacity 0.2s;
     }
-    .shader-lab-controls input[type='range']:hover {
+    .shader-lab-controls input[type='range']:hover,
+    .training-controls input[type='range']:hover {
       opacity: 1;
     }
-    .shader-lab-controls input[type='range']::-webkit-slider-thumb {
+    .shader-lab-controls input[type='range']::-webkit-slider-thumb,
+    .training-controls input[type='range']::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
       width: 14px;
@@ -1670,7 +1736,8 @@ export class AxeeInterface extends LitElement {
       cursor: pointer;
       border-radius: 50%;
     }
-    .shader-lab-controls input[type='range']::-moz-range-thumb {
+    .shader-lab-controls input[type='range']::-moz-range-thumb,
+    .training-controls input[type='range']::-moz-range-thumb {
       width: 14px;
       height: 14px;
       background: var(--accent-color);
@@ -1843,6 +1910,7 @@ export class AxeeInterface extends LitElement {
       url.hash = `planet_data=${encodedData}`;
       navigator.clipboard.writeText(url.href);
       this.statusMessage = 'Shareable link copied to clipboard!';
+      this.triggerHaptic();
       setTimeout(() => {
         this.statusMessage = 'Ready for new command.';
       }, 3000);
@@ -1884,55 +1952,73 @@ export class AxeeInterface extends LitElement {
     this.trainingValidationAccuracy = 0;
     this.audioEngine?.playInteractionSound();
 
-    const totalDuration = 15000; // 15 seconds for simulation
-    const startTime = Date.now();
-
     const stages = [
       {
         duration: 3000,
         status: 'Preprocessing Data...',
-        sub: 'Loading archives...',
+        sub: 'Loading archives',
       },
-      {duration: 10000, status: 'Fitting Model...', sub: 'Running epochs...'},
+      {duration: 10000, status: 'Fitting Model...', sub: 'Running epochs'},
       {
         duration: 2000,
         status: 'Finalizing...',
-        sub: 'Calculating final accuracy...',
+        sub: 'Calculating final accuracy',
       },
     ];
-    let currentStageIndex = 0;
-    let stageStartTime = Date.now();
+    const totalDuration = stages.reduce((sum, s) => sum + s.duration, 0);
+    const startTime = Date.now();
 
     if (this.trainingInterval) clearInterval(this.trainingInterval);
     this.trainingInterval = setInterval(() => {
       const elapsed = Date.now() - startTime;
-      const stageElapsed = Date.now() - stageStartTime;
 
-      if (
-        currentStageIndex < stages.length - 1 &&
-        stageElapsed > stages[currentStageIndex].duration
-      ) {
-        currentStageIndex++;
-        stageStartTime = Date.now();
+      let currentStageIndex = 0;
+      let stageProgress = 0;
+      let cumulativeDuration = 0;
+
+      for (let i = 0; i < stages.length; i++) {
+        const stageDuration = stages[i].duration;
+        if (elapsed < cumulativeDuration + stageDuration) {
+          currentStageIndex = i;
+          const stageElapsed = elapsed - cumulativeDuration;
+          stageProgress = Math.min(
+            Math.floor((stageElapsed / stageDuration) * 100),
+            100,
+          );
+          break;
+        }
+        cumulativeDuration += stageDuration;
       }
 
-      this.trainingStatusMessage = stages[currentStageIndex].status;
-      this.trainingSubMessage = stages[currentStageIndex].sub;
+      // Handle the case where the timer overshoots slightly
+      if (elapsed >= totalDuration) {
+        currentStageIndex = stages.length - 1;
+        stageProgress = 100;
+      }
+
+      const currentStage = stages[currentStageIndex];
+      this.trainingStatusMessage = currentStage.status;
+      this.trainingSubMessage = `${currentStage.sub} (${stageProgress}%)`;
+
+      // Simulate accuracy increase, making it dependent on the "Fitting Model" stage
+      if (currentStageIndex === 1) {
+        // 1 is the index for 'Fitting Model'
+        this.trainingValidationAccuracy = Math.min(
+          98.5,
+          (stageProgress / 100) * 92 + Math.random() * 5,
+        );
+      } else if (currentStageIndex > 1) {
+        this.trainingValidationAccuracy = Math.max(
+          this.trainingValidationAccuracy,
+          97,
+        ); // Ensure it stays high
+      }
 
       const progress = Math.min((elapsed / totalDuration) * 100, 100);
       this.trainingProgress = progress;
 
       const timeRemaining = Math.max(0, totalDuration - elapsed);
       this.trainingTimeRemaining = `ETA: ${Math.round(timeRemaining / 1000)}s`;
-
-      // Simulate accuracy increase, mostly during the fitting stage
-      if (currentStageIndex === 1) {
-        this.trainingValidationAccuracy += Math.random() * 1.5;
-        this.trainingValidationAccuracy = Math.min(
-          this.trainingValidationAccuracy,
-          98.5,
-        );
-      }
 
       if (progress >= 100) {
         clearInterval(this.trainingInterval!);
@@ -1948,8 +2034,21 @@ export class AxeeInterface extends LitElement {
           99.8,
         );
         this.audioEngine?.playSuccessSound();
+        this.trainingSubMessage = 'Finalizing... (100%)';
       }
     }, 100);
+  }
+
+  private _resetTrainingParameters() {
+    this.trainingUseKeplerData = true;
+    this.trainingUseTessData = true;
+    this.trainingClassifier = 'random-forest';
+    this.trainingEpochs = 50;
+    this.trainingLearningRate = 0.001;
+    this.trainingModelArch = 'stellar-cartography';
+    this.trainingCreativity = 0.8;
+    this.trainingDetailLevel = 0.7;
+    this.audioEngine?.playInteractionSound();
   }
 
   private _resetTraining() {
@@ -2248,6 +2347,63 @@ export class AxeeInterface extends LitElement {
             />
           </div>
         </div>
+        <div class="control-group">
+          <label for="model-arch">Model Architecture</label>
+          <select
+            id="model-arch"
+            .value=${this.trainingModelArch}
+            @change=${(e: Event) =>
+              (this.trainingModelArch = (
+                e.target as HTMLSelectElement
+              ).value as any)}
+          >
+            <option value="stellar-cartography">
+              Stellar Cartography Core
+            </option>
+            <option value="astro-poetics">Astro-Poetics Engine</option>
+            <option value="hard-science">Hard Science Simulator</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="creativity">
+            Creativity
+            <span class="value-display"
+              >${this.trainingCreativity.toFixed(2)}</span
+            >
+          </label>
+          <input
+            type="range"
+            id="creativity"
+            min="0.1"
+            max="1.5"
+            step="0.05"
+            .value=${String(this.trainingCreativity)}
+            @input=${(e: Event) =>
+              (this.trainingCreativity = parseFloat(
+                (e.target as HTMLInputElement).value,
+              ))}
+          />
+        </div>
+        <div class="control-group">
+          <label for="detail-level">
+            Detail Level
+            <span class="value-display"
+              >${this.trainingDetailLevel.toFixed(2)}</span
+            >
+          </label>
+          <input
+            type="range"
+            id="detail-level"
+            min="0.1"
+            max="1.0"
+            step="0.05"
+            .value=${String(this.trainingDetailLevel)}
+            @input=${(e: Event) =>
+              (this.trainingDetailLevel = parseFloat(
+                (e.target as HTMLInputElement).value,
+              ))}
+          />
+        </div>
       </div>
       <button
         class="train-button"
@@ -2255,6 +2411,9 @@ export class AxeeInterface extends LitElement {
         ?disabled=${!this.trainingUseKeplerData && !this.trainingUseTessData}
       >
         Begin Training
+      </button>
+      <button class="reset-button" @click=${this._resetTrainingParameters}>
+        Reset to Default
       </button>
     `;
   }
@@ -2525,6 +2684,11 @@ export class AxeeInterface extends LitElement {
     </div>`;
   }
   private renderTrainingConfirmationModal() {
+    const modelArchNameMap = {
+      'stellar-cartography': 'Stellar Cartography Core',
+      'astro-poetics': 'Astro-Poetics Engine',
+      'hard-science': 'Hard Science Simulator',
+    };
     return html`<div
       class="modal-overlay ${this.isTrainingConfirmationOpen ? 'visible' : ''}"
       @click=${() => (this.isTrainingConfirmationOpen = false)}
@@ -2569,6 +2733,18 @@ export class AxeeInterface extends LitElement {
           <div>
             <strong>Learning Rate</strong>
             <span>${this.trainingLearningRate}</span>
+          </div>
+          <div>
+            <strong>Model Architecture</strong>
+            <span>${modelArchNameMap[this.trainingModelArch]}</span>
+          </div>
+          <div>
+            <strong>Creativity</strong>
+            <span>${this.trainingCreativity.toFixed(2)}</span>
+          </div>
+          <div>
+            <strong>Detail Level</strong>
+            <span>${this.trainingDetailLevel.toFixed(2)}</span>
           </div>
         </div>
         <div style="display: flex; gap: 1rem; margin-top: 2rem;">
