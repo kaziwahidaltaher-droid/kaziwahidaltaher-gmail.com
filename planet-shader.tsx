@@ -25,8 +25,7 @@ export const fs = `
   uniform vec3 uOceanColor;
   uniform float uCloudiness; // 0.0 to 1.0
   uniform float uIceCoverage; // 0.0 to 1.0
-  uniform int uTextureType; // 1: Terrestrial, 2: Gas Giant, 3: Volcanic, 4: Icy
-  uniform bool uIsSelected;
+  uniform int uTextureType; // 1: Terrestrial, 2: Gas Giant, 3: Volcanic
 
   varying vec2 vUv;
   varying vec3 vNormal;
@@ -116,18 +115,6 @@ export const fs = `
         vec3 crackColor = uColor2 * 2.0; // Glowing cracks
         finalColor = mix(uColor1, crackColor, cracks);
 
-    } else if (uTextureType == 4) { // Icy
-        float baseNoise = fbm(vPosition * 5.0, 7);
-        float cracks = smoothstep(0.0, 0.08, abs(fbm(vPosition * 15.0 + baseNoise, 3)));
-        cracks = pow(cracks, 0.5);
-
-        // Mix between a base ice color and a slightly darker/bluer crack color
-        vec3 iceColor = mix(uColor1, uColor2, cracks);
-        
-        // Use iceCoverage to determine overall brightness/frostiness
-        float frost = smoothstep(0.5, 1.0, uIceCoverage + baseNoise * 0.1);
-        finalColor = mix(iceColor, vec3(0.95, 0.98, 1.0), frost);
-
     } else { // Terrestrial (default)
         // Base terrain noise
         float terrain = fbm(vPosition * 2.5, 6);
@@ -147,24 +134,14 @@ export const fs = `
         finalColor = surfaceColor;
     }
 
-    // Volcanic heat shimmer for selected planet
-    if (uIsSelected && uTextureType == 3) {
-      float shimmer = snoise(vPosition * 30.0 + vec3(0.0, 0.0, uTime * 2.0)) * 0.5 + 0.5;
-      shimmer = smoothstep(0.7, 1.0, shimmer); // make it more like sparks/hotspots
-      finalColor += shimmer * vec3(1.0, 0.4, 0.1) * 0.5;
-    }
-
     // Clouds layer for all types
     if (uCloudiness > 0.0) {
-      // Rotate clouds for movement across the surface
-      float rotationAngle = uTime * 0.05;
-      mat3 rotationMatrix = mat3(cos(rotationAngle), 0, sin(rotationAngle), 0, 1, 0, -sin(rotationAngle), 0, cos(rotationAngle));
-      vec3 rotatedPosition = rotationMatrix * vPosition;
-
-      // Add a time-based offset to the noise input to make clouds evolve and change shape
-      vec3 evolvingCloudPos = rotatedPosition * 4.0 + vec3(uTime * 0.1, 0.0, 0.0);
-
-      float cloudNoise = cloud_fbm(evolvingCloudPos);
+      // Rotate clouds at a different speed
+      float angle = uTime * 0.2;
+      mat3 rotationMatrix = mat3(cos(angle), 0, sin(angle), 0, 1, 0, -sin(angle), 0, cos(angle));
+      vec3 cloudPos = rotationMatrix * vPosition;
+      
+      float cloudNoise = cloud_fbm(cloudPos * 4.0);
       float cloudCoverage = smoothstep(0.5 - uCloudiness, 0.5, cloudNoise);
       finalColor = mix(finalColor, vec3(1.0), cloudCoverage);
     }

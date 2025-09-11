@@ -1,5 +1,5 @@
 {
-  "name": "AXEE (AURELION Exoplanet Synthesis Engine)",
+  "name": "AURELION Exoplanet Synthesis Engine",
   "description": "An interactive exoplanet discovery engine powered by Gemini.",
   "requestFramePermissions": []
 }

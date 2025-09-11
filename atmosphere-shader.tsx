@@ -25,7 +25,6 @@ export const fs = `
   varying vec2 vUv;
   
   uniform vec3 uAtmosphereColor;
-  uniform float uFresnelPower;
   uniform float uTime;
 
   // Simple 2D noise
@@ -36,7 +35,7 @@ export const fs = `
   void main() {
     // Calculate the fresnel effect
     float fresnel = 1.0 - dot(vNormal, vViewDirection);
-    fresnel = pow(fresnel, uFresnelPower); // Power controls the falloff sharpness
+    fresnel = pow(fresnel, 4.0); // Power controls the falloff sharpness
     
     // Add dynamic, shimmering noise
     float noise = random(vUv * 5.0 + uTime * 0.1);

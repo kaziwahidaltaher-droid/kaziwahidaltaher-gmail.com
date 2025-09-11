@@ -11,7 +11,7 @@ import {EffectComposer} from 'three/examples/jsm/postprocessing/EffectComposer.j
 import {RenderPass} from 'three/examples/jsm/postprocessing/RenderPass.js';
 import {UnrealBloomPass} from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
-import type {PlanetData, GroundingChunk} from './index.tsx';
+import type {PlanetData, GalaxyData, GroundingChunk} from './index.tsx';
 import {
   vs as atmosphereVs,
   fs as atmosphereFs,
@@ -21,15 +21,17 @@ import {vs as starfieldVs, fs as starfieldFs} from './starfield-shaders.tsx';
 
 @customElement('axee-visuals-3d')
 export class AxeeVisuals3D extends LitElement {
-  @property({type: Array}) planetsData: PlanetData[] = [];
+  @property({type: Array}) galaxiesData: GalaxyData[] = [];
+  @property({type: String}) currentGalaxyId: string | null = null;
   @property({type: String}) selectedPlanetId: string | null = null;
+  @property({type: String}) viewMode: 'galaxies' | 'planets' = 'galaxies';
   @property({type: Boolean}) isScanning = false;
-  @property({type: String}) viewMode: 'single' | 'quad' = 'quad';
+  @property({type: Array}) groundingChunks: GroundingChunk[] = [];
 
   @query('#three-canvas') private canvas!: HTMLCanvasElement;
   @state() private selectedPlanetData: PlanetData | null = null;
   @state() private isHoveringObject = false;
-  @state() private starfieldStats = {count: 0, range: 0};
+  @state() private hoverLabel = {text: '', x: 0, y: 0, visible: false};
 
   private renderer!: THREE.WebGLRenderer;
   private scene!: THREE.Scene;
@@ -39,29 +41,25 @@ export class AxeeVisuals3D extends LitElement {
   private raycaster = new THREE.Raycaster();
   private pointer = new THREE.Vector2();
   private clock = new THREE.Clock();
-  private planetGroups = new Map<string, THREE.Group>();
-  private orbits = new Map<string, THREE.Mesh>();
+
   private galaxyGroup = new THREE.Group();
+  private planetGroups = new Map<string, THREE.Group>();
+  private galaxyRenderObjects = new Map<string, THREE.Group>();
+
   private animationFrameId = 0;
-  private targetPosition = new THREE.Vector3(0, 0, 40);
+  private targetPosition = new THREE.Vector3(0, 50, 150);
   private targetLookAt = new THREE.Vector3(0, 0, 0);
   private isManualControl = false;
 
-  // New properties for the dynamic starfield
   private starfield!: THREE.Points;
   private starfieldMaterial!: THREE.ShaderMaterial;
 
   static styles = css`
     :host {
-      --accent-color: #a0d0ff;
-      --accent-color-light: #c0e0ff;
-      --border-color: rgba(160, 208, 255, 0.2);
-
       display: block;
       width: 100%;
       height: 100%;
       position: relative;
-      font-family: 'Exo 2', sans-serif;
     }
 
     #three-canvas {
@@ -74,140 +72,148 @@ export class AxeeVisuals3D extends LitElement {
       cursor: grabbing;
     }
 
-    .quad-view-overlay {
+    .hover-label {
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      background: rgba(0, 20, 0, 0.85);
+      color: #0f0;
+      padding: 0.25rem 0.5rem;
+      border: 1px solid #0f0;
+      border-radius: 4px;
+      font-size: 0.9rem;
       pointer-events: none;
-      z-index: 5;
+      transform: translate(-50%, -150%);
+      transition: opacity 0.2s;
+      white-space: nowrap;
     }
 
-    .quad-view-overlay::before,
-    .quad-view-overlay::after {
-      content: '';
+    .info-panel {
       position: absolute;
-      background-color: var(--border-color);
-      box-shadow: 0 0 10px var(--border-color);
-    }
-
-    /* Vertical line */
-    .quad-view-overlay::before {
-      left: 50%;
-      top: 0;
-      width: 1px;
-      height: 100%;
-      transform: translateX(-50%);
-    }
-
-    /* Horizontal line */
-    .quad-view-overlay::after {
       top: 50%;
-      left: 0;
-      height: 1px;
-      width: 100%;
+      left: 2rem;
       transform: translateY(-50%);
-    }
-
-    .right-hud {
-      position: absolute;
-      top: 9rem;
-      right: 2rem;
-      width: clamp(240px, 22vw, 320px);
-      color: var(--accent-color);
+      width: 400px;
+      max-width: 90vw;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 1.5rem;
+      background: rgba(0, 20, 0, 0.85);
+      border: 1px solid #0f0;
+      box-shadow: 0 0 20px #0f0 inset;
+      color: #0f0;
+      text-shadow: 0 0 5px #0f0;
       transition: opacity 0.5s ease, transform 0.5s ease;
       opacity: 0;
       pointer-events: none;
-      transform: translateX(20px);
-      font-weight: 300;
-      display: flex;
-      flex-direction: column;
-      gap: 2rem;
+      transform: translateY(-50%) translateX(-20px);
     }
 
-    .right-hud.visible {
+    .info-panel.visible {
       opacity: 1;
       pointer-events: all;
-      transform: translateX(0);
+      transform: translateY(-50%) translateX(0);
     }
 
-    .hud-panel {
-      position: relative;
+    .info-panel h2 {
+      font-size: 2rem;
+      margin: 0 0 1rem 0;
+      color: #0f0;
+      text-shadow: 0 0 8px #0f0;
     }
 
-    .hud-panel::before {
-      content: '';
-      position: absolute;
-      bottom: -1rem;
-      left: 0;
-      width: 100%;
-      height: 1px;
-      background: var(--border-color);
-    }
-
-    .hud-panel:last-child::before {
-      display: none;
-    }
-
-    .hud-panel h3 {
-      text-transform: uppercase;
-      letter-spacing: 0.2em;
-      font-weight: 400;
-      margin: 0 0 0.5rem 0;
-      font-size: 0.9rem;
-      color: var(--accent-color-light);
+    .info-panel .ai-whisper {
+      font-style: italic;
+      margin-bottom: 1rem;
       opacity: 0.8;
+      border-left: 2px solid #0f0;
+      padding-left: 1rem;
     }
 
-    .hud-panel p {
+    .info-panel .detail {
+      margin-bottom: 0.8rem;
+    }
+
+    .info-panel .detail strong {
+      color: #0f0;
+      display: block;
+      margin-bottom: 0.2rem;
+      font-weight: 700;
+    }
+
+    .info-panel .detail p {
       margin: 0;
+      opacity: 0.9;
+      line-height: 1.5;
+    }
+
+    .info-panel .assessment-value {
       font-size: 1.2rem;
-      font-weight: 400;
-      color: var(--accent-color-light);
-      text-shadow: 0 0 8px rgba(160, 208, 255, 0.5);
+      font-weight: bold;
+      margin: 0.5rem 0;
+      padding: 0.2rem 0.5rem;
+      display: inline-block;
+      border-radius: 4px;
     }
-
-    .hud-stats {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
+    .assessment-habitable {
+      color: #44ff44;
+      background: rgba(68, 255, 68, 0.1);
+      border: 1px solid #44ff44;
     }
-    .hud-stats div {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      font-size: 1.1rem;
+    .assessment-potentially-habitable {
+      color: #ffff44;
+      background: rgba(255, 255, 68, 0.1);
+      border: 1px solid #ffff44;
     }
-    .hud-stats span:first-child {
-      font-size: 0.8rem;
+    .assessment-unlikely {
+      color: #ff4444;
+      background: rgba(255, 68, 68, 0.1);
+      border: 1px solid #ff4444;
+    }
+    .info-panel .biosignatures {
+      margin-top: 0.5rem;
+    }
+    .info-panel .biosignatures ul {
+      list-style-type: none;
+      padding-left: 1rem;
+      margin: 0.2rem 0 0 0;
+    }
+    .info-panel .biosignatures li {
+      position: relative;
+      padding-left: 1.2rem;
+    }
+    .info-panel .biosignatures li::before {
+      content: '»';
+      position: absolute;
+      left: 0;
+      color: #0f0;
       opacity: 0.7;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
     }
 
-    .evolution-box {
-      width: 100%;
-      height: 150px;
-      border: 1px solid var(--border-color);
-      background: linear-gradient(
-          45deg,
-          rgba(6, 9, 20, 0.9) 0%,
-          rgba(10, 25, 40, 0.5) 50%,
-          rgba(6, 9, 20, 0.9) 100%
-        ),
-        radial-gradient(
-          ellipse at 70% 30%,
-          rgba(255, 180, 120, 0.3) 0%,
-          rgba(160, 208, 255, 0.1) 40%,
-          transparent 80%
-        ),
-        radial-gradient(
-          circle at 20% 80%,
-          rgba(100, 150, 255, 0.4) 0%,
-          transparent 50%
-        ),
-        #060914;
+    .citations {
+      margin-top: 1.5rem;
+      font-size: 0.8rem;
+    }
+    .citations strong {
+      color: #0f0;
+    }
+    .citations ul {
+      list-style: none;
+      padding: 0;
+      margin: 0.5rem 0 0 0;
+    }
+    .citations li {
+      margin-bottom: 0.5rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .citations a {
+      color: #0f0;
+      text-decoration: none;
+    }
+    .citations a:hover {
+      color: #0f0;
+      filter: brightness(1.5);
+      text-decoration: underline;
     }
 
     .scanning-overlay {
@@ -218,9 +224,9 @@ export class AxeeVisuals3D extends LitElement {
       height: 100%;
       background: repeating-linear-gradient(
         0deg,
-        rgba(160, 208, 255, 0),
-        rgba(160, 208, 255, 0.05) 2px,
-        rgba(160, 208, 255, 0) 4px
+        rgba(0, 255, 0, 0),
+        rgba(0, 255, 0, 0.05) 2px,
+        rgba(0, 255, 0, 0) 4px
       );
       animation: scan 2s linear infinite;
       pointer-events: none;
@@ -231,18 +237,6 @@ export class AxeeVisuals3D extends LitElement {
       }
       100% {
         transform: translateY(10%);
-      }
-    }
-
-    @media (max-width: 1200px) {
-      .right-hud {
-        right: 1rem;
-      }
-    }
-
-    @media (max-width: 768px) {
-      .right-hud {
-        display: none; /* Hide on mobile to avoid clutter */
       }
     }
   `;
@@ -270,136 +264,245 @@ export class AxeeVisuals3D extends LitElement {
   protected updated(
     changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>,
   ): void {
-    if (changedProperties.has('planetsData')) {
-      this.updatePlanets();
+    if (
+      changedProperties.has('galaxiesData') ||
+      changedProperties.has('viewMode') ||
+      changedProperties.has('currentGalaxyId')
+    ) {
+      this.updateScene();
     }
-    if (changedProperties.has('selectedPlanetId')) {
+    if (
+      changedProperties.has('selectedPlanetId') ||
+      changedProperties.has('viewMode')
+    ) {
       this.updateTarget();
-      this.selectedPlanetData =
-        this.planetsData.find(
-          (p) => p.celestial_body_id === this.selectedPlanetId,
-        ) || null;
-
-      // Update shader uniforms for selection highlighting
-      this.planetGroups.forEach((group, id) => {
-        const planetMesh = group.children[0] as THREE.Mesh;
-        if (planetMesh && planetMesh.material instanceof THREE.ShaderMaterial) {
-          planetMesh.material.uniforms.uIsSelected.value =
-            id === this.selectedPlanetId;
-        }
-      });
+      if (this.viewMode === 'planets' && this.currentGalaxyId) {
+        const currentGalaxy = this.galaxiesData.find(
+          (g) => g.id === this.currentGalaxyId,
+        );
+        this.selectedPlanetData =
+          currentGalaxy?.planets.get(this.selectedPlanetId!) || null;
+      } else {
+        this.selectedPlanetData = null;
+      }
     }
   }
 
-  private createGalaxy = () => {
-    const galaxyParameters = {
-      count: 150000,
-      size: 0.015,
-      radius: 20,
+  private createGalaxyVisual(
+    galaxy: GalaxyData,
+    isDetailView: boolean,
+  ): THREE.Group {
+    const galaxyGroup = new THREE.Group();
+
+    const parameters = {
+      count: isDetailView ? 150000 : 20000,
+      size: isDetailView ? 0.015 : 0.05,
+      radius: isDetailView ? 20 : 5,
       branches: 5,
       spin: 1.2,
       randomness: 0.5,
       randomnessPower: 3.5,
-      insideColor: '#ffcc77',
-      outsideColor: '#3d56b2',
+      insideColor: galaxy.visualization.insideColor,
+      outsideColor: galaxy.visualization.outsideColor,
+      coreConcentration: 0.3, // Percentage of stars in the core
+      coreSizeFactor: 0.1, // How small the core is relative to the radius
     };
 
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(galaxyParameters.count * 3);
-    const colors = new Float32Array(galaxyParameters.count * 3);
-
-    const colorInside = new THREE.Color(galaxyParameters.insideColor);
-    const colorOutside = new THREE.Color(galaxyParameters.outsideColor);
-
-    for (let i = 0; i < galaxyParameters.count; i++) {
-      const i3 = i * 3;
-
-      // Position
-      const radius =
-        Math.pow(Math.random(), 2) * galaxyParameters.radius;
-      const spinAngle = radius * galaxyParameters.spin;
-      const branchAngle =
-        ((i % galaxyParameters.branches) / galaxyParameters.branches) *
-        Math.PI *
-        2;
-
-      const randomX =
-        Math.pow(Math.random(), galaxyParameters.randomnessPower) *
-        (Math.random() < 0.5 ? 1 : -1) *
-        galaxyParameters.randomness *
-        radius *
-        0.5;
-      const randomY =
-        Math.pow(Math.random(), galaxyParameters.randomnessPower) *
-        (Math.random() < 0.5 ? 1 : -1) *
-        galaxyParameters.randomness *
-        0.2;
-      const randomZ =
-        Math.pow(Math.random(), galaxyParameters.randomnessPower) *
-        (Math.random() < 0.5 ? 1 : -1) *
-        galaxyParameters.randomness *
-        radius *
-        0.5;
-
-      positions[i3] = Math.cos(branchAngle + spinAngle) * radius + randomX;
-      positions[i3 + 1] = randomY;
-      positions[i3 + 2] = Math.sin(branchAngle + spinAngle) * radius + randomZ;
-
-      // Color
-      const mixedColor = colorInside.clone();
-      mixedColor.lerp(colorOutside, radius / galaxyParameters.radius);
-
-      colors[i3] = mixedColor.r;
-      colors[i3 + 1] = mixedColor.g;
-      colors[i3 + 2] = mixedColor.b;
+    switch (galaxy.type.toLowerCase().trim()) {
+      case 'spiral':
+      case 'barred spiral':
+        parameters.branches = galaxy.type.toLowerCase().includes('barred')
+          ? 2
+          : 5;
+        parameters.spin = 1.5;
+        parameters.randomness = 0.4;
+        parameters.count = Math.floor(parameters.count * 1.2);
+        break;
+      case 'elliptical':
+        parameters.branches = 0;
+        parameters.spin = 0;
+        parameters.randomness = 0.8;
+        parameters.randomnessPower = 2.0;
+        parameters.count = Math.floor(parameters.count * 1.5);
+        parameters.coreConcentration = 0.6;
+        break;
+      case 'lenticular':
+        parameters.branches = 0;
+        parameters.spin = 0.2;
+        parameters.randomness = 0.3;
+        parameters.randomnessPower = 2.5;
+        parameters.coreConcentration = 0.5;
+        break;
+      case 'irregular':
+      default:
+        parameters.branches = 0;
+        parameters.spin = 0;
+        parameters.randomness = 1.5;
+        parameters.randomnessPower = 2.0;
+        parameters.count = Math.floor(parameters.count * 0.8);
+        parameters.coreConcentration = 0.1;
+        break;
     }
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const coreCount = Math.floor(parameters.count * parameters.coreConcentration);
+    const armsCount = parameters.count - coreCount;
+    const colorInside = new THREE.Color(parameters.insideColor);
+    const colorOutside = new THREE.Color(parameters.outsideColor);
 
-    const material = new THREE.PointsMaterial({
-      size: galaxyParameters.size,
-      sizeAttenuation: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      vertexColors: true,
-    });
+    // --- Create Core ---
+    if (coreCount > 0) {
+      const coreGeometry = new THREE.BufferGeometry();
+      const corePositions = new Float32Array(coreCount * 3);
+      const coreColors = new Float32Array(coreCount * 3);
+      for (let i = 0; i < coreCount; i++) {
+        const i3 = i * 3;
+        const radius =
+          Math.random() * parameters.radius * parameters.coreSizeFactor;
+        const spherical = new THREE.Spherical(
+          radius,
+          Math.acos(1 - 2 * Math.random()),
+          Math.random() * 2 * Math.PI,
+        );
+        const position = new THREE.Vector3().setFromSpherical(spherical);
+        corePositions[i3] = position.x;
+        corePositions[i3 + 1] = position.y;
+        corePositions[i3 + 2] = position.z;
+        const mixedColor = colorInside.clone();
+        mixedColor.lerp(
+          colorOutside,
+          radius / (parameters.radius * parameters.coreSizeFactor),
+        );
+        coreColors[i3] = mixedColor.r;
+        coreColors[i3 + 1] = mixedColor.g;
+        coreColors[i3 + 2] = mixedColor.b;
+      }
+      coreGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(corePositions, 3),
+      );
+      coreGeometry.setAttribute(
+        'color',
+        new THREE.BufferAttribute(coreColors, 3),
+      );
+      const coreMaterial = new THREE.PointsMaterial({
+        size: parameters.size * 1.2,
+        sizeAttenuation: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexColors: true,
+      });
+      const corePoints = new THREE.Points(coreGeometry, coreMaterial);
+      corePoints.name = 'galaxyCore';
+      galaxyGroup.add(corePoints);
+    }
 
-    const points = new THREE.Points(geometry, material);
-    this.galaxyGroup.add(points);
-  };
+    // --- Create Arms/Disk ---
+    if (armsCount > 0) {
+      const armsGeometry = new THREE.BufferGeometry();
+      const armsPositions = new Float32Array(armsCount * 3);
+      const armsColors = new Float32Array(armsCount * 3);
+      for (let i = 0; i < armsCount; i++) {
+        const i3 = i * 3;
+        const radius =
+          Math.pow(Math.random(), 2) * parameters.radius;
+        const randomX =
+          Math.pow(Math.random(), parameters.randomnessPower) *
+          (Math.random() < 0.5 ? 1 : -1) *
+          parameters.randomness *
+          radius *
+          0.5;
+        const randomY =
+          Math.pow(Math.random(), parameters.randomnessPower) *
+          (Math.random() < 0.5 ? 1 : -1) *
+          parameters.randomness *
+          0.2;
+        const randomZ =
+          Math.pow(Math.random(), parameters.randomnessPower) *
+          (Math.random() < 0.5 ? 1 : -1) *
+          parameters.randomness *
+          radius *
+          0.5;
+
+        if (parameters.branches > 0) {
+          const spinAngle = radius * parameters.spin;
+          const branchAngle =
+            ((i % parameters.branches) / parameters.branches) * Math.PI * 2;
+          armsPositions[i3] =
+            Math.cos(branchAngle + spinAngle) * radius + randomX;
+          armsPositions[i3 + 1] = randomY;
+          armsPositions[i3 + 2] =
+            Math.sin(branchAngle + spinAngle) * radius + randomZ;
+        } else {
+          // Elliptical or Irregular distribution
+          const spherical = new THREE.Spherical(
+            radius,
+            Math.acos(1 - 2 * Math.random()),
+            Math.random() * 2 * Math.PI,
+          );
+          const position = new THREE.Vector3().setFromSpherical(spherical);
+          armsPositions[i3] = position.x + randomX;
+          armsPositions[i3 + 1] = position.y + randomY;
+          armsPositions[i3 + 2] = position.z + randomZ;
+        }
+        const mixedColor = colorInside.clone();
+        mixedColor.lerp(colorOutside, radius / parameters.radius);
+        armsColors[i3] = mixedColor.r;
+        armsColors[i3 + 1] = mixedColor.g;
+        armsColors[i3 + 2] = mixedColor.b;
+      }
+      armsGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(armsPositions, 3),
+      );
+      armsGeometry.setAttribute(
+        'color',
+        new THREE.BufferAttribute(armsColors, 3),
+      );
+      const armsMaterial = new THREE.PointsMaterial({
+        size: parameters.size,
+        sizeAttenuation: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexColors: true,
+      });
+      const armsPoints = new THREE.Points(armsGeometry, armsMaterial);
+      armsPoints.name = 'galaxyArms';
+      galaxyGroup.add(armsPoints);
+    }
+
+    galaxyGroup.userData.spin =
+      parameters.spin > 0 ? 0.0005 + Math.random() * 0.0005 : 0;
+    return galaxyGroup;
+  }
 
   private createStarfield = () => {
-    const starCount = 150000; // Reduced density for a subtler starfield
+    const starCount = 50000;
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(starCount * 3);
     const colors = new Float32Array(starCount * 3);
     const scales = new Float32Array(starCount);
 
     const color = new THREE.Color();
-    const range = 1000; // Half the side length of the cube
-
-    this.starfieldStats = {count: starCount, range: range * 2};
+    const range = 1000;
 
     for (let i = 0; i < starCount; i++) {
       const i3 = i * 3;
-
-      // Position within a large cube
       positions[i3] = (Math.random() - 0.5) * range * 2;
       positions[i3 + 1] = (Math.random() - 0.5) * range * 2;
       positions[i3 + 2] = (Math.random() - 0.5) * range * 2;
 
-      // Color with some variation
-      const randomHue = 0.55 + Math.random() * 0.15; // Bluish to whitish
-      const randomSaturation = 0.2 + Math.random() * 0.4; // Less saturated
-      const randomLightness = 0.6 + Math.random() * 0.4;
-      color.setHSL(randomHue, randomSaturation, randomLightness);
+      // Create more realistic star colors - mostly white with hints of blue/yellow
+      const randomLightness = 0.5 + Math.random() * 0.5; // Wider brightness range
+      const hue = Math.random() > 0.5 ? 0.6 : 0.1; // Tend towards blue or yellow
+      const saturation = Math.random() * 0.1; // Very low saturation for a white-ish look
+      color.setHSL(hue, saturation, randomLightness);
+
       colors[i3] = color.r;
       colors[i3 + 1] = color.g;
       colors[i3 + 2] = color.b;
 
-      // More varied scale: more small stars, fewer large ones
-      scales[i] = Math.pow(Math.random(), 3.0) * 5.0 + 0.5;
+      // Use a power-law distribution for sizes for more realism (many small, few large)
+      scales[i] = Math.pow(1.0 - Math.random(), 3.0) * 2.0 + 0.8;
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -430,7 +533,7 @@ export class AxeeVisuals3D extends LitElement {
       0.1,
       2000,
     );
-    this.camera.position.z = 40;
+    this.camera.position.set(0, 50, 150);
 
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
@@ -439,42 +542,36 @@ export class AxeeVisuals3D extends LitElement {
     this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
     this.renderer.setPixelRatio(window.devicePixelRatio);
 
-    // Camera Controls
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
     this.controls.screenSpacePanning = false;
     this.controls.minDistance = 5;
-    this.controls.maxDistance = 150;
+    this.controls.maxDistance = 200;
     this.controls.target.set(0, 0, 0);
     this.controls.addEventListener('start', () => {
       this.isManualControl = true;
     });
 
-    // Post-processing
     const renderScene = new RenderPass(this.scene, this.camera);
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(this.canvas.clientWidth, this.canvas.clientHeight),
-      0.15, // Further reduced bloom to soften the central "sun"
-      0.5,
+      0.7,
+      0.4,
       0.1,
     );
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(renderScene);
     this.composer.addPass(bloomPass);
 
-    // Dynamic twinkling starfield
     this.createStarfield();
-
-    // Group for galaxy motion
     this.scene.add(this.galaxyGroup);
-    this.createGalaxy();
 
-    // Lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
     this.scene.add(ambientLight);
 
     this.runAnimationLoop();
+    this.updateScene();
   };
 
   private handleResize = () => {
@@ -484,132 +581,60 @@ export class AxeeVisuals3D extends LitElement {
     this.composer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
   };
 
-  private renderQuadrant = (
-    left: number,
-    bottom: number,
-    width: number,
-    height: number,
-  ) => {
-    const dpr = this.renderer.getPixelRatio();
-    const dprLeft = left * dpr;
-    const dprBottom = bottom * dpr;
-    const dprWidth = width * dpr;
-    const dprHeight = height * dpr;
-
-    this.renderer.setViewport(dprLeft, dprBottom, dprWidth, dprHeight);
-    this.renderer.setScissor(dprLeft, dprBottom, dprWidth, dprHeight);
-
-    this.composer.render();
-  };
-
   private runAnimationLoop = () => {
     this.animationFrameId = requestAnimationFrame(this.runAnimationLoop);
     const elapsedTime = this.clock.getElapsedTime();
 
-    // --- UPDATE LOGIC (RUNS ONCE PER FRAME) ---
-
-    // Smooth camera movement, respectful of manual control
     if (!this.isManualControl) {
       this.camera.position.lerp(this.targetPosition, 0.05);
       this.controls.target.lerp(this.targetLookAt, 0.05);
     }
     this.controls.update();
 
-    // Add continuous galaxy motion
-    this.galaxyGroup.rotation.y += 0.0003;
-
-    // Add slow rotation to the dynamic starfield
-    if (this.starfield) {
-      this.starfield.rotation.y += 0.00004;
-      this.starfield.rotation.x += 0.00002;
+    if (this.galaxyGroup.children.length > 0) {
+      const arms = this.galaxyGroup.getObjectByName('galaxyArms');
+      const core = this.galaxyGroup.getObjectByName('galaxyCore');
+      if (arms) {
+        arms.rotation.y += this.galaxyGroup.userData.spin || 0.0003;
+      }
+      if (core) {
+        const pulse = Math.sin(elapsedTime * 0.8) * 0.05 + 0.95;
+        core.scale.set(pulse, pulse, pulse);
+      }
     }
 
-    // Update shader uniforms for dynamic effects
+    this.galaxyRenderObjects.forEach((group) => {
+      const galaxyVisual = group.children[0] as THREE.Group | undefined;
+      if (galaxyVisual) {
+        const arms = galaxyVisual.getObjectByName('galaxyArms');
+        if (arms) {
+          arms.rotation.y += group.userData.spin || 0.001;
+        }
+      }
+    });
+
+    if (this.starfield) {
+      this.starfield.rotation.y += 0.0001;
+      this.starfield.rotation.x += 0.00005;
+    }
     if (this.starfieldMaterial) {
       this.starfieldMaterial.uniforms.uTime.value = elapsedTime;
     }
-    this.planetGroups.forEach((group, id) => {
+    this.planetGroups.forEach((group) => {
       const planetMesh = group.children[0] as THREE.Mesh;
-      const atmosphereMesh = group.children[1] as THREE.Mesh;
-
       if (planetMesh && planetMesh.material instanceof THREE.ShaderMaterial) {
         planetMesh.material.uniforms.uTime.value = elapsedTime;
       }
+      const atmosphereMesh = group.children[1] as THREE.Mesh;
       if (
         atmosphereMesh &&
         atmosphereMesh.material instanceof THREE.ShaderMaterial
       ) {
         atmosphereMesh.material.uniforms.uTime.value = elapsedTime;
       }
-
-      // Ring pulse effect for selected planet
-      const ringMesh = group.children.find(
-        (child) => child.userData.isRing,
-      ) as THREE.Mesh;
-      if (ringMesh) {
-        const material = ringMesh.material as THREE.MeshBasicMaterial;
-        if (id === this.selectedPlanetId) {
-          material.opacity = 0.7 + Math.sin(elapsedTime * 4.0) * 0.2;
-        } else {
-          // Reset to default if it was changed
-          if (material.opacity !== 0.8) {
-            material.opacity = 0.8;
-          }
-        }
-      }
     });
 
-    // Animate orbit lines for selection
-    this.orbits.forEach((orbit, id) => {
-      const material = orbit.material as THREE.MeshBasicMaterial;
-      if (id === this.selectedPlanetId) {
-        // Pulse the selected orbit to make it prominent
-        material.opacity = 0.35 + Math.sin(elapsedTime * 3.0) * 0.2;
-        material.color.set(0xa0d0ff);
-      } else {
-        // Ensure non-selected orbits are faint
-        if (material.opacity !== 0.15) {
-          material.opacity = 0.15;
-        }
-        material.color.set(0x4d7aa5);
-      }
-    });
-
-    // --- RENDER LOGIC (HANDLES SINGLE AND QUAD VIEWS) ---
-    this.renderer.setScissorTest(false);
-    this.renderer.clear();
-    this.renderer.setScissorTest(true);
-
-    const fullWidth = this.canvas.clientWidth;
-    const fullHeight = this.canvas.clientHeight;
-
-    if (this.viewMode === 'quad') {
-      const w = fullWidth / 2;
-      const h = fullHeight / 2;
-
-      // Top-left
-      this.camera.setViewOffset(fullWidth, fullHeight, 0, 0, w, h);
-      this.renderQuadrant(0, h, w, h);
-
-      // Top-right
-      this.camera.setViewOffset(fullWidth, fullHeight, w, 0, w, h);
-      this.renderQuadrant(w, h, w, h);
-
-      // Bottom-left
-      this.camera.setViewOffset(fullWidth, fullHeight, 0, h, w, h);
-      this.renderQuadrant(0, 0, w, h);
-
-      // Bottom-right
-      this.camera.setViewOffset(fullWidth, fullHeight, w, h, w, h);
-      this.renderQuadrant(w, 0, w, h);
-
-      // Clear the view offset after rendering all quadrants
-      this.camera.clearViewOffset();
-    } else {
-      // Single view
-      if (this.camera.view) this.camera.clearViewOffset();
-      this.renderQuadrant(0, 0, fullWidth, fullHeight);
-    }
+    this.composer.render();
   };
 
   private createRingTexture(): THREE.CanvasTexture {
@@ -617,111 +642,140 @@ export class AxeeVisuals3D extends LitElement {
     const ctx = canvas.getContext('2d')!;
     canvas.width = 1;
     canvas.height = 128;
-
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     gradient.addColorStop(0.0, 'rgba(255,255,255,0)');
     gradient.addColorStop(0.2, 'rgba(255,255,255,0.5)');
     gradient.addColorStop(0.8, 'rgba(255,255,255,0.5)');
     gradient.addColorStop(1.0, 'rgba(255,255,255,0)');
-
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
     for (let i = 0; i < 200; i++) {
       ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.1})`;
       ctx.fillRect(0, Math.random() * canvas.height, 1, 2);
     }
-
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
     return texture;
   }
 
-  private updatePlanets() {
-    const currentPlanetIds = new Set(
-      this.planetsData.map((p) => p.celestial_body_id),
-    );
-
-    // Step 1: Remove planets that are no longer in the data (filtered out)
-    for (const [id, group] of this.planetGroups.entries()) {
-      if (!currentPlanetIds.has(id)) {
-        // Find and remove associated orbit
-        const orbitToRemove = this.orbits.get(id);
-        if (orbitToRemove) {
-          this.galaxyGroup.remove(orbitToRemove);
-          orbitToRemove.geometry.dispose();
-          (orbitToRemove.material as THREE.Material).dispose();
-          this.orbits.delete(id);
-        }
-
-        // Remove planet group and clean up its resources
+  private clearSceneContent(isPlanetView: boolean) {
+    if (isPlanetView) {
+      this.planetGroups.forEach((group) => {
         this.galaxyGroup.remove(group);
-        group.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-            child.geometry.dispose();
-            const material = child.material as THREE.Material | THREE.Material[];
-            if (Array.isArray(material)) {
-              material.forEach((m) => m.dispose());
-            } else {
-              material.dispose();
-            }
-          }
+      });
+      this.planetGroups.clear();
+      const orbits = this.galaxyGroup.children.filter(
+        (child) => child.name === 'orbit',
+      );
+      orbits.forEach((orbit) => this.galaxyGroup.remove(orbit));
+    } else {
+      this.galaxyRenderObjects.forEach((group) => {
+        this.scene.remove(group);
+      });
+      this.galaxyRenderObjects.clear();
+    }
+  }
+
+  private updateScene() {
+    this.galaxyGroup.visible = this.viewMode === 'planets';
+
+    if (this.viewMode === 'galaxies') {
+      this.clearSceneContent(true);
+      this.updateGalaxiesView();
+    } else {
+      this.clearSceneContent(false);
+      this.updatePlanetsView();
+    }
+  }
+
+  private updateGalaxiesView() {
+    this.galaxiesData.forEach((galaxy, index) => {
+      if (!this.galaxyRenderObjects.has(galaxy.id)) {
+        const containerGroup = new THREE.Group();
+        const galaxyVisual = this.createGalaxyVisual(galaxy, false);
+
+        // Propagate user data to children for raycasting
+        galaxyVisual.children.forEach((child) => {
+          child.userData = {id: galaxy.id, name: galaxy.name};
         });
-        this.planetGroups.delete(id);
+        containerGroup.add(galaxyVisual);
+        containerGroup.userData.spin = galaxyVisual.userData.spin;
+
+        const angle = (index / 8) * Math.PI * 2;
+        const radius = 40 + (index % 8) * 10;
+        containerGroup.position.set(
+          Math.cos(angle) * radius,
+          (Math.random() - 0.5) * 10,
+          Math.sin(angle) * radius,
+        );
+        this.galaxyRenderObjects.set(galaxy.id, containerGroup);
+        this.scene.add(containerGroup);
+      }
+    });
+  }
+
+  private updatePlanetsView() {
+    const currentGalaxy = this.galaxiesData.find(
+      (g) => g.id === this.currentGalaxyId,
+    );
+    if (!currentGalaxy) {
+      this.clearSceneContent(true);
+      return;
+    }
+
+    // Update galaxy backdrop
+    if (
+      this.galaxyGroup.children.length === 0 ||
+      this.galaxyGroup.userData.id !== currentGalaxy.id
+    ) {
+      this.galaxyGroup.clear();
+      const galaxyVisual = this.createGalaxyVisual(currentGalaxy, true);
+      this.galaxyGroup.userData = {
+        id: currentGalaxy.id,
+        spin: galaxyVisual.userData.spin,
+      };
+      // Move children from temp group to main galaxy group
+      while (galaxyVisual.children.length > 0) {
+        this.galaxyGroup.add(galaxyVisual.children[0]);
       }
     }
 
-    // Step 2: Add new planets and update positions of existing ones
-    this.planetsData.forEach((planet, index) => {
-      let planetGroup = this.planetGroups.get(planet.celestial_body_id);
-
-      // Calculate position based on current index in the (potentially sorted) array
-      const angle = (index / 8) * Math.PI * 2;
-      const radius = 25 + index * 8;
-
-      if (!planetGroup) {
-        // Planet doesn't exist, create it fully
-        planetGroup = new THREE.Group();
-
-        // Planet Sphere with procedural shader
+    const planetsData = Array.from(currentGalaxy.planets.values());
+    planetsData.forEach((planet, index) => {
+      if (!this.planetGroups.has(planet.celestial_body_id)) {
+        const planetGroup = new THREE.Group();
         const geometry = new THREE.SphereGeometry(2, 64, 64);
         const textureTypeMap: {[key: string]: number} = {
           TERRESTRIAL: 1,
           GAS_GIANT: 2,
           VOLCANIC: 3,
-          ICY: 4, // Added new texture type for Icy planets
+          ICY: 1,
         };
         const material = new THREE.ShaderMaterial({
           vertexShader: planetVs,
           fragmentShader: planetFs,
           uniforms: {
             uTime: {value: 0.0},
-            uColor1: {
-              value: new THREE.Color(planet.visualization.color1),
-            },
-            uColor2: {
-              value: new THREE.Color(planet.visualization.color2),
-            },
+            uColor1: {value: new THREE.Color(planet.visualization.color1)},
+            uColor2: {value: new THREE.Color(planet.visualization.color2)},
             uOceanColor: {
-              value: new THREE.Color(planet.visualization.oceanColor || '#000033'),
+              value: new THREE.Color(planet.visualization.oceanColor),
             },
-            uCloudiness: {
-              value: planet.visualization.cloudiness || 0.0,
-            },
-            uIceCoverage: {
-              value: planet.visualization.iceCoverage || 0.0,
-            },
+            uCloudiness: {value: planet.visualization.cloudiness},
+            uIceCoverage: {value: planet.visualization.iceCoverage},
             uTextureType: {
               value: textureTypeMap[planet.visualization.surfaceTexture] || 1,
             },
-            uIsSelected: {value: false},
           },
         });
         const sphereMesh = new THREE.Mesh(geometry, material);
-        sphereMesh.userData = {id: planet.celestial_body_id, isPlanet: true};
+        sphereMesh.userData = {
+          id: planet.celestial_body_id,
+          isPlanet: true,
+          name: planet.planetName,
+        };
         planetGroup.add(sphereMesh);
 
-        // Atmosphere
         const atmosphereGeometry = new THREE.SphereGeometry(2.1, 64, 64);
         const atmosphereMaterial = new THREE.ShaderMaterial({
           vertexShader: atmosphereVs,
@@ -736,14 +790,10 @@ export class AxeeVisuals3D extends LitElement {
           side: THREE.BackSide,
           transparent: true,
         });
-        const atmosphereMesh = new THREE.Mesh(
-          atmosphereGeometry,
-          atmosphereMaterial,
+        planetGroup.add(
+          new THREE.Mesh(atmosphereGeometry, atmosphereMaterial),
         );
-        atmosphereMesh.userData = {id: planet.celestial_body_id};
-        planetGroup.add(atmosphereMesh);
 
-        // Planet Rings
         if (planet.visualization.hasRings) {
           const ringGeometry = new THREE.RingGeometry(2.8, 4.5, 64);
           const ringMaterial = new THREE.MeshBasicMaterial({
@@ -754,67 +804,54 @@ export class AxeeVisuals3D extends LitElement {
             opacity: 0.8,
           });
           const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
-          ringMesh.userData = {id: planet.celestial_body_id, isRing: true};
           ringMesh.rotation.x = Math.PI / 2 - 0.2;
           planetGroup.add(ringMesh);
         }
 
-        // Create its orbit
+        const angle = (index / 8) * Math.PI * 2;
+        const radius = 25 + index * 8;
+        planetGroup.position.set(
+          Math.cos(angle) * radius,
+          0,
+          Math.sin(angle) * radius,
+        );
         const orbitGeometry = new THREE.RingGeometry(radius, radius + 0.05, 128);
         const orbitMaterial = new THREE.MeshBasicMaterial({
-          color: 0x4d7aa5,
+          color: 0x00ff00,
           side: THREE.DoubleSide,
           transparent: true,
-          opacity: 0.15,
+          opacity: 0.2,
           blending: THREE.AdditiveBlending,
         });
         const orbitMesh = new THREE.Mesh(orbitGeometry, orbitMaterial);
         orbitMesh.rotation.x = Math.PI / 2;
+        orbitMesh.name = 'orbit';
         this.galaxyGroup.add(orbitMesh);
-        this.orbits.set(planet.celestial_body_id, orbitMesh);
-
         this.planetGroups.set(planet.celestial_body_id, planetGroup);
         this.galaxyGroup.add(planetGroup);
-      } else {
-        // Planet already exists, update its orbit's radius if changed
-        const orbitMesh = this.orbits.get(planet.celestial_body_id);
-        if (orbitMesh) {
-          const existingRadius = (orbitMesh.geometry as THREE.RingGeometry)
-            .parameters.innerRadius;
-          if (existingRadius !== radius) {
-            orbitMesh.geometry.dispose();
-            orbitMesh.geometry = new THREE.RingGeometry(
-              radius,
-              radius + 0.05,
-              128,
-            );
-          }
-        }
       }
-
-      // Set/update the planet's position
-      planetGroup.position.set(
-        Math.cos(angle) * radius,
-        0,
-        Math.sin(angle) * radius,
-      );
     });
   }
 
   private updateTarget() {
     this.isManualControl = false;
-    if (this.selectedPlanetId) {
-      const group = this.planetGroups.get(this.selectedPlanetId);
-      if (group) {
-        const worldPosition = new THREE.Vector3();
-        group.getWorldPosition(worldPosition);
-        const offset = new THREE.Vector3(0, 2, 8);
-        this.targetPosition.copy(worldPosition).add(offset);
-        this.targetLookAt.copy(worldPosition);
-      }
-    } else {
-      this.targetPosition.set(0, 0, 40);
+    if (this.viewMode === 'galaxies') {
+      this.targetPosition.set(0, 50, 150);
       this.targetLookAt.set(0, 0, 0);
+    } else {
+      if (this.selectedPlanetId) {
+        const group = this.planetGroups.get(this.selectedPlanetId);
+        if (group) {
+          const worldPosition = new THREE.Vector3();
+          group.getWorldPosition(worldPosition);
+          const offset = new THREE.Vector3(0, 2, 8);
+          this.targetPosition.copy(worldPosition).add(offset);
+          this.targetLookAt.copy(worldPosition);
+        }
+      } else {
+        this.targetPosition.set(0, 0, 40);
+        this.targetLookAt.set(0, 0, 0);
+      }
     }
   }
 
@@ -822,16 +859,35 @@ export class AxeeVisuals3D extends LitElement {
     this.pointer.x = (event.clientX / this.canvas.clientWidth) * 2 - 1;
     this.pointer.y = -(event.clientY / this.canvas.clientHeight) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
-
     let hovering = false;
-    const planetObjects = Array.from(this.planetGroups.values()).map(
-      (group) => group.children[0],
-    );
-    const planetIntersects = this.raycaster.intersectObjects(planetObjects);
-    if (planetIntersects.length > 0) {
-      hovering = true;
-    }
+    let labelText = '';
 
+    const objectsToTest =
+      this.viewMode === 'galaxies'
+        ? Array.from(this.galaxyRenderObjects.values())
+        : Array.from(this.planetGroups.values());
+
+    const intersects = this.raycaster.intersectObjects(objectsToTest, true);
+    if (intersects.length > 0) {
+      const intersectedObject = intersects[0].object;
+      if (
+        intersectedObject.userData.name &&
+        (this.viewMode === 'galaxies' || intersectedObject.userData.isPlanet)
+      ) {
+        hovering = true;
+        labelText = intersectedObject.userData.name || '';
+        this.hoverLabel = {
+          text: labelText,
+          x: event.clientX,
+          y: event.clientY,
+          visible: true,
+        };
+      }
+    } else {
+      if (this.hoverLabel.visible) {
+        this.hoverLabel = {...this.hoverLabel, visible: false};
+      }
+    }
     this.isHoveringObject = hovering;
     this.canvas.style.cursor = hovering ? 'pointer' : 'grab';
   };
@@ -840,74 +896,157 @@ export class AxeeVisuals3D extends LitElement {
     this.pointer.x = (event.clientX / this.canvas.clientWidth) * 2 - 1;
     this.pointer.y = -(event.clientY / this.canvas.clientHeight) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
-
-    const intersects = this.raycaster.intersectObjects(
-      Array.from(this.planetGroups.values()),
-      true,
-    );
-
-    if (intersects.length > 0) {
-      const clickedObject = intersects[0].object;
-      if (clickedObject.userData.isPlanet) {
-        (this as EventTarget).dispatchEvent(
-          new CustomEvent('planet-selected', {
-            detail: {planetId: clickedObject.userData.id},
-          }),
-        );
+    let eventToDispatch: CustomEvent | null = null;
+    if (this.viewMode === 'galaxies') {
+      const intersects = this.raycaster.intersectObjects(
+        Array.from(this.galaxyRenderObjects.values()),
+        true,
+      );
+      if (intersects.length > 0) {
+        eventToDispatch = new CustomEvent('galaxy-selected', {
+          detail: {galaxyId: intersects[0].object.userData.id},
+        });
       }
+    } else {
+      const intersects = this.raycaster.intersectObjects(
+        Array.from(this.planetGroups.values()),
+        true,
+      );
+      if (intersects.length > 0 && intersects[0].object.userData.isPlanet) {
+        eventToDispatch = new CustomEvent('planet-selected', {
+          detail: {planetId: intersects[0].object.userData.id},
+        });
+      }
+    }
+    if (eventToDispatch) {
+      (this as EventTarget).dispatchEvent(eventToDispatch);
     }
   };
 
   render() {
     return html`
       <canvas id="three-canvas"></canvas>
-      ${this.viewMode === 'quad'
-        ? html`<div class="quad-view-overlay"></div>`
-        : nothing}
+      ${
+        this.hoverLabel.visible
+          ? html`<div
+              class="hover-label"
+              style="left: ${this.hoverLabel.x}px; top: ${this.hoverLabel
+                .y}px; opacity: ${this.hoverLabel.visible ? 1 : 0}"
+            >
+              ${this.hoverLabel.text}
+            </div>`
+          : nothing
+      }
       ${this.isScanning ? html`<div class="scanning-overlay"></div>` : nothing}
-      <div class="right-hud visible">
+      <div class="info-panel ${this.selectedPlanetData ? 'visible' : ''}">
         ${
           this.selectedPlanetData
             ? html`
-                <div class="hud-panel">
-                  <h3>Emotional Resonance</h3>
-                  <p>${this.selectedPlanetData.potentialForLife.assessment}</p>
-                </div>
-                <div class="hud-panel">
-                  <h3>Species Classifier</h3>
-                  <p>${this.selectedPlanetData.planetType}</p>
-                </div>
-                <div class="hud-panel">
-                  <h3>Evolution Visualization</h3>
-                  <div class="evolution-box"></div>
-                </div>
-              `
-            : html`
-                <div class="hud-panel">
-                  <h3>Stellar Field Data</h3>
+                <h2>${this.selectedPlanetData.planetName}</h2>
+                <p class="ai-whisper">
+                  "${this.selectedPlanetData.aiWhisper}"
+                </p>
+                <div class="detail">
+                  <strong>Star System:</strong>
                   <p>
-                    ${this.starfieldStats.count.toLocaleString()} Rendered Stars
+                    ${this.selectedPlanetData.starSystem}
+                    (${this.selectedPlanetData.starType})
                   </p>
                 </div>
-                <div class="hud-panel">
-                  <h3>Field Parameters</h3>
-                  <div class="hud-stats">
-                    <div>
-                      <span>Side Length</span>
-                      <span>${this.starfieldStats.range.toLocaleString()} ly</span>
-                    </div>
-                    <div>
-                      <span>Density</span>
-                      <span
-                        >${(
-                          this.starfieldStats.count /
-                          Math.pow(this.starfieldStats.range, 3)
-                        ).toExponential(2)}/ly³</span
-                      >
-                    </div>
-                  </div>
+                <div class="detail">
+                  <strong>Planet Type:</strong>
+                  <p>
+                    ${this.selectedPlanetData.planetType} (~${
+                this.selectedPlanetData.distanceLightYears
+              }
+                    light years away)
+                  </p>
                 </div>
+                <div class="detail">
+                  <strong>Atmosphere:</strong>
+                  <p>${this.selectedPlanetData.atmosphericComposition}</p>
+                </div>
+                <div class="detail">
+                  <strong>Surface:</strong>
+                  <p>${this.selectedPlanetData.surfaceFeatures}</p>
+                </div>
+                <div class="detail">
+                  <strong>Orbital Period:</strong>
+                  <p>${this.selectedPlanetData.orbitalPeriod}</p>
+                </div>
+                <div class="detail">
+                  <strong>Rotational Period:</strong>
+                  <p>${this.selectedPlanetData.rotationalPeriod}</p>
+                </div>
+                <div class="detail">
+                  <strong>Moons:</strong>
+                  <p>
+                    ${
+                      this.selectedPlanetData.moons.count > 0
+                        ? `${this.selectedPlanetData.moons.count}${
+                            this.selectedPlanetData.moons.names.length > 0
+                              ? ` (${this.selectedPlanetData.moons.names.join(
+                                  ', ',
+                                )})`
+                              : ''
+                          }`
+                        : 'None'
+                    }
+                  </p>
+                </div>
+                <div class="detail">
+                  <strong>Potential for Life</strong>
+                  <p
+                    class="assessment-value assessment-${this.selectedPlanetData.potentialForLife.assessment
+                      .toLowerCase()
+                      .replace(' ', '-')}"
+                  >
+                    ${this.selectedPlanetData.potentialForLife.assessment}
+                  </p>
+                  <p>${this.selectedPlanetData.potentialForLife.reasoning}</p>
+                  ${
+                    this.selectedPlanetData.potentialForLife.biosignatures &&
+                    this.selectedPlanetData.potentialForLife.biosignatures
+                      .length > 0
+                      ? html` <div class="biosignatures">
+                          <strong>Potential Biosignatures:</strong>
+                          <ul>
+                            ${this.selectedPlanetData.potentialForLife.biosignatures.map(
+                              (sig) => html`<li>${sig}</li>`,
+                            )}
+                          </ul>
+                        </div>`
+                      : nothing
+                  }
+                </div>
+                <div class="detail">
+                  <strong>Discovery Narrative:</strong>
+                  <p>${this.selectedPlanetData.discoveryNarrative}</p>
+                </div>
+
+                ${
+                  this.groundingChunks.length > 0
+                    ? html` <div class="citations">
+                        <strong>Data Sources:</strong>
+                        <ul>
+                          ${this.groundingChunks.map((chunk) =>
+                            chunk.web?.uri
+                              ? html` <li>
+                                  <a
+                                    href=${chunk.web.uri}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    >${chunk.web.title || chunk.web.uri}</a
+                                  >
+                                </li>`
+                              : nothing,
+                          )}
+                        </ul>
+                      </div>`
+                    : nothing
+                }
               `
+            : nothing
         }
       </div>
     `;
