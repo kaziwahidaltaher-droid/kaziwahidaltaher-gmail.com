@@ -10,13 +10,18 @@ import {customElement, state, query} from 'lit/decorators.js';
 import './visual-3d';
 import {AxeeVisuals3D} from './visual-3d';
 import {AxeeAudioEngine} from './audio-engine';
+import createGlobe from 'cobe';
 
 // FIX: Export the PlanetData interface to be used in other modules.
 export interface PlanetData {
   celestial_body_id: string; // Unique ID
   planetName: string;
-  starSystem: string;
-  starType: string;
+  hostStar: {
+    name: string;
+    type: string;
+    temperatureKelvin: number;
+    luminositySuns: number;
+  };
   distanceLightYears: number;
   planetType: string;
   rotationalPeriod: string;
@@ -90,14 +95,21 @@ export class AxeeInterface extends LitElement {
   @state() private hasInteracted = false;
 
   @query('axee-audio-engine') private audioEngine!: AxeeAudioEngine;
+  @query('#cobe-canvas') private cobeCanvas!: HTMLCanvasElement;
 
   private ai: GoogleGenAI;
   // FIX: Changed type to `any` to accommodate `setInterval`'s return type, which can be a `Timeout` object in Node.js environments.
   private discoveryInterval: any | null = null;
+  private globe: any;
+  private globePhi = 0;
 
   constructor() {
     super();
     this.ai = new GoogleGenAI({apiKey: process.env.API_KEY});
+  }
+
+  firstUpdated() {
+    this.initCobeGlobe();
   }
 
   disconnectedCallback() {
@@ -105,6 +117,7 @@ export class AxeeInterface extends LitElement {
     if (this.discoveryInterval) {
       clearInterval(this.discoveryInterval);
     }
+    this.globe?.destroy();
   }
 
   static styles = css`
@@ -361,6 +374,32 @@ export class AxeeInterface extends LitElement {
     }
   `;
 
+  private initCobeGlobe() {
+    if (!this.cobeCanvas) return;
+
+    this.globe = createGlobe(this.cobeCanvas, {
+      devicePixelRatio: 2,
+      width: 200,
+      height: 200,
+      phi: 0,
+      theta: 0.1,
+      dark: 1,
+      diffuse: 1.2,
+      mapSamples: 16000,
+      mapBrightness: 6,
+      baseColor: [0.1, 0.1, 0.1],
+      markerColor: [0.1, 0.8, 0.1],
+      glowColor: [0, 0.8, 0], // Green glow to match theme
+      markers: [], // No markers
+      onRender: (state) => {
+        // Called on every animation frame.
+        // `state` will be an empty object, return updated params.
+        state.phi = this.globePhi;
+        this.globePhi += 0.005;
+      },
+    });
+  }
+
   private speak(text: string) {
     if (!('speechSynthesis' in window)) {
       console.warn('Speech Synthesis not supported.');
@@ -504,8 +543,12 @@ export class AxeeInterface extends LitElement {
       {
         "celestial_body_id": "string (A unique identifier, e.g., 'AXEE-12345')",
         "planetName": "string",
-        "starSystem": "string",
-        "starType": "string (e.g., 'G-type star (Yellow Dwarf)', 'M-type red dwarf')",
+        "hostStar": {
+          "name": "string (The name of the star the planet orbits)",
+          "type": "string (e.g., 'G-type star (Yellow Dwarf)', 'M-type red dwarf')",
+          "temperatureKelvin": "number (The star's surface temperature in Kelvin)",
+          "luminositySuns": "number (The star's luminosity relative to the Sun, e.g., 1.0 for Sun-like, 0.05 for a red dwarf)"
+        },
         "distanceLightYears": number,
         "planetType": "string (e.g., 'Terrestrial Super-Earth', 'Gas Giant', 'Ice Giant')",
         "rotationalPeriod": "string (e.g., '24.6 Earth hours', 'Tidally locked')",
@@ -768,6 +811,12 @@ export class AxeeInterface extends LitElement {
         </header>
 
         <div class="bottom-left-hud">
+          <canvas
+            id="cobe-canvas"
+            style="width: 100px; height: 100px; margin: 0 auto 1rem; border-radius: 50%;"
+            width="200"
+            height="200"
+          ></canvas>
           <div class="hud-item"><span>MODE</span><span>IDLE</span></div>
           <div class="hud-item">
             <span>POS</span><span>238.7, 89.8, 448.3</span>

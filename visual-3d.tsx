@@ -32,6 +32,7 @@ export class AxeeVisuals3D extends LitElement {
   @state() private selectedPlanetData: PlanetData | null = null;
   @state() private isHoveringObject = false;
   @state() private hoverLabel = {text: '', x: 0, y: 0, visible: false};
+  @state() private hoveredPlanetId: string | null = null;
 
   private renderer!: THREE.WebGLRenderer;
   private scene!: THREE.Scene;
@@ -143,6 +144,58 @@ export class AxeeVisuals3D extends LitElement {
       margin: 0;
       opacity: 0.9;
       line-height: 1.5;
+    }
+
+    .host-star-info {
+      background: rgba(0, 255, 0, 0.05);
+      border: 1px solid rgba(0, 255, 0, 0.2);
+      padding: 1rem;
+      margin-top: 1.5rem;
+      margin-bottom: 1rem;
+      border-radius: 4px;
+    }
+
+    .host-star-info strong {
+      display: block;
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      color: #0f0;
+      letter-spacing: 0.05em;
+    }
+
+    .host-star-info .star-type {
+      display: block;
+      opacity: 0.8;
+      margin-bottom: 1rem;
+      font-size: 1rem;
+      border-bottom: 1px solid rgba(0, 255, 0, 0.2);
+      padding-bottom: 0.75rem;
+    }
+
+    .star-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-item .label {
+      font-size: 0.8rem;
+      opacity: 0.7;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.4rem;
+    }
+
+    .stat-item .value {
+      font-size: 1.3rem;
+      font-weight: 700;
+      text-shadow: 0 0 4px #0f0;
     }
 
     .info-panel .assessment-value {
@@ -293,6 +346,7 @@ export class AxeeVisuals3D extends LitElement {
     isDetailView: boolean,
   ): THREE.Group {
     const galaxyGroup = new THREE.Group();
+    let spinRate = 0;
 
     const parameters = {
       count: isDetailView ? 150000 : 20000,
@@ -317,6 +371,7 @@ export class AxeeVisuals3D extends LitElement {
         parameters.spin = 1.5;
         parameters.randomness = 0.4;
         parameters.count = Math.floor(parameters.count * 1.2);
+        spinRate = 0.0008 + Math.random() * 0.0007; // Noticeable but gentle spin
         break;
       case 'elliptical':
         parameters.branches = 0;
@@ -325,6 +380,7 @@ export class AxeeVisuals3D extends LitElement {
         parameters.randomnessPower = 2.0;
         parameters.count = Math.floor(parameters.count * 1.5);
         parameters.coreConcentration = 0.6;
+        spinRate = 0; // Minimal to no coherent spin
         break;
       case 'lenticular':
         parameters.branches = 0;
@@ -332,6 +388,7 @@ export class AxeeVisuals3D extends LitElement {
         parameters.randomness = 0.3;
         parameters.randomnessPower = 2.5;
         parameters.coreConcentration = 0.5;
+        spinRate = 0.0003 + Math.random() * 0.0003; // Slower, subtle spin
         break;
       case 'irregular':
       default:
@@ -341,6 +398,7 @@ export class AxeeVisuals3D extends LitElement {
         parameters.randomnessPower = 2.0;
         parameters.count = Math.floor(parameters.count * 0.8);
         parameters.coreConcentration = 0.1;
+        spinRate = 0; // Chaotic motion, no uniform spin
         break;
     }
 
@@ -470,8 +528,7 @@ export class AxeeVisuals3D extends LitElement {
       galaxyGroup.add(armsPoints);
     }
 
-    galaxyGroup.userData.spin =
-      parameters.spin > 0 ? 0.0005 + Math.random() * 0.0005 : 0;
+    galaxyGroup.userData.spin = spinRate;
     return galaxyGroup;
   }
 
@@ -620,17 +677,29 @@ export class AxeeVisuals3D extends LitElement {
     if (this.starfieldMaterial) {
       this.starfieldMaterial.uniforms.uTime.value = elapsedTime;
     }
-    this.planetGroups.forEach((group) => {
+    this.planetGroups.forEach((group, id) => {
       const planetMesh = group.children[0] as THREE.Mesh;
+      const atmosphereMesh = group.children[1] as THREE.Mesh;
+
+      const isHovered = id === this.hoveredPlanetId;
+      const targetScale = isHovered ? 1.05 : 1.0;
+      const targetHoverIntensity = isHovered ? 1.0 : 0.0;
+
+      group.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
+
       if (planetMesh && planetMesh.material instanceof THREE.ShaderMaterial) {
         planetMesh.material.uniforms.uTime.value = elapsedTime;
+        planetMesh.material.uniforms.uHoverIntensity.value +=
+          (targetHoverIntensity - planetMesh.material.uniforms.uHoverIntensity.value) * 0.1;
       }
-      const atmosphereMesh = group.children[1] as THREE.Mesh;
+
       if (
         atmosphereMesh &&
         atmosphereMesh.material instanceof THREE.ShaderMaterial
       ) {
         atmosphereMesh.material.uniforms.uTime.value = elapsedTime;
+        atmosphereMesh.material.uniforms.uHoverIntensity.value +=
+          (targetHoverIntensity - atmosphereMesh.material.uniforms.uHoverIntensity.value) * 0.1;
       }
     });
 
@@ -766,6 +835,7 @@ export class AxeeVisuals3D extends LitElement {
             uTextureType: {
               value: textureTypeMap[planet.visualization.surfaceTexture] || 1,
             },
+            uHoverIntensity: {value: 0.0},
           },
         });
         const sphereMesh = new THREE.Mesh(geometry, material);
@@ -785,6 +855,7 @@ export class AxeeVisuals3D extends LitElement {
               value: new THREE.Color(planet.visualization.atmosphereColor),
             },
             uTime: {value: 0.0},
+            uHoverIntensity: {value: 0.0},
           },
           blending: THREE.AdditiveBlending,
           side: THREE.BackSide,
@@ -861,6 +932,7 @@ export class AxeeVisuals3D extends LitElement {
     this.raycaster.setFromCamera(this.pointer, this.camera);
     let hovering = false;
     let labelText = '';
+    this.hoveredPlanetId = null;
 
     const objectsToTest =
       this.viewMode === 'galaxies'
@@ -870,24 +942,28 @@ export class AxeeVisuals3D extends LitElement {
     const intersects = this.raycaster.intersectObjects(objectsToTest, true);
     if (intersects.length > 0) {
       const intersectedObject = intersects[0].object;
-      if (
-        intersectedObject.userData.name &&
-        (this.viewMode === 'galaxies' || intersectedObject.userData.isPlanet)
-      ) {
-        hovering = true;
-        labelText = intersectedObject.userData.name || '';
-        this.hoverLabel = {
-          text: labelText,
-          x: event.clientX,
-          y: event.clientY,
-          visible: true,
-        };
-      }
-    } else {
-      if (this.hoverLabel.visible) {
-        this.hoverLabel = {...this.hoverLabel, visible: false};
+      if (intersectedObject.userData.name) {
+        if (this.viewMode === 'planets' && intersectedObject.userData.isPlanet) {
+          this.hoveredPlanetId = intersectedObject.userData.id;
+        }
+
+        if (this.viewMode === 'galaxies' || intersectedObject.userData.isPlanet) {
+          hovering = true;
+          labelText = intersectedObject.userData.name || '';
+          this.hoverLabel = {
+            text: labelText,
+            x: event.clientX,
+            y: event.clientY,
+            visible: true,
+          };
+        }
       }
     }
+
+    if (!hovering && this.hoverLabel.visible) {
+      this.hoverLabel = {...this.hoverLabel, visible: false};
+    }
+
     this.isHoveringObject = hovering;
     this.canvas.style.cursor = hovering ? 'pointer' : 'grab';
   };
@@ -946,12 +1022,27 @@ export class AxeeVisuals3D extends LitElement {
                 <p class="ai-whisper">
                   "${this.selectedPlanetData.aiWhisper}"
                 </p>
-                <div class="detail">
-                  <strong>Star System:</strong>
-                  <p>
-                    ${this.selectedPlanetData.starSystem}
-                    (${this.selectedPlanetData.starType})
-                  </p>
+                <div class="host-star-info">
+                  <strong>${this.selectedPlanetData.hostStar.name}</strong>
+                  <span class="star-type"
+                    >${this.selectedPlanetData.hostStar.type}</span
+                  >
+                  <div class="star-stats">
+                    <div class="stat-item">
+                      <span class="label">Temperature</span>
+                      <span class="value"
+                        >${this.selectedPlanetData.hostStar.temperatureKelvin.toLocaleString()}
+                        K</span
+                      >
+                    </div>
+                    <div class="stat-item">
+                      <span class="label">Luminosity</span>
+                      <span class="value"
+                        >${this.selectedPlanetData.hostStar.luminositySuns}
+                        &times; Sol</span
+                      >
+                    </div>
+                  </div>
                 </div>
                 <div class="detail">
                   <strong>Planet Type:</strong>
