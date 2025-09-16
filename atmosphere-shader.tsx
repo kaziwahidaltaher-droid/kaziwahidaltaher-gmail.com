@@ -35,13 +35,12 @@ export const fs = `
   void main() {
     // Calculate the fresnel effect
     float fresnel = 1.0 - dot(vNormal, vViewDirection);
-    fresnel = pow(fresnel, 4.0); // Power controls the falloff sharpness
+    fresnel = pow(fresnel, 4.0);
     
     // Add dynamic, shimmering noise
     float noise = random(vUv * 5.0 + uTime * 0.1);
-    fresnel *= (0.8 + noise * 0.4); // Modulate fresnel with noise
+    fresnel *= (0.8 + noise * 0.4);
 
-    // Use smoothstep for a softer edge
     float alpha = smoothstep(0.0, 1.0, fresnel);
 
     gl_FragColor = vec4(uAtmosphereColor, alpha);

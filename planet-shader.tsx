@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Vertex Shader: Passes position, normals, and UVs to the fragment shader.
 export const vs = `
   varying vec2 vUv;
   varying vec3 vNormal;
@@ -17,7 +16,6 @@ export const vs = `
   }
 `;
 
-// Fragment Shader: Generates procedural textures for the planet surface.
 export const fs = `
   uniform float uTime;
   uniform vec3 uColor1; // Land color
@@ -32,7 +30,6 @@ export const fs = `
   varying vec3 vPosition;
 
   // 3D Simplex Noise function
-  // (Standard GLSL implementation - necessary for procedural generation)
   vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
   vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
   vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
@@ -83,7 +80,6 @@ export const fs = `
     return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
   }
 
-  // Fractional Brownian Motion for terrain-like features
   float fbm(vec3 p, int octaves) {
     float value = 0.0;
     float amplitude = 0.5;
@@ -96,59 +92,70 @@ export const fs = `
     return value;
   }
 
-  // Generate clouds
-  float cloud_fbm(vec3 p) {
-    return fbm(p, 4); // Clouds have fewer octaves for a softer look
-  }
-
   void main() {
     vec3 finalColor;
 
     if (uTextureType == 2) { // Gas Giant
-        float noise = fbm(vPosition * 3.0 + vec3(uTime * 0.1, 0.0, 0.0), 5);
-        float bands = sin(vPosition.y * 10.0 + noise * 5.0);
-        finalColor = mix(uColor1, uColor2, bands);
+        float noise = fbm(vPosition * 3.0 + vec3(uTime * 0.1, uTime * 0.05, 0.0), 5);
+        float microNoise = snoise(vPosition * 20.0 + vec3(0.0, uTime * 0.3, 0.0));
+        float bands = sin((vPosition.y + microNoise * 0.1) * 10.0 + noise * 5.0);
+        
+        finalColor = mix(uColor1, uColor2, smoothstep(-1.0, 1.0, bands));
+
+        vec3 stormColor = mix(uColor2, uColor1, 0.5) * 1.2; // A third color for intense storms
+        finalColor = mix(finalColor, stormColor, smoothstep(0.6, 0.8, abs(noise)));
 
     } else if (uTextureType == 3) { // Volcanic
         float baseNoise = fbm(vPosition * 4.0, 6);
         float cracks = 1.0 - smoothstep(0.0, 0.05, abs(fbm(vPosition * 10.0 + baseNoise, 2)));
-        vec3 crackColor = uColor2 * 2.0; // Glowing cracks
+        
+        float pulseNoise = snoise(vPosition * 20.0 + uTime);
+        float pulse = (sin(uTime * 2.0 + vPosition.x * 5.0 + pulseNoise * 2.0) + 1.0) / 2.0;
+        pulse = pow(pulse, 2.0); // Make the bright parts brighter and shorter
+        pulse = 0.8 + pulse * 1.2; // pulse up to 2.0
+        
+        vec3 crackColor = uColor2 * 1.5 * pulse;
         finalColor = mix(uColor1, crackColor, cracks);
 
     } else { // Terrestrial (default)
-        // Base terrain noise
         float terrain = fbm(vPosition * 2.5, 6);
-        
-        // Land/ocean mix
         float seaLevel = 0.0;
         vec3 surfaceColor = mix(uOceanColor, uColor1, smoothstep(seaLevel - 0.05, seaLevel + 0.05, terrain));
-        // Add mountains
         surfaceColor = mix(surfaceColor, uColor2, smoothstep(0.3, 0.4, terrain));
-
-        // Ice caps
         float iceFalloff = smoothstep(0.6, 0.8, abs(vPosition.y));
         float iceNoise = snoise(vPosition * 10.0) * 0.1;
         float iceAmount = smoothstep(1.0 - uIceCoverage, 1.0, iceFalloff + iceNoise);
         surfaceColor = mix(surfaceColor, vec3(0.95), iceAmount);
-        
         finalColor = surfaceColor;
+        
+        // Add auroras if there is significant ice coverage
+        if (uIceCoverage > 0.3) {
+            float poleFalloff = smoothstep(0.5, 0.8, abs(vPosition.y)) * pow(abs(vPosition.y), 2.0);
+            float auroraNoise = fbm(vPosition * 2.0 + vec3(0.0, 0.0, uTime * 0.3), 5);
+            auroraNoise = smoothstep(0.4, 0.6, auroraNoise);
+            
+            float auroraShape = sin(vPosition.x * 10.0 + uTime) * sin(vPosition.z * 10.0 + uTime * 0.5);
+            auroraShape = smoothstep(0.8, 1.0, auroraShape);
+
+            float aurora = poleFalloff * auroraNoise * auroraShape;
+            
+            vec3 auroraColor = mix(vec3(0.1, 1.0, 0.2), vec3(0.8, 0.2, 1.0), sin(vPosition.x * 2.0));
+            finalColor = mix(finalColor, auroraColor, aurora * (0.5 + uIceCoverage));
+        }
     }
 
-    // Clouds layer for all types
     if (uCloudiness > 0.0) {
-      // Rotate clouds at a different speed
       float angle = uTime * 0.2;
       mat3 rotationMatrix = mat3(cos(angle), 0, sin(angle), 0, 1, 0, -sin(angle), 0, cos(angle));
       vec3 cloudPos = rotationMatrix * vPosition;
-      
-      float cloudNoise = cloud_fbm(cloudPos * 4.0);
+      // Animate cloud shapes over time
+      float cloudNoise = fbm(cloudPos * 4.0 + vec3(uTime * 0.1, 0.0, 0.0), 4);
       float cloudCoverage = smoothstep(0.5 - uCloudiness, 0.5, cloudNoise);
       finalColor = mix(finalColor, vec3(1.0), cloudCoverage);
     }
     
-    // Basic lighting
     float light = dot(vNormal, normalize(vec3(1.0, 1.0, 1.0)));
-    light = clamp(light, 0.3, 1.0); // Add some ambient light
+    light = clamp(light, 0.3, 1.0);
     
     gl_FragColor = vec4(finalColor * light, 1.0);
   }

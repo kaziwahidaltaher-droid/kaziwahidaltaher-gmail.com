@@ -1,3 +1,4 @@
+
 /* tslint:disable */
 /**
  * @license
@@ -7,12 +8,12 @@
 import {GoogleGenAI} from '@google/genai';
 import {LitElement, css, html, nothing} from 'lit';
 import {customElement, state, query} from 'lit/decorators.js';
-import './visual-3d';
-import {AxeeVisuals3D} from './visual-3d';
-import {AxeeAudioEngine} from './audio-engine';
+import {classMap} from 'lit/directives/class-map.js';
+import './visual-3d.js';
+import './audio-engine.js';
+import {AxeeAudioEngine} from './audio-engine.js';
 import createGlobe from 'cobe';
 
-// FIX: Export the PlanetData interface to be used in other modules.
 export interface PlanetData {
   celestial_body_id: string; // Unique ID
   planetName: string;
@@ -40,6 +41,7 @@ export interface PlanetData {
   atmosphericComposition: string;
   surfaceFeatures: string;
   keyFeatures: string[];
+  factoids: string[];
   aiWhisper: string;
   visualization: {
     color1: string;
@@ -65,7 +67,6 @@ export interface GalaxyData {
   planets: Map<string, PlanetData>;
 }
 
-// FIX: Export the GroundingChunk interface to be used in other modules.
 export interface GroundingChunk {
   web?: {
     uri?: string;
@@ -75,15 +76,35 @@ export interface GroundingChunk {
 
 export type MusicMood = 'galaxy' | 'serene' | 'tense' | 'mysterious' | 'off';
 
+const AVAILABLE_PROTOCOLS = [
+  'air_temps',
+  'precipitations',
+  'land_covers',
+  'soil_moistures',
+  'greenings',
+  'snowpacks',
+  'aerosols',
+  'barometric_pressures',
+  'conductivities',
+  'humidities',
+  'salinities',
+  'sky_conditions',
+  'water_temperatures',
+  'winds',
+];
+
 @customElement('axee-interface')
 export class AxeeInterface extends LitElement {
   @state() private isLoading = false;
-  @state() private statusMessage =
-    'Awaiting new galaxy synthesis protocol.';
+  @state() private statusMessage = 'Awaiting new galaxy synthesis protocol.';
   @state() private galaxies: Map<string, GalaxyData> = new Map();
   @state() private currentGalaxyId: string | null = null;
   @state() private selectedPlanetId: string | null = null;
-  @state() private viewMode: 'galaxies' | 'planets' = 'galaxies';
+  @state() private viewMode:
+    | 'galaxies'
+    | 'planets'
+    | 'solar_system'
+    | 'earth_observation' = 'galaxies';
   @state() private error: string | null = null;
   @state() private userPrompt = '';
   @state() private groundingChunks: GroundingChunk[] = [];
@@ -91,15 +112,27 @@ export class AxeeInterface extends LitElement {
   // Audio & Voice states
   @state() private isSpeaking = false;
   @state() private isMuted = false;
-  @state() private currentMood: MusicMood = 'off';
+  @state() private currentMood: MusicMood = 'galaxy';
   @state() private hasInteracted = false;
+
+  // GLOBE API states
+  @state() private isFetchingGlobeData = false;
+  @state() private globeData: any = null;
+  @state() private globeError: string | null = null;
+  @state() private globeQuery = {
+    protocols: ['air_temps'],
+    startDate: new Date(new Date().setDate(new Date().getDate() - 30))
+      .toISOString()
+      .split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+    countryCode: 'USA',
+  };
 
   @query('axee-audio-engine') private audioEngine!: AxeeAudioEngine;
   @query('#cobe-canvas') private cobeCanvas!: HTMLCanvasElement;
 
   private ai: GoogleGenAI;
-  // FIX: Changed type to `any` to accommodate `setInterval`'s return type, which can be a `Timeout` object in Node.js environments.
-  private discoveryInterval: any | null = null;
+  private discoveryInterval: number | null = null;
   private globe: any;
   private globePhi = 0;
 
@@ -110,6 +143,8 @@ export class AxeeInterface extends LitElement {
 
   firstUpdated() {
     this.initCobeGlobe();
+    // Start with one galaxy to not have a blank screen
+    this.synthesizeGalaxy('A primordial spiral galaxy');
   }
 
   disconnectedCallback() {
@@ -139,6 +174,21 @@ export class AxeeInterface extends LitElement {
       width: 100%;
       height: 100%;
       z-index: 1;
+    }
+
+    .iframe-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    .iframe-container iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
     }
 
     .overlay {
@@ -346,31 +396,93 @@ export class AxeeInterface extends LitElement {
       height: 2rem;
     }
 
-    button {
+    /* Earth Observation Mode Styles */
+    #cobe-canvas.earth-view {
+      position: absolute !important;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 60vh !important;
+      height: 60vh !important;
+      max-width: 90vw;
+      max-height: 90vw;
+      transition: all 0.5s ease-in-out;
+      z-index: 10;
+    }
+
+    .earth-observation-panel,
+    .globe-results-panel {
       pointer-events: all;
-      font-family: 'Orbitron', sans-serif;
-      background: transparent;
-      border: 2px solid #0f0;
-      color: #0f0;
-      padding: 1rem 2rem;
-      font-size: 1.5rem;
-      cursor: pointer;
+      background: rgba(0, 20, 0, 0.8);
+      border: 1px solid #0f0;
+      box-shadow: 0 0 10px #0f0 inset;
+      padding: 1rem;
+    }
+
+    .earth-observation-panel {
+      width: 900px;
+      max-width: 90%;
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .earth-observation-panel .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .earth-observation-panel label {
+      font-size: 0.8rem;
+      opacity: 0.7;
       text-transform: uppercase;
-      letter-spacing: 0.2em;
-      transition: background 0.3s, color 0.3s, box-shadow 0.3s,
-        border-color 0.3s;
-      box-shadow: 0 0 10px #0f0;
     }
 
-    button:hover:not(:disabled) {
-      background: #0f0;
-      color: #000;
-      box-shadow: 0 0 20px #0f0, 0 0 30px #0f0;
+    .earth-observation-panel input,
+    .earth-observation-panel select {
+      font-family: 'Orbitron', sans-serif;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid #0f0;
+      color: #0f0;
+      padding: 0.5rem;
+      font-size: 0.9rem;
+    }
+    .earth-observation-panel select[multiple] {
+      height: 60px;
+    }
+    .earth-observation-panel button {
+      align-self: flex-end;
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      height: 38px;
     }
 
-    button:disabled {
-      cursor: wait;
-      opacity: 0.5;
+    .globe-results-panel {
+      position: absolute;
+      top: 50%;
+      right: 2rem;
+      transform: translateY(-50%);
+      width: 400px;
+      max-width: 90vw;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .globe-results-panel h3 {
+      margin: 0 0 1rem 0;
+    }
+    .globe-results-panel ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      font-size: 0.8rem;
+    }
+    .globe-results-panel li {
+      padding: 0.5rem;
+      border-bottom: 1px solid rgba(0, 255, 0, 0.2);
+    }
+    .globe-results-panel li span {
+      opacity: 0.7;
     }
   `;
 
@@ -392,8 +504,6 @@ export class AxeeInterface extends LitElement {
       glowColor: [0, 0.8, 0], // Green glow to match theme
       markers: [], // No markers
       onRender: (state) => {
-        // Called on every animation frame.
-        // `state` will be an empty object, return updated params.
         state.phi = this.globePhi;
         this.globePhi += 0.005;
       },
@@ -401,8 +511,7 @@ export class AxeeInterface extends LitElement {
   }
 
   private speak(text: string) {
-    if (!('speechSynthesis' in window)) {
-      console.warn('Speech Synthesis not supported.');
+    if (this.isMuted || !('speechSynthesis' in window)) {
       return;
     }
     this.isSpeaking = true;
@@ -421,7 +530,6 @@ export class AxeeInterface extends LitElement {
     this.audioEngine.playInteractionSound();
     if (!this.hasInteracted) {
       this.hasInteracted = true;
-      this.currentMood = 'galaxy';
     }
 
     if (this.viewMode === 'galaxies') {
@@ -431,11 +539,12 @@ export class AxeeInterface extends LitElement {
         this.userPrompt || 'a strange, undiscovered world',
       );
     }
+    this.userPrompt = '';
   }
 
   private startAutonomousDiscovery() {
     this.stopAutonomousDiscovery();
-    this.discoveryInterval = setInterval(() => {
+    this.discoveryInterval = window.setInterval(() => {
       this.synthesizeExoplanet('another new world');
     }, 20000); // Discover a new planet every 20 seconds
   }
@@ -448,10 +557,7 @@ export class AxeeInterface extends LitElement {
   }
 
   async synthesizeGalaxy(promptText: string) {
-    if (!promptText) {
-      this.error = 'Please describe the galaxy you seek.';
-      return;
-    }
+    if (this.isLoading) return;
     this.isLoading = true;
     this.error = null;
     this.statusMessage = 'Synthesizing galactic formation...';
@@ -505,9 +611,7 @@ export class AxeeInterface extends LitElement {
       this.audioEngine.playSuccessSound();
     } catch (e) {
       const errorMessage =
-        e instanceof SyntaxError
-          ? 'Failed to parse AI response.'
-          : (e as Error).message;
+        e instanceof Error ? e.message : 'An unknown error occurred.';
       this.error = `Synthesis Failed: ${errorMessage}`;
       this.statusMessage = 'Synthesis Failed. Check console for details.';
       console.error(e);
@@ -519,12 +623,9 @@ export class AxeeInterface extends LitElement {
   }
 
   async synthesizeExoplanet(promptText: string) {
-    if (!this.currentGalaxyId) {
-      this.error = 'Cannot synthesize planet without a selected galaxy.';
-      return;
-    }
-    if (!promptText) {
-      this.error = 'Please describe the world you seek.';
+    if (!this.currentGalaxyId || this.isLoading) {
+      if (!this.currentGalaxyId)
+        this.error = 'Cannot synthesize planet without a selected galaxy.';
       return;
     }
     this.isLoading = true;
@@ -541,7 +642,6 @@ export class AxeeInterface extends LitElement {
 
       JSON Structure:
       {
-        "celestial_body_id": "string (A unique identifier, e.g., 'AXEE-12345')",
         "planetName": "string",
         "hostStar": {
           "name": "string (The name of the star the planet orbits)",
@@ -564,6 +664,7 @@ export class AxeeInterface extends LitElement {
         "atmosphericComposition": "string (e.g., 'Primarily nitrogen and oxygen with traces of argon', 'Thick methane haze with hydrocarbon rain')",
         "surfaceFeatures": "string (e.g., 'Vast oceans of liquid methane, cryovolcanoes', 'Expansive deserts of red sand, deep canyons')",
         "keyFeatures": ["string", "string", "..."],
+        "factoids": ["string", "string", "... (A list of 3-5 short, surprising, and mind-blowing trivia factoids about the planet. Each factoid MUST be a single, complete sentence and under 140 characters.)"],
         "aiWhisper": "string (An evocative, poetic, one-sentence description that captures the unique essence of the planet, as if you are whispering its secret.)",
         "visualization": {
           "color1": "string (Hex color code for primary land/surface color)",
@@ -598,28 +699,25 @@ export class AxeeInterface extends LitElement {
       }
 
       jsonString = jsonString.substring(firstBrace, lastBrace + 1);
-      const data = JSON.parse(jsonString);
-      const newPlanet = data as PlanetData;
-      newPlanet.celestial_body_id = `axee-planet-${Date.now()}`;
+      const data = JSON.parse(jsonString) as PlanetData;
+      data.celestial_body_id = `axee-planet-${Date.now()}`;
 
       // Update state
       const newGalaxies = new Map(this.galaxies);
       const currentGalaxy = newGalaxies.get(this.currentGalaxyId!);
       if (currentGalaxy) {
-        currentGalaxy.planets.set(newPlanet.celestial_body_id, newPlanet);
+        currentGalaxy.planets.set(data.celestial_body_id, data);
         this.galaxies = newGalaxies;
       }
 
-      this.statusMessage = `Discovery: ${newPlanet.planetName}`;
+      this.statusMessage = `Discovery: ${data.planetName}`;
       this.speak(
-        `New discovery. Announcing ${newPlanet.planetName}, a ${newPlanet.planetType}.`,
+        `New discovery. Announcing ${data.planetName}, a ${data.planetType}.`,
       );
       this.audioEngine.playSuccessSound();
     } catch (e) {
       const errorMessage =
-        e instanceof SyntaxError
-          ? 'Failed to parse AI response.'
-          : (e as Error).message;
+        e instanceof Error ? e.message : 'An unknown error occurred.';
       this.error = `Synthesis Failed: ${errorMessage}`;
       this.statusMessage = 'Synthesis Failed. Check console for details.';
       console.error(e);
@@ -708,20 +806,52 @@ export class AxeeInterface extends LitElement {
   private handleGalaxySelected(e: CustomEvent) {
     this.currentGalaxyId = e.detail.galaxyId;
     this.viewMode = 'planets';
-    this.selectedPlanetId = null; // Deselect planet when changing galaxy
+    this.selectedPlanetId = null;
     this.currentMood = 'galaxy';
     this.speak(`Entering ${this.galaxies.get(this.currentGalaxyId!)?.name}.`);
     this.startAutonomousDiscovery();
+
+    // Generate the first planet of the new galaxy
+    const galaxyName = this.galaxies.get(this.currentGalaxyId!)?.name;
     this.synthesizeExoplanet(
-      'a world at the edge of the ' +
-        this.galaxies.get(this.currentGalaxyId!)?.name,
+      galaxyName
+        ? `a world at the edge of the ${galaxyName}`
+        : 'a primordial world',
     );
   }
 
   private toggleViewMode() {
     this.audioEngine.playInteractionSound();
-    if (this.viewMode === 'planets') {
+    if (
+      this.viewMode === 'planets' ||
+      this.viewMode === 'solar_system' ||
+      this.viewMode === 'earth_observation'
+    ) {
       this.viewMode = 'galaxies';
+      this.currentGalaxyId = null;
+      this.selectedPlanetId = null;
+      this.currentMood = 'galaxy';
+      this.stopAutonomousDiscovery();
+      this.updateGlobeMarkers(null);
+    }
+  }
+
+  private handleSolarSystemView() {
+    this.audioEngine.playInteractionSound();
+    if (this.viewMode !== 'solar_system') {
+      this.viewMode = 'solar_system';
+      this.currentGalaxyId = null;
+      this.selectedPlanetId = null;
+      this.currentMood = 'galaxy';
+      this.stopAutonomousDiscovery();
+      this.updateGlobeMarkers(null);
+    }
+  }
+
+  private handleEarthView() {
+    this.audioEngine.playInteractionSound();
+    if (this.viewMode !== 'earth_observation') {
+      this.viewMode = 'earth_observation';
       this.currentGalaxyId = null;
       this.selectedPlanetId = null;
       this.currentMood = 'galaxy';
@@ -732,6 +862,88 @@ export class AxeeInterface extends LitElement {
   private toggleMute() {
     this.audioEngine.playInteractionSound();
     this.isMuted = !this.isMuted;
+    if (this.isMuted && this.isSpeaking) {
+      window.speechSynthesis.cancel();
+    }
+  }
+
+  private async fetchGlobeData() {
+    this.isFetchingGlobeData = true;
+    this.globeData = null;
+    this.globeError = null;
+
+    const {protocols, startDate, endDate, countryCode} = this.globeQuery;
+    if (protocols.length === 0 || !startDate || !endDate || !countryCode) {
+      this.globeError = 'Please fill all query fields.';
+      this.isFetchingGlobeData = false;
+      return;
+    }
+
+    const params = new URLSearchParams({
+      protocols: protocols.join(','),
+      startdate: startDate,
+      enddate: endDate,
+      countrycode: countryCode,
+      geojson: 'TRUE',
+      sample: 'FALSE',
+      size: '500', // Limit to 500 points
+    });
+
+    const url = `https://api.globe.gov/search/v1/measurement/protocol/measureddate/country/?${params.toString()}`;
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.statusText}`);
+      }
+      const data = await response.json();
+      this.globeData = data;
+      this.updateGlobeMarkers(data);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : 'An unknown error occurred.';
+      this.globeError = `Failed to fetch GLOBE data: ${errorMessage}`;
+      console.error(e);
+      this.updateGlobeMarkers(null); // Clear markers on error
+    } finally {
+      this.isFetchingGlobeData = false;
+    }
+  }
+
+  private updateGlobeMarkers(data: any) {
+    if (this.globe) {
+      if (data && data.features && data.features.length > 0) {
+        const markers = data.features.map((feature: any) => ({
+          location: [
+            feature.geometry.coordinates[1],
+            feature.geometry.coordinates[0],
+          ], // [lat, lon]
+          size: 0.05,
+        }));
+        this.globe.markers = markers;
+      } else {
+        this.globe.markers = [];
+      }
+    }
+  }
+
+  private handleGlobeQueryChange(e: Event) {
+    const target = e.target as HTMLInputElement | HTMLSelectElement;
+    const name = target.name;
+    let value: string | string[];
+
+    if (target.tagName === 'SELECT' && target.hasAttribute('multiple')) {
+      value = Array.from((target as HTMLSelectElement).selectedOptions).map(
+        (option) => option.value,
+      );
+    } else {
+      value = (target as HTMLInputElement).value;
+    }
+
+    this.globeQuery = {
+      ...this.globeQuery,
+      [name]: value,
+    };
   }
 
   render() {
@@ -744,11 +956,17 @@ export class AxeeInterface extends LitElement {
         : null;
 
     let trackingText = 'INTERGALACTIC SPACE';
-    if (currentGalaxy) {
-      trackingText = `GALAXY: ${currentGalaxy.name}`;
-    }
-    if (selectedPlanet) {
-      trackingText = `TRACKING: ${selectedPlanet.planetName} (${currentGalaxy?.name})`;
+    if (this.viewMode === 'solar_system') {
+      trackingText = 'SOLAR SYSTEM SIMULATOR';
+    } else if (this.viewMode === 'earth_observation') {
+      trackingText = 'EARTH OBSERVATION DECK';
+    } else {
+      if (currentGalaxy) {
+        trackingText = `GALAXY: ${currentGalaxy.name.toUpperCase()}`;
+      }
+      if (selectedPlanet) {
+        trackingText = `TRACKING: ${selectedPlanet.planetName.toUpperCase()} (${currentGalaxy?.name.toUpperCase()})`;
+      }
     }
 
     const speakerOnIcon = html`<svg
@@ -767,38 +985,55 @@ export class AxeeInterface extends LitElement {
         d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"
       />
     </svg>`;
-
     const galaxyMapIcon = html`<svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
     >
       <path
-        d="M12,2C6.48,2 2,6.48 2,12c0,5.52 4.48,10 10,10c5.52,0 10,-4.48 10,-10C22,6.48 17.52,2 12,2z M12,17.27C9.36,17.27 7.21,15.7 6.4,13.5h11.2C16.79,15.7 14.64,17.27 12,17.27z M6.4,10.5C7.21,8.3 9.36,6.73 12,6.73c2.64,0 4.79,1.57 5.6,3.77L6.4,10.5z"
-        opacity=".3"
-      ></path>
+        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7zm-1.25-9.25L9.62 9l-1.13-1.12.75-.75L10.38 8.25l1.12-1.13.75.75zm3.63 4.5l.75.75L15.62 9l-1.12-1.13-.75.75 1.13 1.13-1.13 1.12z"
+      />
+    </svg>`;
+    const solarSystemIcon = html`<svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+    >
       <path
-        d="M12,4c-4.41,0 -8,3.59 -8,8s3.59,8 8,8s8,-3.59 8,-8S16.41,4 12,4zM12,2c5.52,0 10,4.48 10,10c0,5.52 -4.48,10 -10,10C6.48,22 2,17.52 2,12C2,6.48 6.48,2 12,2z"
-        opacity="1"
-      ></path>
+        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93s3.05-7.44 7-7.93v15.86zm2-15.86c1.03.13 2 .45 2.87.93L15 8h-2V4.07zM15 10h2l-1.13 4.02c.6-.33 1.14-.74 1.63-1.22L19.36 15c-1.23 1.42-2.94 2.4-4.86 2.77L14.5 16h-1v-2h1.5l.5-2z"
+      />
+    </svg>`;
+    const earthIcon = html`<svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+    >
       <path
-        d="M12,6.73c-2.64,0 -4.79,1.57 -5.6,3.77h11.2C16.79,8.3 14.64,6.73 12,6.73z"
-      ></path>
-      <path
-        d="M12,17.27c2.64,0 4.79,-1.57 5.6,-3.77H6.4C7.21,15.7 9.36,17.27 12,17.27z"
-      ></path>
+        d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.9 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 8C5.22 6.34 6.75 5.07 8.59 4.44 7.99 5.55 7.53 6.75 7.21 8H4.26zM4.26 16c-.09-.33-.14-.66-.14-1s.05-.67.14-1h2.95c-.06.33-.09.66-.09 1s.03.67.09 1H4.26zm.92 2C6.75 18.93 8.28 17.66 9.24 16h5.52c.96 1.66 2.49 2.93 4.33 3.56-.96 1.66-2.49 2.93-4.33 3.56S13.84 20.63 12 20.63s-1.84-.63-2.71-1.24c-1.46-1.02-2.68-2.4-3.37-4.05zm15.68-2h-2.95c.06-.33.09-.66.09-1s-.03-.67-.09-1h2.95c.09.33.14.66.14 1s-.05.67-.14 1z"
+      />
     </svg>`;
 
+    const globeClasses = {
+      'earth-view': this.viewMode === 'earth_observation',
+    };
+
     return html`
-      <axee-visuals-3d
-        .galaxiesData=${Array.from(this.galaxies.values())}
-        .currentGalaxyId=${this.currentGalaxyId}
-        .selectedPlanetId=${this.selectedPlanetId}
-        .viewMode=${this.viewMode}
-        .isScanning=${this.isLoading}
-        .groundingChunks=${this.groundingChunks}
-        @planet-selected=${this.handlePlanetSelected}
-        @galaxy-selected=${this.handleGalaxySelected}
-      ></axee-visuals-3d>
+      ${this.viewMode === 'galaxies' || this.viewMode === 'planets'
+        ? html` <axee-visuals-3d
+            .galaxiesData=${Array.from(this.galaxies.values())}
+            .currentGalaxyId=${this.currentGalaxyId}
+            .selectedPlanetId=${this.selectedPlanetId}
+            .viewMode=${this.viewMode}
+            .isScanning=${this.isLoading}
+            .groundingChunks=${this.groundingChunks}
+            @planet-selected=${this.handlePlanetSelected}
+            @galaxy-selected=${this.handleGalaxySelected}
+          ></axee-visuals-3d>`
+        : this.viewMode === 'solar_system'
+        ? html`<div class="iframe-container">
+            <iframe
+              src="https://eyes.nasa.gov/apps/solar-system/#/home?interactPrompt=true&surfaceMapTiling=true&hd=true"
+              allowfullscreen
+            ></iframe>
+          </div>`
+        : nothing}
 
       <axee-audio-engine
         .mood=${this.currentMood}
@@ -813,11 +1048,17 @@ export class AxeeInterface extends LitElement {
         <div class="bottom-left-hud">
           <canvas
             id="cobe-canvas"
+            class=${classMap(globeClasses)}
             style="width: 100px; height: 100px; margin: 0 auto 1rem; border-radius: 50%;"
             width="200"
             height="200"
           ></canvas>
-          <div class="hud-item"><span>MODE</span><span>IDLE</span></div>
+          <div class="hud-item">
+            <span>MODE</span>
+            <span
+              >${this.viewMode === 'earth_observation' ? 'QUERY' : 'IDLE'}</span
+            >
+          </div>
           <div class="hud-item">
             <span>POS</span><span>238.7, 89.8, 448.3</span>
           </div>
@@ -832,9 +1073,28 @@ export class AxeeInterface extends LitElement {
               @click=${this.toggleViewMode}
               title="Galaxy Map"
               aria-label="Toggle galaxy map view"
-              ?disabled=${this.viewMode === 'galaxies'}
+              ?disabled=${this.viewMode === 'galaxies' || this.isLoading}
             >
               ${galaxyMapIcon}
+            </button>
+            <button
+              class="hud-button"
+              @click=${this.handleSolarSystemView}
+              title="Solar System"
+              aria-label="Toggle solar system view"
+              ?disabled=${this.viewMode === 'solar_system' || this.isLoading}
+            >
+              ${solarSystemIcon}
+            </button>
+            <button
+              class="hud-button"
+              @click=${this.handleEarthView}
+              title="Earth Observation"
+              aria-label="Toggle Earth observation view"
+              ?disabled=${this.viewMode === 'earth_observation' ||
+              this.isLoading}
+            >
+              ${earthIcon}
             </button>
             <button
               class="hud-button"
@@ -847,57 +1107,154 @@ export class AxeeInterface extends LitElement {
           </div>
         </div>
 
-        <footer>
-          <div class="command-bar">
-            <input
-              type="text"
-              placeholder=${
-                this.viewMode === 'galaxies'
-                  ? 'Describe a new galaxy...'
-                  : 'Ask the cosmos...'
-              }
-              .value=${this.userPrompt}
-              @input=${(e: Event) => {
-                this.userPrompt = (e.target as HTMLInputElement).value;
-              }}
-              @keydown=${(e: KeyboardEvent) => {
-                if (e.key === 'Enter') this.handleSynthesis();
-              }}
-              ?disabled=${this.isLoading}
-              aria-label="Synthesis command"
-            />
-            <button
-              class="send-button"
-              @click=${this.handleSynthesis}
-              ?disabled=${this.isLoading}
-              title="Synthesize"
-              aria-label="Synthesize"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24"
-                fill="currentColor"
-              >
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-              </svg>
-            </button>
-          </div>
+        ${this.globeData || this.globeError
+          ? html`<div class="globe-results-panel">
+              <h3>Query Results</h3>
+              ${this.globeError
+                ? html`<p>${this.globeError}</p>`
+                : html`
+                    <p>
+                      Found ${this.globeData.features.length} measurements.
+                      Showing on globe.
+                    </p>
+                    <ul>
+                      ${this.globeData.features
+                        .slice(0, 50)
+                        .map(
+                          (feature: any) => html`
+                            <li>
+                              ${feature.properties.protocol} on
+                              ${new Date(
+                                feature.properties.measuredDate,
+                              ).toLocaleDateString()}<br />
+                              <span
+                                >Coords:
+                                ${feature.geometry.coordinates[1].toFixed(
+                                  2,
+                                )},
+                                ${feature.geometry.coordinates[0].toFixed(
+                                  2,
+                                )}</span
+                              >
+                            </li>
+                          `,
+                        )}
+                    </ul>
+                    ${this.globeData.features.length > 50
+                      ? html`<p>...and more.</p>`
+                      : nothing}
+                  `}
+            </div>`
+          : nothing}
 
-          <div class="status-bar">
-            ${
-              this.isLoading
-                ? html`
-                    <div class="loader">
-                      <div></div>
-                      <div></div>
-                      <div></div>
-                      <div></div>
-                    </div>
-                    <span>${this.statusMessage}</span>
-                  `
-                : html`<span>${this.error || this.statusMessage}</span>`
-            }
-          </div>
+        <footer>
+          ${this.viewMode === 'galaxies' || this.viewMode === 'planets'
+            ? html`<div class="command-bar">
+                  <input
+                    type="text"
+                    placeholder=${this.viewMode === 'galaxies'
+                      ? 'Describe a new galaxy...'
+                      : 'Describe a new world...'}
+                    .value=${this.userPrompt}
+                    @input=${(e: Event) => {
+                      this.userPrompt = (e.target as HTMLInputElement).value;
+                    }}
+                    @keydown=${(e: KeyboardEvent) => {
+                      if (e.key === 'Enter') this.handleSynthesis();
+                    }}
+                    ?disabled=${this.isLoading}
+                    aria-label="Synthesis command"
+                  />
+                  <button
+                    class="send-button"
+                    @click=${this.handleSynthesis}
+                    ?disabled=${this.isLoading}
+                    title="Synthesize"
+                    aria-label="Synthesize"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div class="status-bar">
+                  ${this.isLoading
+                    ? html`
+                        <div class="loader">
+                          <div></div>
+                          <div></div>
+                          <div></div>
+                          <div></div>
+                        </div>
+                        <span>${this.statusMessage}</span>
+                      `
+                    : html`<span>${this.error || this.statusMessage}</span>`}
+                </div>`
+            : this.viewMode === 'earth_observation'
+            ? html`<div class="earth-observation-panel">
+                  <div class="form-group">
+                    <label for="protocols">Protocols</label>
+                    <select
+                      id="protocols"
+                      name="protocols"
+                      multiple
+                      @change=${this.handleGlobeQueryChange}
+                    >
+                      ${AVAILABLE_PROTOCOLS.map(
+                        (p) =>
+                          html`<option
+                            .value=${p}
+                            ?selected=${this.globeQuery.protocols.includes(p)}
+                          >
+                            ${p}
+                          </option>`,
+                      )}
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="startDate">Start Date</label>
+                    <input
+                      type="date"
+                      id="startDate"
+                      name="startDate"
+                      .value=${this.globeQuery.startDate}
+                      @change=${this.handleGlobeQueryChange}
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="endDate">End Date</label>
+                    <input
+                      type="date"
+                      id="endDate"
+                      name="endDate"
+                      .value=${this.globeQuery.endDate}
+                      @change=${this.handleGlobeQueryChange}
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="countryCode">Country (ISO3)</label>
+                    <input
+                      type="text"
+                      id="countryCode"
+                      name="countryCode"
+                      .value=${this.globeQuery.countryCode}
+                      @input=${this.handleGlobeQueryChange}
+                      placeholder="e.g., USA"
+                    />
+                  </div>
+                  <button
+                    @click=${this.fetchGlobeData}
+                    ?disabled=${this.isFetchingGlobeData}
+                  >
+                    ${this.isFetchingGlobeData ? 'Querying...' : 'Query Earth'}
+                  </button>
+                </div>`
+            : nothing}
         </footer>
       </div>
     `;

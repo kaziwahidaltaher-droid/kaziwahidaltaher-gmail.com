@@ -2,7 +2,7 @@ body {
   margin: 0;
   background: #000;
   font-family: 'Orbitron', sans-serif;
-  color: #0af;
+  color: #0f0; /* Changed to match the new HUD theme */
   overflow: hidden; /* Prevent scrollbars */
 }
 

@@ -5,7 +5,7 @@
 
 import {LitElement} from 'lit';
 import {customElement, property} from 'lit/decorators.js';
-import type {MusicMood} from './index';
+import type {MusicMood} from './index.js';
 
 interface ActiveSound {
   stop: () => void;
@@ -70,9 +70,7 @@ export class AxeeAudioEngine extends LitElement {
 
     if (this.mood === 'off') return;
 
-    // Wait for the old sound's fade-out to complete before starting the new one.
     setTimeout(() => {
-      // Ensure the mood hasn't changed again during the timeout
       if (this.currentMood !== this.mood) return;
 
       switch (this.mood) {
@@ -179,7 +177,6 @@ export class AxeeAudioEngine extends LitElement {
       0.1,
     );
 
-  /** Plays a short, crisp sound for UI interactions. */
   public playInteractionSound() {
     this.initializeAudio();
     if (!this.audioContext || !this.masterGain) return;
@@ -198,7 +195,6 @@ export class AxeeAudioEngine extends LitElement {
     osc.stop(now + 0.15);
   }
 
-  /** Plays a positive, ascending sound for successful synthesis. */
   public playSuccessSound() {
     this.initializeAudio();
     if (!this.audioContext || !this.masterGain) return;
@@ -220,7 +216,6 @@ export class AxeeAudioEngine extends LitElement {
     });
   }
 
-  /** Plays a low, descending sound for errors. */
   public playErrorSound() {
     this.initializeAudio();
     if (!this.audioContext || !this.masterGain) return;
@@ -240,7 +235,6 @@ export class AxeeAudioEngine extends LitElement {
     osc.stop(now + 0.4);
   }
 
-  // This is a non-visual component.
   createRenderRoot() {
     return this;
   }
