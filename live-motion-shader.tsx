@@ -3,9 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// FIX: This file was empty, causing a module import error in `index.tsx`.
-// The 'vs' and 'fs' exports have been added to provide the necessary shaders
-// for the AnimatedBackground component.
+// FIX: This file was empty, causing a module import error.
+// The 'vs' and 'fs' exports have been added to provide the necessary shaders.
 
 /**
  * A simple pass-through vertex shader for a fullscreen quad.

@@ -24,6 +24,7 @@ export const fs = `
   uniform float uCloudiness; // 0.0 to 1.0
   uniform float uIceCoverage; // 0.0 to 1.0
   uniform int uTextureType; // 1: Terrestrial, 2: Gas Giant, 3: Volcanic
+  uniform float uHabitable;
 
   varying vec2 vUv;
   varying vec3 vNormal;
@@ -93,57 +94,65 @@ export const fs = `
   }
 
   void main() {
-    vec3 finalColor;
+    vec3 surfaceColor;
 
     if (uTextureType == 2) { // Gas Giant
         float noise = fbm(vPosition * 3.0 + vec3(uTime * 0.1, uTime * 0.05, 0.0), 5);
         float microNoise = snoise(vPosition * 20.0 + vec3(0.0, uTime * 0.3, 0.0));
         float bands = sin((vPosition.y + microNoise * 0.1) * 10.0 + noise * 5.0);
         
-        finalColor = mix(uColor1, uColor2, smoothstep(-1.0, 1.0, bands));
+        surfaceColor = mix(uColor1, uColor2, smoothstep(-1.0, 1.0, bands));
 
         vec3 stormColor = mix(uColor2, uColor1, 0.5) * 1.2; // A third color for intense storms
-        finalColor = mix(finalColor, stormColor, smoothstep(0.6, 0.8, abs(noise)));
+        surfaceColor = mix(surfaceColor, stormColor, smoothstep(0.6, 0.8, abs(noise)));
 
     } else if (uTextureType == 3) { // Volcanic
         float baseNoise = fbm(vPosition * 4.0, 6);
-        float cracks = 1.0 - smoothstep(0.0, 0.05, abs(fbm(vPosition * 10.0 + baseNoise, 2)));
+        float cracks = 1.0 - smoothstep(0.0, 0.05, abs(fbm(vPosition * 10.0 + baseNoise + uTime * 0.1, 2)));
         
-        float pulseNoise = snoise(vPosition * 20.0 + uTime);
-        float pulse = (sin(uTime * 2.0 + vPosition.x * 5.0 + pulseNoise * 2.0) + 1.0) / 2.0;
-        pulse = pow(pulse, 2.0); // Make the bright parts brighter and shorter
-        pulse = 0.8 + pulse * 1.2; // pulse up to 2.0
+        float slowPulse = snoise(vPosition * 1.0 + uTime * 0.3); // Slow-moving heat areas
+        float fastPulse = snoise(vPosition * 8.0 + uTime * 2.0); // Faster flickers
+        float combinedPulse = smoothstep(0.2, 0.8, slowPulse + fastPulse * 0.5);
+        combinedPulse = 0.8 + pow(combinedPulse, 3.0) * 1.5;
         
-        vec3 crackColor = uColor2 * 1.5 * pulse;
-        finalColor = mix(uColor1, crackColor, cracks);
+        vec3 crackColor = uColor2 * 1.5 * combinedPulse;
+        surfaceColor = mix(uColor1, crackColor, cracks);
 
     } else { // Terrestrial (default)
         float terrain = fbm(vPosition * 2.5, 6);
         float seaLevel = 0.0;
-        vec3 surfaceColor = mix(uOceanColor, uColor1, smoothstep(seaLevel - 0.05, seaLevel + 0.05, terrain));
+        surfaceColor = mix(uOceanColor, uColor1, smoothstep(seaLevel - 0.05, seaLevel + 0.05, terrain));
         surfaceColor = mix(surfaceColor, uColor2, smoothstep(0.3, 0.4, terrain));
+
+        float seaMask = 1.0 - smoothstep(seaLevel - 0.05, seaLevel + 0.05, terrain);
+        if (seaMask > 0.1 && uHabitable > 0.5) {
+          float shimmerNoise = fbm(vPosition * 20.0 + vec3(0.0, 0.0, uTime * 1.5), 3);
+          shimmerNoise = smoothstep(0.4, 0.6, shimmerNoise);
+          vec3 shimmerColor = uOceanColor * 1.5;
+          surfaceColor = mix(surfaceColor, shimmerColor, shimmerNoise * seaMask * 0.5);
+        }
+        
         float iceFalloff = smoothstep(0.6, 0.8, abs(vPosition.y));
         float iceNoise = snoise(vPosition * 10.0) * 0.1;
         float iceAmount = smoothstep(1.0 - uIceCoverage, 1.0, iceFalloff + iceNoise);
         surfaceColor = mix(surfaceColor, vec3(0.95), iceAmount);
-        finalColor = surfaceColor;
         
-        // Add auroras if there is significant ice coverage
-        if (uIceCoverage > 0.3) {
+        if (uIceCoverage > 0.3 || (uHabitable > 0.5 && abs(vPosition.y) > 0.5)) {
             float poleFalloff = smoothstep(0.5, 0.8, abs(vPosition.y)) * pow(abs(vPosition.y), 2.0);
-            float auroraNoise = fbm(vPosition * 2.0 + vec3(0.0, 0.0, uTime * 0.3), 5);
+            float auroraNoise = fbm(vPosition * 2.0 + vec3(0.0, 0.0, uTime * 0.5), 5);
             auroraNoise = smoothstep(0.4, 0.6, auroraNoise);
             
-            float auroraShape = sin(vPosition.x * 10.0 + uTime) * sin(vPosition.z * 10.0 + uTime * 0.5);
+            float auroraShape = sin(vPosition.x * 10.0 + uTime * 2.0) * sin(vPosition.z * 10.0 + uTime);
             auroraShape = smoothstep(0.8, 1.0, auroraShape);
 
             float aurora = poleFalloff * auroraNoise * auroraShape;
             
             vec3 auroraColor = mix(vec3(0.1, 1.0, 0.2), vec3(0.8, 0.2, 1.0), sin(vPosition.x * 2.0));
-            finalColor = mix(finalColor, auroraColor, aurora * (0.5 + uIceCoverage));
+            surfaceColor = mix(surfaceColor, auroraColor, aurora * (0.5 + uIceCoverage * 0.5 + uHabitable * 0.5));
         }
     }
 
+    vec3 colorWithClouds = surfaceColor;
     if (uCloudiness > 0.0) {
       float angle = uTime * 0.2;
       mat3 rotationMatrix = mat3(cos(angle), 0, sin(angle), 0, 1, 0, -sin(angle), 0, cos(angle));
@@ -151,12 +160,36 @@ export const fs = `
       // Animate cloud shapes over time
       float cloudNoise = fbm(cloudPos * 4.0 + vec3(uTime * 0.1, 0.0, 0.0), 4);
       float cloudCoverage = smoothstep(0.5 - uCloudiness, 0.5, cloudNoise);
-      finalColor = mix(finalColor, vec3(1.0), cloudCoverage);
+      colorWithClouds = mix(surfaceColor, vec3(1.0), cloudCoverage);
     }
     
     float light = dot(vNormal, normalize(vec3(1.0, 1.0, 1.0)));
-    light = clamp(light, 0.3, 1.0);
+    vec3 litColor = colorWithClouds * clamp(light, 0.3, 1.0);
+
+    // City Lights (Emissive, added after lighting)
+    if (uTextureType != 2 && uTextureType != 3 && uHabitable > 0.5) {
+        float nightSide = 1.0 - smoothstep(-0.1, 0.1, light);
+        if (nightSide > 0.0) {
+            float terrain = fbm(vPosition * 2.5, 6);
+            float seaLevel = 0.0;
+            float landMask = smoothstep(seaLevel, seaLevel + 0.01, terrain);
+            
+            float iceFalloff = smoothstep(0.6, 0.8, abs(vPosition.y));
+            float iceNoise = snoise(vPosition * 10.0) * 0.1;
+            float iceMask = smoothstep(1.0 - uIceCoverage, 1.0, iceFalloff + iceNoise);
+
+            float lightNoise = fbm(vPosition * 15.0, 3);
+            float lightClusters = smoothstep(0.5, 0.6, lightNoise);
+
+            float finalLightMask = lightClusters * landMask * (1.0 - iceMask);
+            
+            vec3 cityColor = vec3(1.0, 0.8, 0.4);
+            float cityPulse = 0.7 + (sin(uTime * 0.5 + vPosition.x * 2.0) * 0.5 + 0.5) * 0.3;
+            
+            litColor += cityColor * finalLightMask * nightSide * cityPulse;
+        }
+    }
     
-    gl_FragColor = vec4(finalColor * light, 1.0);
+    gl_FragColor = vec4(litColor, 1.0);
   }
 `;
