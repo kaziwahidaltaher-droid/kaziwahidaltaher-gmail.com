@@ -72,8 +72,17 @@ export const fs = `
     float noise = fbm(p, 5);
     noise = (noise + 1.0) * 0.5; // map to 0-1
 
-    // Mix colors based on noise
+    // Proximity factor (0 = far, 1 = close)
+    float proximity = smoothstep(400.0, 100.0, uCameraDistance);
+    
+    // Create a third "hot" color for close proximity
+    vec3 hotColor = uColor2 + vec3(0.5, 0.5, 0.5);
+
+    // Mix between the two base colors
     vec3 mixedColor = mix(uColor1, uColor2, noise);
+    
+    // Further mix towards the hot color based on proximity and noise pattern
+    mixedColor = mix(mixedColor, hotColor, proximity * (0.5 + noise * 0.5));
 
     // Create a soft, circular mask to fade the edges
     float d = distance(vUv, vec2(0.5));
@@ -91,7 +100,7 @@ export const fs = `
 
     float finalIntensity = (intensity + wisps) * pulse;
 
-    // Apply proximity fade effect
+    // Apply proximity fade effect (on alpha)
     float proximityFade = 1.0 - smoothstep(150.0, 600.0, uCameraDistance);
     finalIntensity *= proximityFade;
 

@@ -317,6 +317,7 @@ export class AxeeInterface extends LitElement {
     | 'thinking-cluster'
     | 'thinking-galaxy'
     | 'thinking-galaxy-cluster'
+    | 'thinking-image'
     | 'navigating'
     | 'error' = 'initializing';
   @state() private statusMessage = 'Initializing Galactic Cartography CORE...';
@@ -327,6 +328,8 @@ export class AxeeInterface extends LitElement {
   @state() private error: string | null = null;
   @state() private galaxyMapCoords = new Map<string, [number, number, number]>();
   @state() private navigationRoute: Waypoint[] | null = null;
+  @state() private generatedImageUrl: string | null = null;
+
 
   // UI States
   @state() private isLeftPanelOpen = true;
@@ -1074,6 +1077,56 @@ export class AxeeInterface extends LitElement {
     }
   }
 
+  private async generatePlanetVisualization(planet: PlanetData) {
+    if (this.aiStatus.startsWith('thinking')) return;
+    this.aiStatus = 'thinking-image';
+    this.generatedImageUrl = null;
+    this.error = null;
+    this.audioEngine?.playInteractionSound();
+
+    const statusUpdates = ['Requesting imaging satellite...', 'Calibrating deep space lens...', 'Focusing on planetary signature...', 'Rendering visualization from concept...'];
+    let updateIndex = 0;
+    const statusInterval = setInterval(() => { this.statusMessage = statusUpdates[updateIndex % statusUpdates.length]; updateIndex++; }, 2000);
+
+    const prompt = `A cinematic, photorealistic, epic space art style visualization of an exoplanet.
+    Planet Name: ${planet.planetName}.
+    Type: ${planet.planetType}.
+    Description: ${planet.surfaceFeatures}. ${planet.discoveryNarrative}.
+    Atmosphere: ${planet.atmosphericComposition}. Visually, the atmosphere has a color of ${planet.visualization.atmosphereColor}.
+    Key Features: ${planet.keyFeatures.join(', ')}.
+    Inspiration: "${planet.aiWhisper}".
+    The overall color palette should be inspired by ${planet.visualization.color1} and ${planet.visualization.color2}.
+    The planet ${planet.visualization.hasRings ? 'has prominent rings' : 'does not have rings'}.
+    Cloud coverage is approximately ${planet.visualization.cloudiness * 100}%.
+    Ice coverage on the poles/surface is ${planet.visualization.iceCoverage * 100}%.`;
+
+    try {
+        const response = await this.ai.models.generateImages({
+            model: 'imagen-4.0-generate-001',
+            prompt: prompt,
+            config: {
+                numberOfImages: 1,
+                outputMimeType: 'image/jpeg',
+                aspectRatio: '1:1',
+            },
+        });
+
+        const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
+        this.generatedImageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
+        this.statusMessage = `Visualization for ${planet.planetName} generated.`;
+        this.audioEngine?.playSuccessSound();
+        this.addChronicleEntry('discovery', `Generated a visual concept for ${planet.planetName}.`);
+    } catch (err) {
+        console.error('Image generation error:', err);
+        this.error = 'Image generation failed. The concept could not be visualized.';
+        this.statusMessage = 'Error: Visualization Failed.';
+        this.audioEngine?.playErrorSound();
+    } finally {
+        clearInterval(statusInterval);
+        this.aiStatus = 'idle';
+    }
+  }
+
   private async calculateRouteToPlanet(planet: PlanetData) {
     if (this.aiStatus.startsWith('thinking') || this.aiStatus === 'navigating') return;
 
@@ -1133,7 +1186,7 @@ export class AxeeInterface extends LitElement {
   }
 
   private async analyzeMagnetosphere(planet: PlanetData) {
-    if (this.magnetosphereStatus === 'running') return;
+    if (this.magnetosphereStatus === 'running' || this.aiStatus.startsWith('thinking')) return;
     this.magnetosphereStatus = 'running';
     this.magnetosphereAnalysisData = null;
     this.error = null;
@@ -1198,12 +1251,11 @@ export class AxeeInterface extends LitElement {
       this.audioEngine?.playErrorSound();
     } finally {
       clearInterval(statusInterval);
-      this.aiStatus = 'idle';
     }
   }
 
   private async analyzeDeepStructure(planet: PlanetData) {
-    if (this.deepScanStatus === 'running') return;
+    if (this.deepScanStatus === 'running' || this.aiStatus.startsWith('thinking')) return;
     this.deepScanStatus = 'running';
     this.deepScanData = null;
     this.error = null;
@@ -1297,12 +1349,11 @@ export class AxeeInterface extends LitElement {
       this.audioEngine?.playErrorSound();
     } finally {
       clearInterval(statusInterval);
-      this.aiStatus = 'idle';
     }
   }
   
   private async analyzeExoSuitShielding(planet: PlanetData) {
-    if (this.exoSuitStatus === 'running') return;
+    if (this.exoSuitStatus === 'running' || this.aiStatus.startsWith('thinking')) return;
     this.exoSuitStatus = 'running';
     this.exoSuitAnalysisData = null;
     this.error = null;
@@ -1394,7 +1445,6 @@ export class AxeeInterface extends LitElement {
       this.audioEngine?.playErrorSound();
     } finally {
       clearInterval(statusInterval);
-      this.aiStatus = 'idle';
     }
   }
   
@@ -1443,7 +1493,7 @@ export class AxeeInterface extends LitElement {
   }
 
   private async analyzeLightCurve(planet: PlanetData) {
-    if (this.lightCurveStatus === 'running') return;
+    if (this.lightCurveStatus === 'running' || this.aiStatus.startsWith('thinking')) return;
     this.lightCurveStatus = 'running';
     this.lightCurveData = null;
     this.error = null;
@@ -1516,12 +1566,11 @@ export class AxeeInterface extends LitElement {
       this.audioEngine?.playErrorSound();
     } finally {
       clearInterval(statusInterval);
-      this.aiStatus = 'idle';
     }
   }
 
   private async analyzeRadialVelocity(planet: PlanetData) {
-    if (this.radialVelocityStatus === 'running') return;
+    if (this.radialVelocityStatus === 'running' || this.aiStatus.startsWith('thinking')) return;
     this.radialVelocityStatus = 'running';
     this.radialVelocityData = null;
     this.error = null;
@@ -1592,7 +1641,6 @@ export class AxeeInterface extends LitElement {
       this.audioEngine?.playErrorSound();
     } finally {
       clearInterval(statusInterval);
-      this.aiStatus = 'idle';
     }
   }
 
@@ -1672,6 +1720,7 @@ export class AxeeInterface extends LitElement {
     this.selectedPlanetId = planetId;
     this.isLeftPanelOpen = true;
     this.navigationRoute = null;
+    this.generatedImageUrl = null;
     this.magnetosphereStatus = 'idle'; // Reset analysis on new selection
     this.magnetosphereAnalysisData = null;
     this.deepScanStatus = 'idle';
@@ -2054,7 +2103,7 @@ export class AxeeInterface extends LitElement {
           <button @click=${this._handleBatchAnalysisClick} ?disabled=${this.aiStatus !== 'idle' || !this.activeGalaxy} title="Analyze a CSV of exoplanet candidates">BATCH ANALYSIS</button>
           <button @click=${this._handleExportCsv} ?disabled=${this.discoveredGalaxies.flatMap(g => g.planets).length === 0} title="Export all discovered data to CSV">EXPORT CSV</button>
           <button class="clear-button" @click=${this._handleClearSession} title="Clear all discovered data">CLEAR UNIVERSE</button>
-          <button @click=${() => (this.isMuted = !this.isMuted)}>${this.isMuted ? 'UNMUTE' : 'MUTE'}</button>
+          <button @click=${() => (this.isMuted = !this.isMuted)} title=${this.isMuted ? 'Unmute' : 'Mute'}>${this.isMuted ? 'UNMUTE' : 'MUTE'}</button>
         </div>
       </header>
     `;
@@ -2135,17 +2184,25 @@ export class AxeeInterface extends LitElement {
       <button class="back-button" @click=${() => (this.selectedPlanetId = null)}>← View Discovered Worlds</button>
       <h2>${planet.planetName}</h2>
       <h3>${planet.starSystem} // ${planet.planetType}</h3>
-      <p class="ai-whisper">"${planet.aiWhisper}"</p>
-      
-      <div id="analysis-buttons" class="planet-actions">
-        <button class="route-button" ?disabled=${this.aiStatus === 'navigating'} @click=${() => this.calculateRouteToPlanet(planet)}>${this.aiStatus === 'navigating' ? 'CALCULATING...' : 'CALCULATE ROUTE'}</button>
-        <button class="analysis-button" @click=${() => this.analyzeMagnetosphere(planet)} ?disabled=${this.magnetosphereStatus === 'running'}>${this.magnetosphereStatus === 'running' ? 'ANALYZING...' : 'MAGNETOSPHERE'}</button>
-        <button class="analysis-button deep-scan" @click=${() => this.analyzeDeepStructure(planet)} ?disabled=${this.deepScanStatus === 'running'}>${this.deepScanStatus === 'running' ? 'SCANNING...' : 'DEEP SCAN'}</button>
-        <button class="analysis-button exo-suit" @click=${() => this.analyzeExoSuitShielding(planet)} ?disabled=${this.exoSuitStatus === 'running'}>${this.exoSuitStatus === 'running' ? 'SIMULATING...' : 'EXO-SUIT'}</button>
-        <button class="analysis-button" @click=${() => this.analyzeLightCurve(planet)} ?disabled=${this.lightCurveStatus === 'running'}>${this.lightCurveStatus === 'running' ? 'ANALYZING...' : 'LIGHT CURVE'}</button>
-        <button class="analysis-button" @click=${() => this.analyzeRadialVelocity(planet)} ?disabled=${this.radialVelocityStatus === 'running'}>${this.radialVelocityStatus === 'running' ? 'ANALYZING...' : 'RADIAL VELOCITY'}</button>
+      <div class="ai-whisper">
+        <p>"${planet.aiWhisper}"</p>
+        <span>— AURELION CORE</span>
       </div>
       
+      <div id="analysis-buttons" class="planet-actions">
+        <button class="analysis-button generate-viz" @click=${() => this.generatePlanetVisualization(planet)} ?disabled=${this.aiStatus.startsWith('thinking')}>
+          ${this.aiStatus === 'thinking-image' ? 'GENERATING...' : 'GENERATE VISUALIZATION'}
+        </button>
+        <button class="route-button" ?disabled=${this.aiStatus.startsWith('thinking') || this.aiStatus === 'navigating'} @click=${() => this.calculateRouteToPlanet(planet)}>${this.aiStatus === 'navigating' ? 'CALCULATING...' : 'CALCULATE ROUTE'}</button>
+        <button class="analysis-button" @click=${() => this.analyzeMagnetosphere(planet)} ?disabled=${this.magnetosphereStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.magnetosphereStatus === 'running' ? 'ANALYZING...' : 'MAGNETOSPHERE'}</button>
+        <button class="analysis-button deep-scan" @click=${() => this.analyzeDeepStructure(planet)} ?disabled=${this.deepScanStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.deepScanStatus === 'running' ? 'SCANNING...' : 'DEEP SCAN'}</button>
+        <button class="analysis-button exo-suit" @click=${() => this.analyzeExoSuitShielding(planet)} ?disabled=${this.exoSuitStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.exoSuitStatus === 'running' ? 'SIMULATING...' : 'EXO-SUIT'}</button>
+        <button class="analysis-button" @click=${() => this.analyzeLightCurve(planet)} ?disabled=${this.lightCurveStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.lightCurveStatus === 'running' ? 'ANALYZING...' : 'LIGHT CURVE'}</button>
+        <button class="analysis-button" @click=${() => this.analyzeRadialVelocity(planet)} ?disabled=${this.radialVelocityStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.radialVelocityStatus === 'running' ? 'ANALYZING...' : 'RADIAL VELOCITY'}</button>
+      </div>
+      
+      ${this.renderVisualizationResult()}
+
       <h4>Planetary Data</h4>
       <div class="stats-grid">
         <div><strong>Star Type</strong><span>${planet.starType}</span></div>
@@ -2196,6 +2253,21 @@ export class AxeeInterface extends LitElement {
         ${planet.keyFeatures.map((f) => html`<li>${f}</li>`)}
       </ul>
     </div>`;
+  }
+
+  private renderVisualizationResult() {
+    // Only render this section if a generation has been started or completed.
+    if (this.aiStatus !== 'thinking-image' && !this.generatedImageUrl) {
+      return nothing;
+    }
+
+    return html`
+      <h4>AI Generated Visualization</h4>
+      <div class="visualization-container">
+        ${this.aiStatus === 'thinking-image' ? html`<div class="loader">Rendering from concept...</div>` : nothing}
+        ${this.generatedImageUrl ? html`<img src=${this.generatedImageUrl} alt="AI generated visualization of the planet" />` : nothing}
+      </div>
+    `;
   }
 
   private renderMagnetosphereAnalysis() {
@@ -2602,7 +2674,9 @@ export class AxeeInterface extends LitElement {
     .planet-detail h2 { margin: 0; font-size: 1.8rem; font-weight: 700; color: var(--accent-color); }
     .planet-detail h3 { margin: 0 0 1rem 0; font-size: 1rem; font-weight: 300; opacity: 0.8; }
     .planet-detail p { line-height: 1.6; opacity: 0.9; margin: 0 0 1rem 0; }
-    .ai-whisper { font-style: italic; opacity: 0.9; margin-bottom: 1rem; border-left: 2px solid var(--accent-color); padding-left: 1rem; }
+    .ai-whisper { opacity: 0.9; margin-bottom: 1.5rem; border-left: 2px solid var(--accent-color); padding-left: 1rem; }
+    .ai-whisper p { font-style: italic; margin: 0; }
+    .ai-whisper span { display: block; text-align: right; font-size: 0.8rem; opacity: 0.7; margin-top: 0.5rem; }
     .planet-detail h4 { font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin: 1.5rem 0 1rem 0; }
     .planet-detail h5 { font-weight: 300; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.8; margin: 1rem 0 0.5rem 0; font-size: 0.9rem;}
     .stats-grid, .analysis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1rem; font-size: 0.9rem; }
@@ -2628,6 +2702,33 @@ export class AxeeInterface extends LitElement {
     .analysis-button.deep-scan:hover:not(:disabled) { background: var(--success-color); color: var(--bg-color); }
     .analysis-button.exo-suit { border-color: var(--warning-color); color: var(--warning-color); }
     .analysis-button.exo-suit:hover:not(:disabled) { background: var(--warning-color); color: var(--bg-color); }
+    .analysis-button.generate-viz {
+      grid-column: 1 / -1;
+      border-color: #ff61c3;
+      color: #ff61c3;
+    }
+    .analysis-button.generate-viz:hover:not(:disabled) {
+      background: #ff61c3;
+      color: var(--bg-color);
+    }
+    .visualization-container {
+      margin-top: 1rem;
+      width: 100%;
+      min-height: 200px;
+      aspect-ratio: 1 / 1;
+      background: rgba(0,0,0,0.2);
+      border: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem;
+    }
+    .visualization-container img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 2px;
+    }
     .navigation-panel { margin-top: 1rem; border-top: 1px solid var(--border-color); }
     .waypoint-list { list-style: none; padding: 0; margin: 0; }
     .waypoint { display: flex; align-items: flex-start; gap: 1rem; padding: 0.8rem 0; border-bottom: 1px solid var(--border-color); }
@@ -2669,7 +2770,7 @@ export class AxeeInterface extends LitElement {
     .status-bar { font-size: 0.8rem; color: var(--text-color-dark); display: flex; align-items: center; gap: 0.5rem; }
     .ai-status-indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--text-color-dark); transition: background-color 0.5s ease; flex-shrink: 0; }
     .ai-status-indicator.status-idle { background: var(--accent-color); animation: pulse-idle 3s ease-in-out infinite; }
-    .ai-status-indicator.status-initializing, .ai-status-indicator.status-thinking, .ai-status-indicator.status-thinking-cluster, .ai-status-indicator.status-navigating, .ai-status-indicator.status-thinking-galaxy, .ai-status-indicator.status-thinking-galaxy-cluster { background: var(--warning-color); animation: pulse-active 1.5s ease-in-out infinite; }
+    .ai-status-indicator.status-initializing, .ai-status-indicator.status-thinking, .ai-status-indicator.status-thinking-cluster, .ai-status-indicator.status-navigating, .ai-status-indicator.status-thinking-galaxy, .ai-status-indicator.status-thinking-galaxy-cluster, .ai-status-indicator.status-thinking-image { background: var(--warning-color); animation: pulse-active 1.5s ease-in-out infinite; }
     .ai-status-indicator.status-error { background: var(--error-color); animation: none; }
     @keyframes pulse-idle { 0% { box-shadow: 0 0 0 0 rgba(97, 250, 255, 0.4); } 70% { box-shadow: 0 0 0 6px rgba(97, 250, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(97, 250, 255, 0); } }
     @keyframes pulse-active { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 250, 97, 0.7); } 50% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(255, 250, 97, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 250, 97, 0); } }
@@ -2746,5 +2847,138 @@ export class AxeeInterface extends LitElement {
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border-color); }
     ::-webkit-scrollbar-thumb:hover { background: var(--accent-color); }
+
+    /* --- RESPONSIVE DESIGN --- */
+
+    /* Tablet - smaller side panels, stacked action buttons */
+    @media (max-width: 1024px) {
+      .side-panel {
+        width: clamp(300px, 35vw, 400px);
+        padding-top: 7rem;
+      }
+
+      .planet-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .dashboard-metrics-container,
+      .tuning-controls {
+        flex-direction: column;
+      }
+
+      .main-header, .main-footer {
+        padding: 1rem;
+      }
+    }
+
+    /* Mobile - single panel focus, stacked layouts, simplified controls */
+    @media (max-width: 768px) {
+      .main-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+      }
+      .main-header .controls {
+        max-width: 100%;
+        justify-content: flex-start;
+      }
+
+      /* Hide less critical header buttons on mobile */
+      .main-header .controls button:not(.back-to-galaxy):not([title="Start the guided tutorial"]):not([title*="Mute"]) {
+        display: none;
+      }
+      .main-header .controls button.clear-button {
+        display: none;
+      }
+
+      .side-panel {
+        width: clamp(280px, 85vw, 400px);
+        padding: 1rem;
+        padding-top: 6rem;
+        background: var(--panel-bg); /* Make it solid for overlap */
+        backdrop-filter: blur(10px);
+        z-index: 10;
+        box-shadow: 5px 0 20px rgba(0,0,0,0.2);
+      }
+      .side-panel.right {
+         box-shadow: -5px 0 20px rgba(0,0,0,0.2);
+      }
+
+      .side-panel.left:not(.open) {
+        transform: translateX(-105%);
+      }
+      .side-panel.right:not(.open) {
+        transform: translateX(105%);
+      }
+
+      .panel-toggle {
+        width: 2.5rem;
+        height: 6rem;
+      }
+      .side-panel.left .panel-toggle {
+        right: -2.5rem;
+      }
+      .side-panel.right .panel-toggle {
+        left: -2.5rem;
+      }
+
+      .stats-grid, .analysis-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .planet-detail h2 {
+        font-size: 1.5rem;
+      }
+
+      .command-bar {
+        max-width: 100%;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+      .input-wrapper {
+        flex-basis: 100%;
+        order: 1;
+        width: 100%;
+      }
+      .command-bar button {
+        padding: 0.8rem 1rem;
+        font-size: 0.9rem;
+        flex-grow: 1;
+        order: 2;
+      }
+
+      .onboarding-content, .tutorial-prompt {
+        width: 90%;
+        box-sizing: border-box;
+      }
+
+      .onboarding-text {
+        white-space: normal; /* Allow text to wrap */
+        border-right: none !important;
+        width: 100% !important;
+        animation: none !important;
+        opacity: 1 !important;
+      }
+      .past-stanza .onboarding-text {
+        opacity: 0.7 !important;
+      }
+      .onboarding-overlay .begin-button, .onboarding-overlay .continue-button {
+        animation: none !important;
+        opacity: 1 !important;
+      }
+
+      .dashboard-content {
+        width: 95%;
+        padding: 1rem;
+        max-height: 95vh;
+        overflow-y: auto;
+      }
+      .confusion-matrix {
+          font-size: 0.7rem;
+      }
+      .matrix-cell .value {
+          font-size: 1.1rem;
+      }
+    }
   `;
 }

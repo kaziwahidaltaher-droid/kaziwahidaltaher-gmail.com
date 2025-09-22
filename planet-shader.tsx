@@ -228,6 +228,48 @@ export const fs = `
 
     vec3 litColor = diffuse + scatterColor;
     
+    // --- Night Side Glow ---
+    // A mask for the night side of the planet with a soft transition at the terminator
+    float nightMask = 1.0 - smoothstep(-0.05, 0.15, light);
+    if (nightMask > 0.0) {
+        vec3 nightGlow = vec3(0.0);
+        if (uTextureType == 1) { // Terrestrial "City Lights"
+            // Recalculate terrain to create a landmass mask. We only want lights on land.
+            float terrain_for_lights = fbm(tiltedPosition * 2.5, 6) + fbm(tiltedPosition * 12.0, 4) * 0.2;
+            float landMask = smoothstep(0.0, 0.05, terrain_for_lights);
+
+            // High frequency noise for the lights themselves
+            float cityNoise = fbm(tiltedPosition * 35.0, 5);
+            // Sharpen the noise to create points of light rather than clouds
+            cityNoise = smoothstep(0.4, 0.45, cityNoise);
+            
+            // Use another, lower frequency noise layer to create clusters/continents of lights
+            float clusterNoise = fbm(tiltedPosition * 1.5, 4);
+            clusterNoise = smoothstep(0.1, 0.4, clusterNoise);
+            
+            cityNoise *= clusterNoise;
+
+            // Lights only appear on land
+            cityNoise *= landMask;
+
+            nightGlow = vec3(1.0, 0.85, 0.6) * cityNoise;
+        } else if (uTextureType == 3) { // Volcanic "Lava Glow"
+            float lavaGlowNoise = fbm(tiltedPosition * 4.0, 6);
+            vec3 lavaPos = tiltedPosition * 10.0 + lavaGlowNoise + vec3(0.0, 0.0, uTime * -0.3);
+            float lavaCracks = 1.0 - smoothstep(0.0, 0.05, abs(fbm(lavaPos, 2)));
+            // Make the glow pulse subtly
+            lavaCracks *= (0.6 + sin(uTime * 2.0 + tiltedPosition.x * 5.0) * 0.4);
+            nightGlow = uColor2 * lavaCracks * 1.2;
+        } else { // Generic Atmospheric Glow for other types (e.g., Gas Giants, Icy)
+            float atmoGlowNoise = snoise(tiltedPosition * 2.0 + uTime * 0.1);
+            atmoGlowNoise = (atmoGlowNoise + 1.0) * 0.5; // map to 0-1
+            atmoGlowNoise = pow(atmoGlowNoise, 3.0);
+            nightGlow = uAtmosphereColor * atmoGlowNoise * 0.5;
+        }
+        
+        litColor += nightGlow * nightMask;
+    }
+
     gl_FragColor = vec4(litColor, 1.0);
   }
 `;

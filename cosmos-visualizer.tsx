@@ -53,6 +53,7 @@ export class CosmosVisualizer extends LitElement {
   private intergalacticGroup = new THREE.Group(); // For galaxies
   private galaxyVisuals = new Map<string, THREE.Group>();
   private planetVisuals = new Map<string, THREE.Group>();
+  private planetOrbits = new Map<string, THREE.Mesh>();
   private routeLine: THREE.Mesh | null = null;
   private localGalaxyPoints!: THREE.Points;
 
@@ -312,19 +313,44 @@ export class CosmosVisualizer extends LitElement {
 
   private updatePlanetVisuals() {
     const currentPlanetIds = new Set(this.activePlanets.map(p => p.celestial_body_id));
+    
+    // Clean up visuals for planets that no longer exist
     this.planetVisuals.forEach((group, id) => {
         if (!currentPlanetIds.has(id)) {
             this.galaxyGroup.remove(group);
+            // dispose geometry and materials to prevent memory leaks
+            group.traverse((child) => {
+                if (child instanceof THREE.Mesh) {
+                    child.geometry.dispose();
+                    const material = child.material as THREE.Material | THREE.Material[];
+                    if (Array.isArray(material)) {
+                        material.forEach(m => m.dispose());
+                    } else {
+                        material.dispose();
+                    }
+                }
+            });
             this.planetVisuals.delete(id);
+
+            // Also remove and dispose the corresponding orbit
+            const orbit = this.planetOrbits.get(id);
+            if (orbit) {
+                this.galaxyGroup.remove(orbit);
+                orbit.geometry.dispose();
+                (orbit.material as THREE.Material).dispose();
+                this.planetOrbits.delete(id);
+            }
         }
     });
 
+    // Add/update visuals for current planets
     this.activePlanets.forEach((planet) => {
         const coords = this.activePlanetCoords.get(planet.celestial_body_id);
         if (!coords) return;
 
         let planetGroup = this.planetVisuals.get(planet.celestial_body_id);
         if (!planetGroup) {
+            // --- Create Planet Group ---
             planetGroup = new THREE.Group();
             planetGroup.userData = { id: planet.celestial_body_id, isPlanet: true };
 
@@ -365,16 +391,44 @@ export class CosmosVisualizer extends LitElement {
                 ringMesh.rotation.x = Math.PI / 2 - 0.2;
                 planetGroup.add(ringMesh);
             }
+            // --- End Planet Group Creation ---
 
             this.planetVisuals.set(planet.celestial_body_id, planetGroup);
             this.galaxyGroup.add(planetGroup);
+
+            // --- Create Orbit ---
+            const radius = new THREE.Vector2(coords[0], coords[2]).length();
+            const orbitGeometry = new THREE.RingGeometry(radius, radius + 0.1, 128);
+            const orbitMaterial = new THREE.MeshBasicMaterial({
+                color: 0x61faff,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.15,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+            });
+            const orbitMesh = new THREE.Mesh(orbitGeometry, orbitMaterial);
+            orbitMesh.rotation.x = Math.PI / 2;
+            this.planetOrbits.set(planet.celestial_body_id, orbitMesh);
+            this.galaxyGroup.add(orbitMesh);
         }
         
         planetGroup.position.set(...coords);
         
+        const radius = planet.planetRadiusEarths || 1;
+        const scale = 0.3 + Math.log1p(radius) * 0.4;
+        planetGroup.scale.set(scale, scale, scale);
+
         const isSelected = planet.celestial_body_id === this.selectedPlanetId;
         (planetGroup.children[0] as THREE.Mesh<any, THREE.ShaderMaterial>).material.uniforms.uIsSelected.value = isSelected;
         (planetGroup.children[1] as THREE.Mesh<any, THREE.ShaderMaterial>).material.uniforms.uIsSelected.value = isSelected;
+
+        // Update orbit visual for selection
+        const orbit = this.planetOrbits.get(planet.celestial_body_id);
+        if (orbit) {
+            (orbit.material as THREE.MeshBasicMaterial).opacity = isSelected ? 0.4 : 0.15;
+            (orbit.material as THREE.MeshBasicMaterial).color.set(isSelected ? 0xffffff : 0x61faff);
+        }
     });
   }
 
@@ -447,7 +501,7 @@ export class CosmosVisualizer extends LitElement {
     this.camera.aspect = this.canvas.clientWidth / this.canvas.clientHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
-    this.composer.setSize(this.canvas.clientWidth, this.clientHeight);
+    this.composer.setSize(this.clientWidth, this.clientHeight);
   };
 
   private runAnimationLoop = () => {
