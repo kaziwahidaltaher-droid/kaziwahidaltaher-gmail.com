@@ -12,5 +12,16 @@
       "sizes": "any",
       "type": "image/svg+xml"
     }
+  ],
+  "categories": [
+    "Artificial Intelligence & Machine Learning",
+    "Coding",
+    "Data Analysis",
+    "Data Management",
+    "Data Visualization",
+    "Extrasolar Objects",
+    "Planets & Moons",
+    "Software",
+    "Space Exploration"
   ]
 }

@@ -1,8 +1,11 @@
+html,
 body {
+  height: 100%;
+  width: 100%;
   margin: 0;
-  background: #000;
-  font-family: 'Orbitron', sans-serif;
-  color: #0f0; /* Changed to match the new HUD theme */
+  background: #010206;
+  font-family: 'Exo 2', sans-serif;
+  color: #a0d0ff;
   overflow: hidden; /* Prevent scrollbars */
 }
 
