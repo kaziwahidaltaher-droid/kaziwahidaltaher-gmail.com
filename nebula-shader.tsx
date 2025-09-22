@@ -62,34 +62,48 @@ export const fs = `
   }
 
   void main() {
-    vec2 p = vUv * 4.0;
+    // --- Swirl Effect ---
+    vec2 centeredUv = vUv - vec2(0.5);
+    float dist = length(centeredUv);
+    float angle = atan(centeredUv.y, centeredUv.x);
+    // Swirl is stronger at the center and fades out
+    float swirlStrength = (1.0 - smoothstep(0.0, 0.6, dist)) * 2.5;
+    angle += swirlStrength * uTime * 0.3;
+    vec2 swirledUv = vec2(cos(angle), sin(angle)) * dist + vec2(0.5);
+
+    vec2 p = swirledUv * 4.0;
     
-    // Animate the noise field over time
+    // Animate the noise field over time (in addition to swirl)
     p.x += uTime * 0.05 + uSeed;
     p.y += uTime * 0.02 + uSeed;
 
-    // Create a base noise pattern
-    float noise = fbm(p, 5);
-    noise = (noise + 1.0) * 0.5; // map to 0-1
+    // --- Color Mixing ---
+    // A slower, larger noise pattern for color distribution
+    float colorNoise = fbm(p * 0.7 + uSeed * 2.0, 4);
+    colorNoise = (colorNoise + 1.0) * 0.5; // Map to 0-1
+    // A power function creates more contrast and defined color regions
+    float colorMixFactor = pow(colorNoise, 1.5);
+    vec3 mixedColor = mix(uColor1, uColor2, colorMixFactor);
+
+    // --- Intensity and Masking ---
+    // A more detailed noise pattern for brightness and texture
+    float intensityNoise = fbm(p, 5);
+    intensityNoise = (intensityNoise + 1.0) * 0.5; // Map to 0-1
 
     // Proximity factor (0 = far, 1 = close)
     float proximity = smoothstep(400.0, 100.0, uCameraDistance);
-    
-    // Create a third "hot" color for close proximity
-    vec3 hotColor = uColor2 + vec3(0.5, 0.5, 0.5);
+    vec3 hotColor = (uColor1 + uColor2) * 1.5; // Brighter core color
+    // Mix in the hot color when the camera is close, biased towards the brighter parts of the nebula
+    mixedColor = mix(mixedColor, hotColor, proximity * smoothstep(0.6, 1.0, intensityNoise));
 
-    // Mix between the two base colors
-    vec3 mixedColor = mix(uColor1, uColor2, noise);
-    
-    // Further mix towards the hot color based on proximity and noise pattern
-    mixedColor = mix(mixedColor, hotColor, proximity * (0.5 + noise * 0.5));
-
-    // Create a soft, circular mask to fade the edges
+    // Create a soft, circular mask to fade the edges, distorted by noise
+    float noiseForMask = snoise(vUv * 3.0 + uSeed);
     float d = distance(vUv, vec2(0.5));
+    d -= noiseForMask * 0.2; // Distort the distance to be less circular
     float mask = smoothstep(0.5, 0.1, d);
 
-    // Combine noise and mask
-    float intensity = pow(noise, 2.5) * mask;
+    // Combine noise and mask for final intensity
+    float intensity = pow(intensityNoise, 2.5) * mask;
 
     // Add some sharper "wisps" using another layer of noise
     float wisps = fbm(p * 3.5, 5);

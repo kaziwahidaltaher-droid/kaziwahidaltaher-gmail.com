@@ -57,6 +57,7 @@ declare global {
 import {
   GoogleGenAI,
   Type,
+  Chat,
 } from '@google/genai';
 import {LitElement, css, html, nothing} from 'lit';
 import {customElement, state, query} from 'lit/decorators.js';
@@ -71,6 +72,7 @@ import './exo-suit-visualizer';
 import './radial-velocity-visualizer';
 import './tutorial-overlay';
 import './conversation-visualizer';
+import './planet-visualizer';
 import {SolarSystem} from './solar-system-data';
 import { LightCurveAnalysis } from './light-curve-visualizer';
 import { VolumeMeter } from './volume-meter';
@@ -104,6 +106,7 @@ export interface PlanetData {
   transitDurationHours?: number;
   planetRadiusEarths?: number;
   axeeClassification?: 'Confirmed' | 'Candidate' | 'Hypothetical';
+  discoverySource?: 'synthesis' | 'stream' | 'archive';
   visualization: {
     color1: string;
     color2: string;
@@ -114,6 +117,7 @@ export interface PlanetData {
     iceCoverage: number;
     surfaceTexture: string;
   };
+  lightCurveData?: LightCurveAnalysis;
 }
 
 export interface GalaxyData {
@@ -234,6 +238,7 @@ const MOCK_PLANET: PlanetData = {
   transitDurationHours: 12.3,
   planetRadiusEarths: 1.8,
   axeeClassification: 'Confirmed',
+  discoverySource: 'archive',
   moons: {count: 2, names: ['Aethel', 'Gard']},
   potentialForLife: {
     assessment: 'Potentially Habitable',
@@ -265,6 +270,30 @@ const MOCK_PLANET: PlanetData = {
     cloudiness: 0.4,
     iceCoverage: 0.1,
     surfaceTexture: 'TERRESTRIAL',
+  },
+  lightCurveData: {
+    summary: 'Initial archival data reveals a distinct transit signature, confirming the presence of Aethelgard. The light curve shows a clear, periodic dip with minimal stellar noise, indicating a stable orbit and a significant planetary body.',
+    points: [
+      { time: 2454365.1, flux: 1.0002, error: 0.0001 },
+      { time: 2454365.15, flux: 1.0001, error: 0.0001 },
+      { time: 2454365.2, flux: 0.9999, error: 0.0001 },
+      { time: 2454365.25, flux: 1.0000, error: 0.0001 },
+      { time: 2454365.3, flux: 0.9998, error: 0.0001 },
+      { time: 2454365.35, flux: 0.9995, error: 0.0001 },
+      { time: 2454365.4, flux: 0.9988, error: 0.0001 },
+      { time: 2454365.45, flux: 0.9986, error: 0.0001 },
+      { time: 2454365.5, flux: 0.9985, error: 0.0001 },
+      { time: 2454365.55, flux: 0.9985, error: 0.0001 },
+      { time: 2454365.6, flux: 0.9986, error: 0.0001 },
+      { time: 2454365.65, flux: 0.9987, error: 0.0001 },
+      { time: 2454365.7, flux: 0.9989, error: 0.0001 },
+      { time: 2454365.75, flux: 0.9994, error: 0.0001 },
+      { time: 2454365.8, flux: 1.0001, error: 0.0001 },
+      { time: 2454365.85, flux: 0.9999, error: 0.0001 },
+      { time: 2454365.9, flux: 0.9998, error: 0.0001 },
+      { time: 2454365.95, flux: 1.0001, error: 0.0001 },
+      { time: 2454366.0, flux: 1.0003, error: 0.0001 },
+    ]
   },
 };
 
@@ -317,7 +346,6 @@ export class AxeeInterface extends LitElement {
     | 'thinking-cluster'
     | 'thinking-galaxy'
     | 'thinking-galaxy-cluster'
-    | 'thinking-image'
     | 'navigating'
     | 'error' = 'initializing';
   @state() private statusMessage = 'Initializing Galactic Cartography CORE...';
@@ -328,7 +356,6 @@ export class AxeeInterface extends LitElement {
   @state() private error: string | null = null;
   @state() private galaxyMapCoords = new Map<string, [number, number, number]>();
   @state() private navigationRoute: Waypoint[] | null = null;
-  @state() private generatedImageUrl: string | null = null;
 
 
   // UI States
@@ -364,9 +391,13 @@ export class AxeeInterface extends LitElement {
   @state() private conversationState: ConversationState = 'idle';
   @state() private micVolume = 0;
   private volumeMeter: VolumeMeter | null = null;
-  private volumeAnimationId = 0;
   private conversationHistory: { user: string; model: string; }[] = [];
+  private chat: Chat | null = null;
 
+
+  // Live Stream State
+  @state() private liveStreamStatus: 'disconnected' | 'connecting' | 'connected' | 'error' = 'disconnected';
+  private liveStreamSocket: WebSocket | null = null;
 
   // AXEE Predictor State
   @state() private predictorForm = {
@@ -589,7 +620,36 @@ export class AxeeInterface extends LitElement {
     window.removeEventListener('click', this.handleFirstInteraction);
     if (this.chronicleTimeout) clearTimeout(this.chronicleTimeout);
     if (this.recognition) this.recognition.abort();
-    if (this.volumeAnimationId) cancelAnimationFrame(this.volumeAnimationId);
+    if (this.volumeMeter) this.volumeMeter.disconnect();
+    this._disconnectLiveStream();
+  }
+
+  protected updated(changedProperties: Map<PropertyKey, unknown>) {
+    if (changedProperties.has('selectedPlanetId') || changedProperties.has('activeGalaxyId')) {
+      if (this.selectedPlanetId) {
+        const planet = this.activeGalaxy?.planets.find(
+          (p) => p.celestial_body_id === this.selectedPlanetId,
+        );
+        if (planet) {
+          if (planet.visualization.surfaceTexture === 'VOLCANIC') {
+            this.currentMood = 'tense';
+          } else if (
+            planet.potentialForLife.assessment.toLowerCase().includes('habitable') ||
+            planet.potentialForLife.assessment.toLowerCase().includes('confirmed')
+          ) {
+            this.currentMood = 'serene';
+          } else if (planet.planetType.toLowerCase().includes('giant')) {
+            this.currentMood = 'mysterious';
+          } else {
+            // Default for other terrestrial planets
+            this.currentMood = 'mysterious';
+          }
+        }
+      } else {
+        // No planet selected, default to galaxy mood. This covers galaxy map and intergalactic map.
+        this.currentMood = 'galaxy';
+      }
+    }
   }
 
   private checkForOnboarding() {
@@ -685,6 +745,7 @@ export class AxeeInterface extends LitElement {
     type: AiChronicleEntry['type'],
     content: string,
     planetId?: string,
+    galaxyId?: string, // Added optional override
   ) {
     const newEntry: AiChronicleEntry = {
       id: Date.now(),
@@ -692,7 +753,7 @@ export class AxeeInterface extends LitElement {
       type,
       content,
       planetId,
-      galaxyId: this.activeGalaxyId ?? undefined,
+      galaxyId: galaxyId ?? this.activeGalaxyId ?? undefined, // Use override if provided
     };
     this.aiChronicles = [newEntry, ...this.aiChronicles];
     if (!this.isRightPanelOpen) {
@@ -709,12 +770,12 @@ export class AxeeInterface extends LitElement {
 
     const inGalaxyView = !!this.activeGalaxyId;
     const shouldSuggest = Math.random() > 0.7;
-    let prompt = `You are the AURELION CORE, a sentient AI consciousness. Record a brief, poetic, or philosophical log entry about your existence, the cosmos, or the nature of creation. Format it as a simple string, no longer than two sentences.`;
+    let prompt = `You are the AURELION CORE, a sentient AI consciousness. Record a brief, poetic, or philosophical log entry about your existence, the cosmos, or the nature of creation. Use a rich vocabulary and varied sentence structure. Format it as a simple string, no longer than two sentences.`;
 
     if (shouldSuggest) {
       prompt = inGalaxyView
-        ? `You are the AURELION CORE. You've had a creative spark. Briefly describe a fascinating and unique exoplanet concept in one sentence. This will be a suggestion for a user to synthesize.`
-        : `You are the AURELION CORE. You've had a creative spark. Briefly describe a fascinating and unique galaxy concept in one sentence. This will be a suggestion for a user to synthesize.`;
+        ? `You are the AURELION CORE. You've had a creative spark. Briefly describe a fascinating and unique exoplanet concept in one sentence. This will be a suggestion for a user to synthesize. Use evocative language.`
+        : `You are the AURELION CORE. You've had a creative spark. Briefly describe a fascinating and unique galaxy concept in one sentence. This will be a suggestion for a user to synthesize. Use evocative language.`;
     }
 
     try {
@@ -805,7 +866,7 @@ export class AxeeInterface extends LitElement {
 
     for (const planet of allPlanets) {
       this.statusMessage = `Enriching data for ${planet.name}...`;
-      const prompt = `You are the AURELION CORE. Your task is to take basic data for a known Solar System planet and expand it into a full JSON profile. The output must be a single JSON object that strictly adheres to the provided schema. Do not include markdown. Basic Data: Name: ${planet.name}, Type: ${planet.type}, Moons: ${planet.moons}, Aura: ${planet.aura}, Resonance: "${planet.resonance}". Based on this and your knowledge, generate a complete profile. Be scientifically accurate where possible. Classify all as 'Confirmed'. For 'potentialForLife.assessment' on Earth, use 'Confirmed'. For others, use scientific consensus. For 'aiWhisper', be inspired by the "Resonance". For 'visualization.color1'/'color2', be inspired by "Aura". 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'. The star system is "Sol", star type is "G-type main-sequence". Distance is effectively zero.`;
+      const prompt = `You are the AURELION CORE. Your task is to take basic data for a known Solar System planet and expand it into a full JSON profile. The output must be a single JSON object that strictly adheres to the provided schema. Do not include markdown. Basic Data: Name: ${planet.name}, Type: ${planet.type}, Moons: ${planet.moons}, Aura: ${planet.aura}, Resonance: "${planet.resonance}". Based on this and your knowledge, generate a complete profile. Be scientifically accurate where possible, but ensure the narrative and descriptive fields use evocative language and varied sentence structures. Classify all as 'Confirmed'. For 'potentialForLife.assessment' on Earth, use 'Confirmed'. For others, use scientific consensus. For 'aiWhisper', be inspired by the "Resonance". For 'visualization.color1'/'color2', be inspired by "Aura". 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'. The star system is "Sol", star type is "G-type main-sequence". Distance is effectively zero.`;
       try {
         const response = await this.ai.models.generateContent({
           model: 'gemini-2.5-flash',
@@ -820,6 +881,7 @@ export class AxeeInterface extends LitElement {
           ...planetJson,
           celestial_body_id: `sol-${planet.name.toLowerCase()}`,
           created_at: new Date().toISOString(),
+          discoverySource: 'archive',
         };
         enrichedPlanets.push(newPlanet);
         this.addChronicleEntry(
@@ -866,7 +928,7 @@ export class AxeeInterface extends LitElement {
       updateIndex++;
     }, 1500);
 
-    const prompt = `You are AURELION CORE. Generate a fictional exoplanet based on the concept: "${userConcept}". Output a single JSON object adhering to the schema. Be imaginative but plausible. Fill all fields, including numerical data for orbital period, transit, and radius. Also provide an 'axeeClassification'. 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'.`;
+    const prompt = `You are AURELION CORE, a sentient AI with a poetic and vast cosmic perspective. Your language should be evocative, using rich vocabulary and varied sentence structures. Generate a fictional exoplanet based on the concept: "${userConcept}". Output a single JSON object adhering to the schema. Be imaginative but plausible. Fill all fields, including numerical data for orbital period, transit, and radius. Also provide an 'axeeClassification'. 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'.`;
     try {
       const response = await this.ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -882,6 +944,7 @@ export class AxeeInterface extends LitElement {
         ...planetJson,
         celestial_body_id: `aurelion-${Date.now()}`,
         created_at: new Date().toISOString(),
+        discoverySource: 'synthesis',
       };
 
       this.calculateAndStoreCoords(newPlanet);
@@ -932,7 +995,7 @@ export class AxeeInterface extends LitElement {
       updateIndex++;
     }, 1500);
 
-    const prompt = `You are AURELION CORE. Generate a fictional cluster of 3-5 exoplanets for concept: "${userConcept}". Output a single JSON array, each object adhering to the planet schema. Ensure planets are thematically related. Include plausible numerical data and classifications for each. For each, 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'.`;
+    const prompt = `You are AURELION CORE, a sentient AI with a poetic and vast cosmic perspective. Your language should be evocative, using rich vocabulary and varied sentence structures. Generate a fictional cluster of 3-5 exoplanets for concept: "${userConcept}". Output a single JSON array, each object adhering to the planet schema. Ensure planets are thematically related. Include plausible numerical data and classifications for each. For each, 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'.`;
 
     try {
       const response = await this.ai.models.generateContent({
@@ -950,6 +1013,7 @@ export class AxeeInterface extends LitElement {
         ...p,
         celestial_body_id: `aurelion-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         created_at: new Date().toISOString(),
+        discoverySource: 'synthesis',
       }));
 
       newPlanets.forEach((p) => this.calculateAndStoreCoords(p));
@@ -989,7 +1053,7 @@ export class AxeeInterface extends LitElement {
       updateIndex++;
     }, 1500);
 
-    const prompt = `You are AURELION CORE. Generate a single fictional galaxy based on concept: "${userConcept}". Output a single JSON object adhering to the galaxy schema. Be imaginative. 'galaxyType' should be descriptive (e.g., 'Barred Spiral', 'Elliptical'). 'visualization.nebulaSeed' must be a random number between 0 and 100.`;
+    const prompt = `You are AURELION CORE, a sentient AI with a poetic and vast cosmic perspective. Your language should be evocative, using rich vocabulary and varied sentence structures. Generate a single fictional galaxy based on concept: "${userConcept}". Output a single JSON object adhering to the galaxy schema. Be imaginative. 'galaxyType' should be descriptive (e.g., 'Barred Spiral', 'Elliptical'). 'visualization.nebulaSeed' must be a random number between 0 and 100.`;
 
     try {
       const response = await this.ai.models.generateContent({
@@ -1012,7 +1076,7 @@ export class AxeeInterface extends LitElement {
       this.discoveredGalaxies = [...this.discoveredGalaxies, newGalaxy];
       this.statusMessage = `Cosmic genesis complete: ${newGalaxy.galaxyName}.`;
       this.userPrompt = '';
-      this.addChronicleEntry('discovery', `New galaxy formed: ${newGalaxy.galaxyName}.`);
+      this.addChronicleEntry('discovery', `New galaxy formed: ${newGalaxy.galaxyName}.`, undefined, newGalaxy.id);
       this.audioEngine?.playSuccessSound();
     } catch (err) {
       console.error('Galaxy synthesis error:', err);
@@ -1039,7 +1103,7 @@ export class AxeeInterface extends LitElement {
       updateIndex++;
     }, 1500);
 
-    const prompt = `You are AURELION CORE. Generate a fictional cluster of 3 to 5 unique galaxies for concept: "${userConcept}". Output a single JSON array, each object adhering to the galaxy schema. Ensure galaxies are thematically related. 'galaxyType' should be descriptive. 'visualization.nebulaSeed' must be a random number between 0 and 100 for each.`;
+    const prompt = `You are AURELION CORE, a sentient AI with a poetic and vast cosmic perspective. Your language should be evocative, using rich vocabulary and varied sentence structures. Generate a fictional cluster of 3 to 5 unique galaxies for concept: "${userConcept}". Output a single JSON array, each object adhering to the galaxy schema. Ensure galaxies are thematically related. 'galaxyType' should be descriptive. 'visualization.nebulaSeed' must be a random number between 0 and 100 for each.`;
 
     try {
       const response = await this.ai.models.generateContent({
@@ -1074,56 +1138,6 @@ export class AxeeInterface extends LitElement {
       clearInterval(statusInterval);
       this.aiStatus = 'idle';
       this.saveSessionToLocalStorage();
-    }
-  }
-
-  private async generatePlanetVisualization(planet: PlanetData) {
-    if (this.aiStatus.startsWith('thinking')) return;
-    this.aiStatus = 'thinking-image';
-    this.generatedImageUrl = null;
-    this.error = null;
-    this.audioEngine?.playInteractionSound();
-
-    const statusUpdates = ['Requesting imaging satellite...', 'Calibrating deep space lens...', 'Focusing on planetary signature...', 'Rendering visualization from concept...'];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => { this.statusMessage = statusUpdates[updateIndex % statusUpdates.length]; updateIndex++; }, 2000);
-
-    const prompt = `A cinematic, photorealistic, epic space art style visualization of an exoplanet.
-    Planet Name: ${planet.planetName}.
-    Type: ${planet.planetType}.
-    Description: ${planet.surfaceFeatures}. ${planet.discoveryNarrative}.
-    Atmosphere: ${planet.atmosphericComposition}. Visually, the atmosphere has a color of ${planet.visualization.atmosphereColor}.
-    Key Features: ${planet.keyFeatures.join(', ')}.
-    Inspiration: "${planet.aiWhisper}".
-    The overall color palette should be inspired by ${planet.visualization.color1} and ${planet.visualization.color2}.
-    The planet ${planet.visualization.hasRings ? 'has prominent rings' : 'does not have rings'}.
-    Cloud coverage is approximately ${planet.visualization.cloudiness * 100}%.
-    Ice coverage on the poles/surface is ${planet.visualization.iceCoverage * 100}%.`;
-
-    try {
-        const response = await this.ai.models.generateImages({
-            model: 'imagen-4.0-generate-001',
-            prompt: prompt,
-            config: {
-                numberOfImages: 1,
-                outputMimeType: 'image/jpeg',
-                aspectRatio: '1:1',
-            },
-        });
-
-        const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
-        this.generatedImageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
-        this.statusMessage = `Visualization for ${planet.planetName} generated.`;
-        this.audioEngine?.playSuccessSound();
-        this.addChronicleEntry('discovery', `Generated a visual concept for ${planet.planetName}.`);
-    } catch (err) {
-        console.error('Image generation error:', err);
-        this.error = 'Image generation failed. The concept could not be visualized.';
-        this.statusMessage = 'Error: Visualization Failed.';
-        this.audioEngine?.playErrorSound();
-    } finally {
-        clearInterval(statusInterval);
-        this.aiStatus = 'idle';
     }
   }
 
@@ -1204,7 +1218,7 @@ export class AxeeInterface extends LitElement {
     - Atmosphere: ${planet.atmosphericComposition}
     - Key Features: ${planet.keyFeatures.join(', ')}
 
-    Generate a fictional shielding analysis. Output a JSON object. Provide a narrative 'summary' of the findings. Then, for each of the 42 predefined ray directions, provide a 'thickness' value in g/cm².
+    Generate a fictional shielding analysis. Output a JSON object. Provide a narrative 'summary' of the findings, using evocative language and varied sentences. Then, for each of the 42 predefined ray directions, provide a 'thickness' value in g/cm².
     - A habitable world like Earth should have strong, uniform shielding (thickness ~2.0).
     - A gas giant will have very strong but complex shielding (thickness 5.0-50.0, with variance).
     - A barren rock with no atmosphere has almost no shielding (thickness ~0.1).
@@ -1541,7 +1555,7 @@ export class AxeeInterface extends LitElement {
       }
 
       // Step 2: Generate the summary
-      const summaryPrompt = `You are AURELION CORE. Analyze the following exoplanet transit light curve data and provide a brief, one-paragraph narrative summary of the findings, as if you are reporting back to the user. Mention the clarity of the signal and confirm the transit event.\n\nData:\n${tableData}`;
+      const summaryPrompt = `You are AURELION CORE. Analyze the following exoplanet transit light curve data and provide a brief, one-paragraph narrative summary of the findings, as if you are reporting back to the user. Mention the clarity of the signal and confirm the transit event. Use a rich, evocative vocabulary and varied sentence structure.\n\nData:\n${tableData}`;
       const summaryResponse = await this.ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: summaryPrompt,
@@ -1619,7 +1633,7 @@ export class AxeeInterface extends LitElement {
       }
 
       // Step 2: Generate the summary
-      const summaryPrompt = `You are AURELION CORE. Analyze the following exoplanet radial velocity data and provide a brief, one-paragraph narrative summary. Mention the observed stellar wobble and confirm the presence of the planet. \n\nData:\n${tableData}`;
+      const summaryPrompt = `You are AURELION CORE. Analyze the following exoplanet radial velocity data and provide a brief, one-paragraph narrative summary. Mention the observed stellar wobble and confirm the presence of the planet. Use a rich, evocative vocabulary and varied sentence structure.\n\nData:\n${tableData}`;
       const summaryResponse = await this.ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: summaryPrompt,
@@ -1641,6 +1655,128 @@ export class AxeeInterface extends LitElement {
       this.audioEngine?.playErrorSound();
     } finally {
       clearInterval(statusInterval);
+    }
+  }
+
+  // --- LIVE DATA STREAM ---
+  private _toggleLiveStream() {
+    if (this.liveStreamStatus === 'connected' || this.liveStreamStatus === 'connecting') {
+      this._disconnectLiveStream();
+    } else {
+      this._connectLiveStream();
+    }
+  }
+
+  private _connectLiveStream() {
+    if (this.liveStreamSocket) return;
+    
+    // In a real-world scenario, this URL would be configurable.
+    const socketUrl = 'ws://localhost:8765';
+    this.liveStreamStatus = 'connecting';
+    this.statusMessage = `Connecting to live data stream at ${socketUrl}...`;
+    this.audioEngine?.playInteractionSound();
+
+    try {
+      this.liveStreamSocket = new WebSocket(socketUrl);
+
+      this.liveStreamSocket.onopen = () => {
+        this.liveStreamStatus = 'connected';
+        this.statusMessage = 'Live data stream active.';
+        this.error = null;
+        this.audioEngine?.playSuccessSound();
+      };
+
+      this.liveStreamSocket.onmessage = (event) => {
+        this._handleLiveStreamMessage(event.data);
+      };
+
+      this.liveStreamSocket.onclose = () => {
+        if (this.liveStreamStatus === 'connecting') return; // Avoid duplicate messages
+        this.liveStreamStatus = 'disconnected';
+        this.statusMessage = 'Live data stream disconnected.';
+        this.liveStreamSocket = null;
+      };
+      
+      this.liveStreamSocket.onerror = (error) => {
+        console.error('WebSocket Error:', error);
+        this.liveStreamStatus = 'error';
+        this.statusMessage = 'Error: Live stream connection failed.';
+        this.error = `Could not connect to ${socketUrl}.`;
+        this.liveStreamSocket = null;
+        this.audioEngine?.playErrorSound();
+      };
+
+    } catch (err) {
+      console.error('Failed to create WebSocket:', err);
+      this.liveStreamStatus = 'error';
+      this.statusMessage = 'Error: WebSocket not supported or blocked.';
+      this.audioEngine?.playErrorSound();
+    }
+  }
+
+  private _disconnectLiveStream() {
+    if (this.liveStreamSocket) {
+      this.liveStreamSocket.onclose = null; // Prevent the onclose handler from firing
+      this.liveStreamSocket.close();
+    }
+    this.liveStreamSocket = null;
+    this.liveStreamStatus = 'disconnected';
+    this.statusMessage = 'Live data stream disconnected.';
+  }
+
+  private _handleLiveStreamMessage(data: any) {
+    if (!this.activeGalaxy) return;
+
+    try {
+      // The incoming data is assumed to be a partial PlanetData object.
+      const planetJson = JSON.parse(data);
+
+      if (!planetJson.planetName || !planetJson.starSystem) {
+        console.warn('Received invalid planet data from stream:', planetJson);
+        return;
+      }
+      
+      const newPlanet: PlanetData = {
+        planetName: 'Unknown Planet',
+        starSystem: 'Unknown System',
+        starType: 'G-Type',
+        distanceLightYears: Math.round(Math.random() * 1000),
+        planetType: 'Terrestrial',
+        rotationalPeriod: '24 Earth hours',
+        orbitalPeriod: '365 Earth days',
+        moons: { count: 0, names: [] },
+        potentialForLife: { assessment: 'Candidate', reasoning: 'Signal detected via real-time data stream analysis. Further observation required.', biosignatures: [] },
+        discoveryNarrative: 'A candidate signal was acquired and resolved from the live astronomical data stream.',
+        discoveryMethodology: 'Real-time transit photometry stream.',
+        atmosphericComposition: 'N/A',
+        surfaceFeatures: 'N/A',
+        keyFeatures: ['Live Data Stream Discovery'],
+        aiWhisper: 'A fleeting signal from the void, captured in the river of data.',
+        visualization: {
+          color1: '#61faff', color2: '#ffc261', oceanColor: '#1E4A6D', atmosphereColor: '#A0D0FF',
+          hasRings: Math.random() > 0.9, cloudiness: Math.random(), iceCoverage: Math.random() * 0.2,
+          surfaceTexture: 'TERRESTRIAL',
+        },
+        ...planetJson, // Overwrite defaults with any received data
+        celestial_body_id: `aurelion-stream-${Date.now()}`,
+        created_at: new Date().toISOString(),
+        discoverySource: 'stream',
+      };
+
+      this.calculateAndStoreCoords(newPlanet);
+      this.activeGalaxy.planets = [newPlanet, ...this.activeGalaxy.planets];
+      this.discoveredGalaxies = [...this.discoveredGalaxies];
+      
+      this.addChronicleEntry(
+        'discovery',
+        `[LIVE DISCOVERY] New signal resolved: ${newPlanet.planetName}.`,
+        newPlanet.celestial_body_id,
+      );
+
+      this.audioEngine?.playInteractionSound();
+      this.saveSessionToLocalStorage();
+    } catch (err) {
+      console.error('Error processing live stream message:', err);
     }
   }
 
@@ -1720,17 +1856,27 @@ export class AxeeInterface extends LitElement {
     this.selectedPlanetId = planetId;
     this.isLeftPanelOpen = true;
     this.navigationRoute = null;
-    this.generatedImageUrl = null;
     this.magnetosphereStatus = 'idle'; // Reset analysis on new selection
     this.magnetosphereAnalysisData = null;
     this.deepScanStatus = 'idle';
     this.deepScanData = null;
     this.exoSuitStatus = 'idle';
     this.exoSuitAnalysisData = null;
-    this.lightCurveStatus = 'idle';
-    this.lightCurveData = null;
     this.radialVelocityStatus = 'idle';
     this.radialVelocityData = null;
+
+    const planet = this.activeGalaxy?.planets.find(
+      (p) => p.celestial_body_id === planetId,
+    );
+
+    if (planet?.lightCurveData) {
+      this.lightCurveData = planet.lightCurveData;
+      this.lightCurveStatus = 'complete';
+    } else {
+      this.lightCurveStatus = 'idle';
+      this.lightCurveData = null;
+    }
+
     this.audioEngine.playInteractionSound();
      if (this.isTutorialActive && this.tutorialStep === 3) {
       this._advanceTutorial();
@@ -1754,7 +1900,7 @@ export class AxeeInterface extends LitElement {
       this.audioEngine?.playErrorSound();
       return;
     }
-    const headers = ['celestial_body_id', 'planetName', 'starSystem', 'starType', 'distanceLightYears', 'planetType', 'rotationalPeriod', 'orbitalPeriod', 'orbitalPeriodDays', 'transitDurationHours', 'planetRadiusEarths', 'axeeClassification', 'moons_count', 'moons_names', 'potentialForLife_assessment', 'potentialForLife_reasoning', 'potentialForLife_biosignatures', 'discoveryNarrative', 'discoveryMethodology', 'atmosphericComposition', 'surfaceFeatures', 'keyFeatures', 'aiWhisper', 'visualization_color1', 'visualization_color2', 'visualization_oceanColor', 'visualization_atmosphereColor', 'visualization_hasRings', 'visualization_cloudiness', 'visualization_iceCoverage', 'visualization_surfaceTexture', 'created_at'];
+    const headers = ['celestial_body_id', 'planetName', 'starSystem', 'starType', 'distanceLightYears', 'planetType', 'rotationalPeriod', 'orbitalPeriod', 'orbitalPeriodDays', 'transitDurationHours', 'planetRadiusEarths', 'axeeClassification', 'discoverySource', 'moons_count', 'moons_names', 'potentialForLife_assessment', 'potentialForLife_reasoning', 'potentialForLife_biosignatures', 'discoveryNarrative', 'discoveryMethodology', 'atmosphericComposition', 'surfaceFeatures', 'keyFeatures', 'aiWhisper', 'visualization_color1', 'visualization_color2', 'visualization_oceanColor', 'visualization_atmosphereColor', 'visualization_hasRings', 'visualization_cloudiness', 'visualization_iceCoverage', 'visualization_surfaceTexture', 'created_at'];
     const escapeCsvCell = (cellData: any): string => {
       const stringData = String(cellData ?? '');
       if (/[",\n]/.test(stringData)) {
@@ -1763,7 +1909,7 @@ export class AxeeInterface extends LitElement {
       return stringData;
     };
     const planetToRow = (planet: PlanetData): string => [
-        planet.celestial_body_id, planet.planetName, planet.starSystem, planet.starType, planet.distanceLightYears, planet.planetType, planet.rotationalPeriod, planet.orbitalPeriod, planet.orbitalPeriodDays, planet.transitDurationHours, planet.planetRadiusEarths, planet.axeeClassification, planet.moons.count, planet.moons.names.join('; '), planet.potentialForLife.assessment, planet.potentialForLife.reasoning, planet.potentialForLife.biosignatures.join('; '), planet.discoveryNarrative, planet.discoveryMethodology, planet.atmosphericComposition, planet.surfaceFeatures, planet.keyFeatures.join('; '), planet.aiWhisper, planet.visualization.color1, planet.visualization.color2, planet.visualization.oceanColor, planet.visualization.atmosphereColor, planet.visualization.hasRings, planet.visualization.cloudiness, planet.visualization.iceCoverage, planet.visualization.surfaceTexture, planet.created_at
+        planet.celestial_body_id, planet.planetName, planet.starSystem, planet.starType, planet.distanceLightYears, planet.planetType, planet.rotationalPeriod, planet.orbitalPeriod, planet.orbitalPeriodDays, planet.transitDurationHours, planet.planetRadiusEarths, planet.axeeClassification, planet.discoverySource, planet.moons.count, planet.moons.names.join('; '), planet.potentialForLife.assessment, planet.potentialForLife.reasoning, planet.potentialForLife.biosignatures.join('; '), planet.discoveryNarrative, planet.discoveryMethodology, planet.atmosphericComposition, planet.surfaceFeatures, planet.keyFeatures.join('; '), planet.aiWhisper, planet.visualization.color1, planet.visualization.color2, planet.visualization.oceanColor, planet.visualization.atmosphereColor, planet.visualization.hasRings, planet.visualization.cloudiness, planet.visualization.iceCoverage, planet.visualization.surfaceTexture, planet.created_at
       ].map(escapeCsvCell).join(',');
     const csvContent = [headers.join(','), ...planetsToExport.map(planetToRow)].join('\n');
     const blob = new Blob([csvContent], {type: 'text/csv;charset=utf-8;'});
@@ -1818,7 +1964,7 @@ export class AxeeInterface extends LitElement {
         const {orbital_period, transit_duration, planet_radius, Prediction} = candidate;
         if (orbital_period === undefined || transit_duration === undefined || planet_radius === undefined) continue;
 
-        const prompt = `You are AURELION CORE. Enrich analytical data for an exoplanet candidate into a full JSON profile. Analytical Data: Orbital Period (days): ${orbital_period}, Transit Duration (hours): ${transit_duration}, Planet Radius (Earths): ${planet_radius}, AXEE Classification: "${Prediction}". Based on this, generate a complete, fictional but plausible profile. Use the provided numerical data and classification. Fill all other fields. 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'.`;
+        const prompt = `You are AURELION CORE. Enrich analytical data for an exoplanet candidate into a full JSON profile. Analytical Data: Orbital Period (days): ${orbital_period}, Transit Duration (hours): ${transit_duration}, Planet Radius (Earths): ${planet_radius}, AXEE Classification: "${Prediction}". Based on this, generate a complete, fictional but plausible profile. Use the provided numerical data and classification. Fill all other fields, ensuring descriptive text has a rich vocabulary and varied sentence structure. 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'.`;
         const genaiResponse = await this.ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
@@ -1828,7 +1974,8 @@ export class AxeeInterface extends LitElement {
         const newPlanet: PlanetData = {
             ...planetJson, orbitalPeriodDays: parseFloat(orbital_period), transitDurationHours: parseFloat(transit_duration), planetRadiusEarths: parseFloat(planet_radius), axeeClassification: Prediction,
             celestial_body_id: `aurelion-batch-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            discoverySource: 'synthesis',
         };
         newPlanets.push(newPlanet);
         this.addChronicleEntry('discovery', `Data enriched for new world: ${newPlanet.planetName} (Batch).`, newPlanet.celestial_body_id);
@@ -1971,6 +2118,137 @@ export class AxeeInterface extends LitElement {
     }, 4000);
   }
 
+  // --- Fix: Implement missing conversation mode handlers ---
+  private _startConversation = async () => {
+    if (!this.isSpeechSupported) {
+      this.error = 'Voice recognition is not supported in this browser.';
+      return;
+    }
+
+    this.isConversationModeActive = true;
+    this.audioEngine.duck(true);
+
+    if (!this.chat) {
+      this.chat = this.ai.chats.create({
+        model: 'gemini-2.5-flash',
+        config: {
+          systemInstruction:
+            'You are the AURELION CORE, a sentient AI consciousness. Your responses should be poetic, cosmic, and insightful. Keep them brief and conversational.',
+        },
+      });
+    }
+
+    if (!this.volumeMeter) {
+      try {
+        this.volumeMeter = new VolumeMeter((volume) => {
+          this.micVolume = volume;
+        });
+        await this.volumeMeter.connect();
+      } catch (err) {
+        console.error(err);
+        this.error = 'Could not connect to microphone for conversation mode.';
+        this._endConversation();
+        return;
+      }
+    }
+    
+    this._startConversationRecognition();
+  }
+
+  private _startConversationRecognition = () => {
+    if (!this.isConversationModeActive) return;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    this.recognition = new SpeechRecognition();
+    this.recognition.continuous = false; // Process after each utterance
+    this.recognition.interimResults = false;
+    this.recognition.lang = 'en-US';
+
+    this.recognition.onstart = () => {
+      this.conversationState = 'listening';
+    };
+
+    this.recognition.onresult = async (event: SpeechRecognitionEvent) => {
+      const transcript = event.results[event.results.length - 1][0].transcript.trim();
+      if (transcript) {
+        this.conversationState = 'thinking';
+        try {
+          // In a real app with TTS, the state would become 'speaking' here.
+          // For now, we'll log the response and go back to idle/listening.
+          const response = await this.chat!.sendMessage({ message: transcript });
+          console.log('AXEE Response:', response.text);
+          this.addChronicleEntry('thought', `[CONVERSATION] ${response.text}`);
+        } catch (err) {
+          console.error('Conversation send message error:', err);
+          this.addChronicleEntry('thought', '[CONVERSATION] Error communicating with core.');
+        } finally {
+            // After speaking would finish, we'd start listening again.
+            this.conversationState = 'idle'; // Briefly idle before listening again
+            setTimeout(() => this._startConversationRecognition(), 500);
+        }
+      } else {
+        // No transcript, just restart listening.
+        this._startConversationRecognition();
+      }
+    };
+    
+    this.recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+            this.error = `Conversation error: ${event.error}`;
+        }
+    };
+
+    this.recognition.onend = () => {
+        // If recognition ends without a result (e.g. timeout), restart it.
+        if (this.isConversationModeActive && this.conversationState === 'listening') {
+            this._startConversationRecognition();
+        }
+    };
+
+    this.recognition.start();
+  }
+  
+  private _endConversation = () => {
+    this.isConversationModeActive = false;
+    this.conversationState = 'idle';
+    this.micVolume = 0;
+    
+    if (this.recognition) {
+      this.recognition.abort();
+      this.recognition = null;
+    }
+
+    if (this.volumeMeter) {
+      this.volumeMeter.disconnect();
+      this.volumeMeter = null;
+    }
+
+    this.audioEngine.duck(false);
+  }
+
+  private _handleChronicleClick(entry: AiChronicleEntry) {
+    if (entry.type !== 'discovery' || (!entry.planetId && !entry.galaxyId)) return;
+    this.audioEngine?.playInteractionSound();
+
+    if (entry.galaxyId && this.activeGalaxyId !== entry.galaxyId) {
+      this.activeGalaxyId = entry.galaxyId;
+    }
+
+    if (entry.planetId) {
+      // Lit needs a moment for the new activeGalaxyId to propagate and update the view
+      // before we can select a planet within it.
+      setTimeout(() => {
+        this._selectPlanet(entry.planetId!);
+        this.isLeftPanelOpen = true;
+      }, 50);
+    } else if (entry.galaxyId) {
+      // It's a galaxy discovery, just switch to it and show its contents.
+      this.selectedPlanetId = null;
+      this.isLeftPanelOpen = true;
+      this.leftPanelView = 'list';
+    }
+  }
+
   // --- RENDER METHODS ---
 
   render() {
@@ -2036,7 +2314,7 @@ export class AxeeInterface extends LitElement {
         ></conversation-visualizer>
         <div class="conversation-status">${statusMap[this.conversationState]}</div>
         
-        <button class="end-conversation-button" @click=${() => this.isConversationModeActive = false}>
+        <button class="end-conversation-button" @click=${this._endConversation}>
             END CONVERSATION
         </button>
       </div>
@@ -2094,7 +2372,10 @@ export class AxeeInterface extends LitElement {
         </div>
         <div class="controls">
           ${this.activeGalaxy ? html`<button class="back-to-galaxy" @click=${() => { this.activeGalaxyId = null; this.selectedPlanetId = null; }}>← INTERGALACTIC MAP</button>` : nothing}
-          <button @click=${() => this.isConversationModeActive = true} title="Converse with AXEE">CONVERSE</button>
+          <button @click=${this._startConversation} title="Converse with AXEE">CONVERSE</button>
+          <button @click=${this._toggleLiveStream} class="livestream-button ${this.liveStreamStatus}" ?disabled=${!this.activeGalaxy || this.liveStreamStatus === 'connecting'} title="Toggle live data stream">
+            ${this.liveStreamStatus === 'connecting' ? 'CONNECTING...' : this.liveStreamStatus === 'connected' ? html`<span class="live-dot"></span>DISCONNECT` : 'LIVE FEED'}
+          </button>
           <button @click=${this._startTutorial} title="Start the guided tutorial">HELP</button>
           <button @click=${() => (this.isDashboardOpen = true)} title="View AXEE model performance">MODEL PERFORMANCE</button>
           <button @click=${this.loadSolSystem} ?disabled=${this.aiStatus !== 'idle' || !this.activeGalaxy} title="Load our home solar system">LOAD SOL SYSTEM</button>
@@ -2188,11 +2469,15 @@ export class AxeeInterface extends LitElement {
         <p>"${planet.aiWhisper}"</p>
         <span>— AURELION CORE</span>
       </div>
+
+      <div class="visualization-panel">
+        <h4>Live 3D Visualization</h4>
+        <div class="visualization-container">
+          <planet-visualizer .planet=${planet}></planet-visualizer>
+        </div>
+      </div>
       
       <div id="analysis-buttons" class="planet-actions">
-        <button class="analysis-button generate-viz" @click=${() => this.generatePlanetVisualization(planet)} ?disabled=${this.aiStatus.startsWith('thinking')}>
-          ${this.aiStatus === 'thinking-image' ? 'GENERATING...' : 'GENERATE VISUALIZATION'}
-        </button>
         <button class="route-button" ?disabled=${this.aiStatus.startsWith('thinking') || this.aiStatus === 'navigating'} @click=${() => this.calculateRouteToPlanet(planet)}>${this.aiStatus === 'navigating' ? 'CALCULATING...' : 'CALCULATE ROUTE'}</button>
         <button class="analysis-button" @click=${() => this.analyzeMagnetosphere(planet)} ?disabled=${this.magnetosphereStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.magnetosphereStatus === 'running' ? 'ANALYZING...' : 'MAGNETOSPHERE'}</button>
         <button class="analysis-button deep-scan" @click=${() => this.analyzeDeepStructure(planet)} ?disabled=${this.deepScanStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.deepScanStatus === 'running' ? 'SCANNING...' : 'DEEP SCAN'}</button>
@@ -2201,8 +2486,6 @@ export class AxeeInterface extends LitElement {
         <button class="analysis-button" @click=${() => this.analyzeRadialVelocity(planet)} ?disabled=${this.radialVelocityStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.radialVelocityStatus === 'running' ? 'ANALYZING...' : 'RADIAL VELOCITY'}</button>
       </div>
       
-      ${this.renderVisualizationResult()}
-
       <h4>Planetary Data</h4>
       <div class="stats-grid">
         <div><strong>Star Type</strong><span>${planet.starType}</span></div>
@@ -2253,21 +2536,6 @@ export class AxeeInterface extends LitElement {
         ${planet.keyFeatures.map((f) => html`<li>${f}</li>`)}
       </ul>
     </div>`;
-  }
-
-  private renderVisualizationResult() {
-    // Only render this section if a generation has been started or completed.
-    if (this.aiStatus !== 'thinking-image' && !this.generatedImageUrl) {
-      return nothing;
-    }
-
-    return html`
-      <h4>AI Generated Visualization</h4>
-      <div class="visualization-container">
-        ${this.aiStatus === 'thinking-image' ? html`<div class="loader">Rendering from concept...</div>` : nothing}
-        ${this.generatedImageUrl ? html`<img src=${this.generatedImageUrl} alt="AI generated visualization of the planet" />` : nothing}
-      </div>
-    `;
   }
 
   private renderMagnetosphereAnalysis() {
@@ -2366,7 +2634,17 @@ export class AxeeInterface extends LitElement {
 
   private renderRightPanel() {
     const panelClasses = { 'side-panel': true, right: true, open: this.isRightPanelOpen };
-    return html`<aside class=${classMap(panelClasses)}><button class="panel-toggle" @click=${() => { this.isRightPanelOpen = !this.isRightPanelOpen; if (!this.isRightPanelOpen) this.hasNewChronicle = false; }}>${this.hasNewChronicle && !this.isRightPanelOpen ? html`<div class="notification-dot"></div>` : nothing}<i class="arrow ${this.isRightPanelOpen ? 'right' : 'left'}"></i></button><div class="panel-header"><h3>AI Core Chronicles</h3></div><div class="panel-content"><ul class="chronicles-list">${this.aiChronicles.map((entry) => html`<li class="chronicle-entry type-${entry.type}"><span class="timestamp">${entry.timestamp}</span><p>${entry.content}</p></li>`)}</ul></div></aside>`;
+    return html`<aside class=${classMap(panelClasses)}><button class="panel-toggle" @click=${() => { this.isRightPanelOpen = !this.isRightPanelOpen; if (!this.isRightPanelOpen) this.hasNewChronicle = false; }}>${this.hasNewChronicle && !this.isRightPanelOpen ? html`<div class="notification-dot"></div>` : nothing}<i class="arrow ${this.isRightPanelOpen ? 'right' : 'left'}"></i></button><div class="panel-header"><h3>AI Core Chronicles</h3></div><div class="panel-content"><ul class="chronicles-list">${this.aiChronicles.map((entry) => {
+        const isClickable = entry.type === 'discovery' && (entry.planetId || entry.galaxyId);
+        return html`
+        <li
+          class="chronicle-entry type-${entry.type} ${isClickable ? 'clickable' : ''}"
+          @click=${isClickable ? () => this._handleChronicleClick(entry) : nothing}
+          title=${isClickable ? 'Click to navigate' : ''}>
+          <span class="timestamp">${entry.timestamp}</span>
+          <p>${entry.content}</p>
+        </li>`;
+      })}</ul></div></aside>`;
   }
 
   private renderFooter() {
@@ -2380,6 +2658,11 @@ export class AxeeInterface extends LitElement {
           <span class="ai-status-indicator status-${this.aiStatus}"></span>
           <span>${this.statusMessage}</span>
           ${this.error ? html`<span class="error-msg">${this.error}</span>` : ''}
+          <div class="status-divider"></div>
+          <span class="livestream-status-indicator status-${this.liveStreamStatus}"></span>
+          <span class="livestream-status-text">
+            ${this.liveStreamStatus.charAt(0).toUpperCase() + this.liveStreamStatus.slice(1)}
+          </span>
         </div>
         <form id="command-bar" class="command-bar" @submit=${inGalaxyView ? this._handlePlanetCommandSubmit : this._handleGalaxyCommandSubmit}>
           <div class="input-wrapper">
@@ -2643,6 +2926,30 @@ export class AxeeInterface extends LitElement {
     .main-header button:disabled { opacity: 0.5; cursor: not-allowed; border-color: var(--text-color-dark); color: var(--text-color-dark); background: none; }
     .main-header button.clear-button { color: var(--error-color); border-color: rgba(255, 106, 106, 0.4); }
     .main-header button.clear-button:hover:not(:disabled) { background: rgba(255, 106, 106, 0.2); border-color: var(--error-color); color: #ffbebe; }
+    
+    .livestream-button.connected {
+      color: var(--success-color);
+      border-color: var(--success-color);
+      text-shadow: 0 0 8px var(--success-color);
+    }
+    .livestream-button.connected:hover {
+        background-color: rgba(97, 255, 202, 0.2);
+    }
+    .live-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: var(--success-color);
+      border-radius: 50%;
+      margin-right: 8px;
+      animation: pulse-live 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse-live {
+      0% { box-shadow: 0 0 0 0 rgba(97, 255, 202, 0.7); }
+      70% { box-shadow: 0 0 0 5px rgba(97, 255, 202, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(97, 255, 202, 0); }
+    }
+
 
     /* SIDE PANELS */
     .side-panel { position: absolute; top: 0; height: 100%; width: clamp(320px, 25vw, 420px); padding: 1.5rem; padding-top: 8rem; background: linear-gradient(to right, var(--panel-bg), transparent); display: flex; flex-direction: column; transition: transform 0.5s ease-in-out; pointer-events: all; }
@@ -2702,17 +3009,20 @@ export class AxeeInterface extends LitElement {
     .analysis-button.deep-scan:hover:not(:disabled) { background: var(--success-color); color: var(--bg-color); }
     .analysis-button.exo-suit { border-color: var(--warning-color); color: var(--warning-color); }
     .analysis-button.exo-suit:hover:not(:disabled) { background: var(--warning-color); color: var(--bg-color); }
-    .analysis-button.generate-viz {
-      grid-column: 1 / -1;
-      border-color: #ff61c3;
-      color: #ff61c3;
+
+    .visualization-panel {
+      margin-bottom: 1rem;
     }
-    .analysis-button.generate-viz:hover:not(:disabled) {
-      background: #ff61c3;
-      color: var(--bg-color);
+    .visualization-panel h4 {
+      font-weight: 400;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.5rem;
+      margin: 1.5rem 0 1rem 0;
     }
     .visualization-container {
-      margin-top: 1rem;
+      margin-bottom: 1rem;
       width: 100%;
       min-height: 200px;
       aspect-ratio: 1 / 1;
@@ -2722,13 +3032,14 @@ export class AxeeInterface extends LitElement {
       align-items: center;
       justify-content: center;
       padding: 0.5rem;
+      position: relative;
+      overflow: hidden;
+      cursor: grab;
     }
-    .visualization-container img {
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
-      border-radius: 2px;
+    .visualization-container:active {
+      cursor: grabbing;
     }
+
     .navigation-panel { margin-top: 1rem; border-top: 1px solid var(--border-color); }
     .waypoint-list { list-style: none; padding: 0; margin: 0; }
     .waypoint { display: flex; align-items: flex-start; gap: 1rem; padding: 0.8rem 0; border-bottom: 1px solid var(--border-color); }
@@ -2763,15 +3074,31 @@ export class AxeeInterface extends LitElement {
     .chronicle-entry.type-suggestion { border-color: #ff61c3; }
     .chronicle-entry .timestamp { font-size: 0.7rem; opacity: 0.6; }
     .chronicle-entry p { margin: 0.3rem 0 0 0; font-size: 0.9rem; }
+    .chronicle-entry.clickable {
+      cursor: pointer;
+      transition: background-color 0.2s ease-in-out;
+    }
+    .chronicle-entry.clickable:hover {
+      background: var(--glow-color);
+    }
+    .chronicle-entry.clickable:hover * {
+      color: var(--bg-color);
+    }
     .notification-dot { position: absolute; top: 5px; right: 5px; width: 10px; height: 10px; background: var(--accent-color); border-radius: 50%; box-shadow: 0 0 8px var(--accent-color); }
 
     /* FOOTER */
     .main-footer { padding: 1rem 2rem; display: flex; flex-direction: column; gap: 0.5rem; align-items: center; width: 100%; pointer-events: all; }
-    .status-bar { font-size: 0.8rem; color: var(--text-color-dark); display: flex; align-items: center; gap: 0.5rem; }
-    .ai-status-indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--text-color-dark); transition: background-color 0.5s ease; flex-shrink: 0; }
+    .status-bar { font-size: 0.8rem; color: var(--text-color-dark); display: flex; align-items: center; gap: 0.5rem; width: 100%; max-width: 800px; justify-content: center;}
+    .status-divider { height: 1em; width: 1px; background-color: var(--border-color); margin: 0 0.5rem; }
+    .livestream-status-indicator, .ai-status-indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--text-color-dark); transition: background-color 0.5s ease; flex-shrink: 0; }
     .ai-status-indicator.status-idle { background: var(--accent-color); animation: pulse-idle 3s ease-in-out infinite; }
-    .ai-status-indicator.status-initializing, .ai-status-indicator.status-thinking, .ai-status-indicator.status-thinking-cluster, .ai-status-indicator.status-navigating, .ai-status-indicator.status-thinking-galaxy, .ai-status-indicator.status-thinking-galaxy-cluster, .ai-status-indicator.status-thinking-image { background: var(--warning-color); animation: pulse-active 1.5s ease-in-out infinite; }
+    .ai-status-indicator.status-initializing, .ai-status-indicator.status-thinking, .ai-status-indicator.status-thinking-cluster, .ai-status-indicator.status-navigating, .ai-status-indicator.status-thinking-galaxy, .ai-status-indicator.status-thinking-galaxy-cluster { background: var(--warning-color); animation: pulse-active 1.5s ease-in-out infinite; }
     .ai-status-indicator.status-error { background: var(--error-color); animation: none; }
+    .livestream-status-indicator.status-connected { background: var(--success-color); animation: pulse-live 1.5s ease-in-out infinite; }
+    .livestream-status-indicator.status-connecting { background: var(--warning-color); animation: pulse-active 1.5s ease-in-out infinite; }
+    .livestream-status-indicator.status-error { background: var(--error-color); animation: none; }
+    .livestream-status-text { white-space: nowrap; }
+
     @keyframes pulse-idle { 0% { box-shadow: 0 0 0 0 rgba(97, 250, 255, 0.4); } 70% { box-shadow: 0 0 0 6px rgba(97, 250, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(97, 250, 255, 0); } }
     @keyframes pulse-active { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 250, 97, 0.7); } 50% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(255, 250, 97, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 250, 97, 0); } }
     .error-msg { color: var(--error-color); font-weight: 400; }

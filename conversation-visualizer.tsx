@@ -44,13 +44,16 @@ export class ConversationVisualizer extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+  }
+
+  firstUpdated() {
     this.initThree();
-    this.resizeObserver.observe(this);
+    this.resizeObserver.observe(this as unknown as Element);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    this.resizeObserver.unobserve(this);
+    this.resizeObserver.unobserve(this as unknown as Element);
     cancelAnimationFrame(this.animationFrameId);
     this.renderer?.dispose();
   }
@@ -71,7 +74,7 @@ export class ConversationVisualizer extends LitElement {
   
   private initThree() {
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(75, this.clientWidth / this.clientHeight, 0.1, 1000);
+    this.camera = new THREE.PerspectiveCamera(75, this.canvas.clientWidth / this.canvas.clientHeight, 0.1, 1000);
     this.camera.position.z = 2.5;
 
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
@@ -79,7 +82,7 @@ export class ConversationVisualizer extends LitElement {
     this.renderer.setClearColor(0x010206);
 
     const renderScene = new RenderPass(this.scene, this.camera);
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(this.clientWidth, this.clientHeight), 0.5, 0.5, 0.1);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(this.canvas.clientWidth, this.canvas.clientHeight), 0.5, 0.5, 0.1);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(renderScene);
     this.composer.addPass(bloomPass);
@@ -120,7 +123,7 @@ export class ConversationVisualizer extends LitElement {
 
   private handleResize() {
     if (!this.renderer || !this.camera) return;
-    const { clientWidth, clientHeight } = this;
+    const { clientWidth, clientHeight } = this.canvas;
     if (clientWidth === 0 || clientHeight === 0) return;
     this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();

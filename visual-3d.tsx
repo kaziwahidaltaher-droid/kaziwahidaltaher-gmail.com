@@ -874,7 +874,7 @@ export class AxeeVisuals3D extends LitElement {
     if (intersects.length > 0) {
       const clickedObject = intersects[0].object;
       if (clickedObject.userData.isPlanet) {
-        (this as EventTarget).dispatchEvent(
+        (this as unknown as EventTarget).dispatchEvent(
           new CustomEvent('planet-selected', {
             detail: {planetId: clickedObject.userData.id},
           }),

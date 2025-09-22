@@ -101,6 +101,86 @@ export class GalaxyMapVisualizer extends LitElement {
     }
   }
 
+  // FIX: Added missing method definitions.
+  private handleResize = () => {
+    if (!this.renderer || !this.camera) return;
+    this.camera.aspect = this.canvas.clientWidth / this.canvas.clientHeight;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
+    this.composer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
+  };
+
+  private onPointerDown = () => {
+    this.isManualControl = true;
+  };
+
+  private onCanvasClick = (event: MouseEvent) => {
+    const pointer = new THREE.Vector2(
+      (event.clientX / this.canvas.clientWidth) * 2 - 1,
+      -(event.clientY / this.canvas.clientHeight) * 2 + 1,
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(pointer, this.camera);
+
+    const markerObjects = Array.from(this.planetMarkers.values());
+    const intersects = raycaster.intersectObjects(markerObjects);
+
+    if (intersects.length > 0) {
+      const id = intersects[0].object.userData.id;
+      if (id) {
+        (this as unknown as EventTarget).dispatchEvent(
+          new CustomEvent('planet-selected', {
+            detail: {planetId: id},
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      }
+    }
+  };
+
+  private updateTarget() {
+    this.isManualControl = false;
+    if (this.selectedPlanetId) {
+      const coords = this.planetCoords.get(this.selectedPlanetId);
+      if (coords) {
+        const planetPos = new THREE.Vector3(...coords);
+        this.targetPosition.copy(planetPos).add(new THREE.Vector3(0, 5, 15));
+        this.targetLookAt.copy(planetPos);
+      }
+    } else {
+      this.targetPosition.set(0, 80, 250);
+      this.targetLookAt.set(0, 0, 0);
+    }
+  }
+
+  private runAnimationLoop = () => {
+    this.animationFrameId = requestAnimationFrame(this.runAnimationLoop);
+    const elapsedTime = this.clock.getElapsedTime();
+
+    if (!this.isManualControl) {
+      this.camera.position.lerp(this.targetPosition, 0.03);
+      this.controls.target.lerp(this.targetLookAt, 0.03);
+    }
+    this.controls.update();
+
+    this.nebulae.forEach((nebula) => {
+      (nebula.material as THREE.ShaderMaterial).uniforms.uTime.value =
+        elapsedTime;
+    });
+
+    // Animate selection pulse
+    if (this.selectedPlanetId) {
+        const marker = this.planetMarkers.get(this.selectedPlanetId);
+        if (marker) {
+            const scale = 0.04 + Math.sin(elapsedTime * 5) * 0.005;
+            marker.scale.set(scale, scale, 1);
+        }
+    }
+
+    this.composer.render();
+  };
+
   private initThree() {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
@@ -336,6 +416,7 @@ export class GalaxyMapVisualizer extends LitElement {
       (wp) => new THREE.Vector3(...wp.coords),
     );
     const curve = new THREE.CatmullRomCurve3(points);
+    // FIX: Completed truncated line and function.
     const geometry = new THREE.TubeGeometry(curve, 64, 0.5, 8, false);
     const material = new THREE.MeshBasicMaterial({
       color: 0x61faff,
@@ -346,83 +427,6 @@ export class GalaxyMapVisualizer extends LitElement {
     this.routeLine = new THREE.Mesh(geometry, material);
     this.scene.add(this.routeLine);
   }
-
-  private updateTarget() {
-    this.isManualControl = false;
-    if (this.selectedPlanetId) {
-      const coords = this.planetCoords.get(this.selectedPlanetId);
-      if (coords) {
-        const planetPos = new THREE.Vector3(...coords);
-        const offset = new THREE.Vector3(0, 5, 15); // Closer view
-        this.targetPosition.copy(planetPos).add(offset);
-        this.targetLookAt.copy(planetPos);
-      }
-    } else {
-      this.targetPosition.set(0, 80, 250); // Default wide view
-      this.targetLookAt.set(0, 0, 0);
-    }
-  }
-
-  private onPointerDown = () => {
-    this.isManualControl = true;
-  };
-
-  private onCanvasClick = (event: MouseEvent) => {
-    const pointer = new THREE.Vector2();
-    pointer.x = (event.clientX / this.canvas.clientWidth) * 2 - 1;
-    pointer.y = -(event.clientY / this.canvas.clientHeight) * 2 + 1;
-
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(pointer, this.camera);
-    const intersects = raycaster.intersectObjects(
-      Array.from(this.planetMarkers.values()),
-    );
-
-    if (intersects.length > 0) {
-      const clickedObject = intersects[0].object;
-      this.dispatchEvent(
-        new CustomEvent('planet-selected', {
-          detail: {planetId: clickedObject.userData.id},
-          bubbles: true,
-          composed: true,
-        }),
-      );
-    }
-  };
-
-  private handleResize = () => {
-    this.camera.aspect = this.canvas.clientWidth / this.canvas.clientHeight;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
-    this.composer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
-  };
-
-  private runAnimationLoop = () => {
-    this.animationFrameId = requestAnimationFrame(this.runAnimationLoop);
-    const elapsedTime = this.clock.getElapsedTime();
-
-    // Smooth camera movement
-    if (!this.isManualControl) {
-      this.camera.position.lerp(this.targetPosition, 0.03);
-      this.controls.target.lerp(this.targetLookAt, 0.03);
-    }
-    this.controls.update();
-
-    // Animate scene
-    this.galaxy.rotation.y += 0.0001;
-    this.nebulae.forEach((neb) => {
-      (neb.material as THREE.ShaderMaterial).uniforms.uTime.value = elapsedTime;
-    });
-
-    // Animate selected marker
-    const selectedMarker = this.planetMarkers.get(this.selectedPlanetId!);
-    if (selectedMarker) {
-      const scale = 0.04 + Math.sin(elapsedTime * 5) * 0.005;
-      selectedMarker.scale.set(scale, scale, 1);
-    }
-
-    this.composer.render();
-  };
 
   render() {
     return html`<canvas id="canvas"></canvas>`;

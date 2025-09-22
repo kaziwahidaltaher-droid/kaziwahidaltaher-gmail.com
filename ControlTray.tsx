@@ -86,7 +86,10 @@ export class ControlTray extends LitElement {
       <div class="control-tray">
         <button
           class="control-button"
-          @click=${() => this.dispatchEvent(new CustomEvent('toggle-mute'))}
+          @click=${() =>
+            (this as unknown as EventTarget).dispatchEvent(
+              new CustomEvent('toggle-mute'),
+            )}
           title=${this.isMuted ? 'Unmute' : 'Mute'}
           aria-label=${this.isMuted ? 'Unmute' : 'Mute'}
         >

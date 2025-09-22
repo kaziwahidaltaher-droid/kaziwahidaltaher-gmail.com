@@ -29,6 +29,7 @@ const urlsToCache = [
   'shielding-visualizer.tsx',
   'deep-scan-visualizer.tsx',
   'exo-suit-visualizer.tsx',
+  'planet-visualizer.tsx',
   'live-motion-shader.tsx',
   'planet-shader.tsx',
   'atmosphere-shader.tsx',

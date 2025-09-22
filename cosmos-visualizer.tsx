@@ -36,6 +36,11 @@ export class CosmosVisualizer extends LitElement {
 
   @query('#canvas') private canvas!: HTMLCanvasElement;
   @state() private viewMode: 'intergalactic' | 'galaxy' = 'galaxy';
+  @state() private hoveredObjectId: string | null = null;
+  @state() private hoveredObjectName: string = '';
+  @state() private tooltipPosition = { x: 0, y: 0, visible: false };
+  @state() private highlightedPlanets = new Map<string, number>();
+  @state() private lastActiveGalaxyId: string | null = null;
 
   // --- THREE.js CORE ---
   private renderer!: THREE.WebGLRenderer;
@@ -45,6 +50,7 @@ export class CosmosVisualizer extends LitElement {
   private controls!: OrbitControls;
   private clock = new THREE.Clock();
   private animationFrameId = 0;
+  private raycaster = new THREE.Raycaster();
 
   // --- SCENE OBJECTS ---
   private starfield!: THREE.Points;
@@ -52,10 +58,14 @@ export class CosmosVisualizer extends LitElement {
   private galaxyGroup = new THREE.Group(); // For planets and local objects
   private intergalacticGroup = new THREE.Group(); // For galaxies
   private galaxyVisuals = new Map<string, THREE.Group>();
+  private backgroundNebulae: THREE.Mesh[] = [];
   private planetVisuals = new Map<string, THREE.Group>();
   private planetOrbits = new Map<string, THREE.Mesh>();
   private routeLine: THREE.Mesh | null = null;
   private localGalaxyPoints!: THREE.Points;
+  private previouslyRenderedPlanetIds = new Set<string>();
+  private shockwaves: { mesh: THREE.Mesh, startTime: number }[] = [];
+
 
   // --- CAMERA & CONTROL ---
   private targetPosition = new THREE.Vector3(0, 0, 0);
@@ -77,8 +87,40 @@ export class CosmosVisualizer extends LitElement {
       width: 100%;
       height: 100%;
       display: block;
+      cursor: grab;
+    }
+    canvas:active {
+        cursor: grabbing;
+    }
+    .tooltip {
+      position: fixed;
+      transform: translate(15px, 15px);
+      background: rgba(1, 2, 6, 0.75);
+      backdrop-filter: blur(5px);
+      border: 1px solid rgba(97, 250, 255, 0.4);
+      color: #c0f0ff;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 100;
+      transition: opacity 0.2s ease;
+      animation: fadeIn 0.2s ease-out;
+      opacity: 0;
+    }
+    .tooltip.visible {
+        opacity: 1;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
   `;
+
+  constructor() {
+    super();
+  }
 
   connectedCallback() {
     super.connectedCallback();
@@ -90,6 +132,7 @@ export class CosmosVisualizer extends LitElement {
     window.removeEventListener('resize', this.handleResize);
     this.canvas?.removeEventListener('click', this.onCanvasClick);
     this.canvas?.removeEventListener('pointerdown', this.onPointerDown);
+    this.canvas?.removeEventListener('pointermove', this.onCanvasPointerMove);
     cancelAnimationFrame(this.animationFrameId);
     this.renderer?.dispose();
   }
@@ -99,6 +142,15 @@ export class CosmosVisualizer extends LitElement {
   }
 
   protected updated(changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>): void {
+    if (changedProperties.has('activeGalaxyId')) {
+      const previousGalaxyId = changedProperties.get('activeGalaxyId') as string | null | undefined;
+      if (this.activeGalaxyId) {
+          this.lastActiveGalaxyId = this.activeGalaxyId;
+      } else if (previousGalaxyId) {
+          this.lastActiveGalaxyId = previousGalaxyId;
+      }
+    }
+
     const previousViewMode = this.viewMode;
     this.viewMode = this.activeGalaxyId ? 'galaxy' : 'intergalactic';
 
@@ -107,14 +159,26 @@ export class CosmosVisualizer extends LitElement {
     }
 
     if (this.viewMode === 'intergalactic') {
-        if (changedProperties.has('galaxies')) this.updateGalaxyVisuals();
+      if (changedProperties.has('galaxies')) this.updateGalaxyVisuals();
+      if (changedProperties.has('activeGalaxyId') || changedProperties.has('galaxies')) {
+           this.updateGalaxyHighlights();
+      }
     } else { // galaxy view
-        if (changedProperties.has('activePlanets')) this.updatePlanetVisuals();
-        if (changedProperties.has('selectedPlanetId')) {
-            this.updateTarget();
-            this.updatePlanetVisuals();
-        }
-        if (changedProperties.has('navigationRoute')) this.updateNavigationRoute();
+      if (changedProperties.has('activePlanets')) {
+          const currentPlanetIds = new Set(this.activePlanets.map(p => p.celestial_body_id));
+          currentPlanetIds.forEach(id => {
+            if (!this.previouslyRenderedPlanetIds.has(id)) {
+              this.highlightedPlanets.set(id, Date.now());
+            }
+          });
+          this.previouslyRenderedPlanetIds = currentPlanetIds;
+          this.updatePlanetVisuals();
+      }
+      if (changedProperties.has('selectedPlanetId')) {
+          this.updateTarget();
+          this.updatePlanetVisuals();
+      }
+      if (changedProperties.has('navigationRoute')) this.updateNavigationRoute();
     }
   }
 
@@ -137,6 +201,7 @@ export class CosmosVisualizer extends LitElement {
     this.composer.addPass(bloomPass);
 
     this.createStarfield();
+    this.createBackgroundNebulae();
     this.createLocalGalaxy();
     this.scene.add(this.galaxyGroup);
     this.scene.add(this.intergalacticGroup);
@@ -147,9 +212,193 @@ export class CosmosVisualizer extends LitElement {
 
     this.canvas.addEventListener('click', this.onCanvasClick);
     this.canvas.addEventListener('pointerdown', this.onPointerDown);
+    this.canvas.addEventListener('pointermove', this.onCanvasPointerMove);
 
     this.runAnimationLoop();
   }
+
+  private handleResize = () => {
+    if (!this.renderer || !this.camera || !this.composer) return;
+    const { clientWidth, clientHeight } = this.canvas;
+    if (clientWidth === 0 || clientHeight === 0) return;
+    this.camera.aspect = clientWidth / clientHeight;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(clientWidth, clientHeight);
+    this.composer.setSize(clientWidth, clientHeight);
+  };
+
+  private onPointerDown = () => {
+    this.isManualControl = true;
+  };
+
+  private onCanvasClick = (event: MouseEvent) => {
+    const pointer = new THREE.Vector2(
+        (event.clientX / this.canvas.clientWidth) * 2 - 1,
+        -(event.clientY / this.canvas.clientHeight) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(pointer, this.camera);
+
+    if (this.viewMode === 'intergalactic') {
+        const galaxyObjects = Array.from(this.galaxyVisuals.values()).flatMap(group => group.children);
+        const intersects = this.raycaster.intersectObjects(galaxyObjects);
+        if (intersects.length > 0) {
+            const id = intersects[0].object.userData.id;
+            if (id) {
+                // FIX: Cast `this` to `EventTarget` to resolve TypeScript error.
+                (this as unknown as EventTarget).dispatchEvent(new CustomEvent('galaxy-selected', {
+                    detail: { galaxyId: id },
+                    bubbles: true,
+                    composed: true,
+                }));
+                this.createShockwave(id);
+            }
+        }
+    } else { // 'galaxy' view
+        const planetObjects = Array.from(this.planetVisuals.values()).flatMap(group => group.children);
+        const intersects = this.raycaster.intersectObjects(planetObjects, true);
+
+        if (intersects.length > 0) {
+            const clickedObject = intersects[0].object;
+            const id = clickedObject.userData.id;
+            if (id) {
+                // FIX: Cast `this` to `EventTarget` to resolve TypeScript error.
+                (this as unknown as EventTarget).dispatchEvent(new CustomEvent('planet-selected', {
+                    detail: { planetId: id },
+                    bubbles: true,
+                    composed: true,
+                }));
+            }
+        }
+    }
+  };
+
+  private onCanvasPointerMove = (event: PointerEvent) => {
+    const pointer = new THREE.Vector2(
+        (event.clientX / this.canvas.clientWidth) * 2 - 1,
+        -(event.clientY / this.canvas.clientHeight) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(pointer, this.camera);
+
+    let hovering = false;
+    let hoveredId: string | null = null;
+    let hoveredName = '';
+
+    if (this.viewMode === 'intergalactic') {
+        const galaxyObjects = Array.from(this.galaxyVisuals.values()).flatMap(group => group.children);
+        const intersects = this.raycaster.intersectObjects(galaxyObjects);
+        if (intersects.length > 0) {
+            hovering = true;
+            hoveredId = intersects[0].object.userData.id;
+            const galaxy = this.galaxies.find(g => g.id === hoveredId);
+            if (galaxy) hoveredName = galaxy.galaxyName;
+        }
+    } else {
+        const planetObjects = Array.from(this.planetVisuals.values()).flatMap(group => group.children.filter(c => c.userData.isPlanet));
+        const intersects = this.raycaster.intersectObjects(planetObjects, true);
+        if (intersects.length > 0) {
+            hovering = true;
+            hoveredId = intersects[0].object.userData.id;
+            const planet = this.activePlanets.find(p => p.celestial_body_id === hoveredId);
+            if (planet) hoveredName = planet.planetName;
+        }
+    }
+    
+    if (this.hoveredObjectId !== hoveredId) {
+        this.hoveredObjectId = hoveredId;
+        this.updatePlanetVisuals(); // to update shader uniform for planets
+    }
+
+    this.canvas.style.cursor = hovering ? 'pointer' : 'grab';
+    this.tooltipPosition = { x: event.clientX, y: event.clientY, visible: hovering };
+    this.hoveredObjectName = hoveredName;
+  };
+
+  private updateTarget() {
+    this.isManualControl = false;
+
+    if (this.viewMode === 'galaxy') {
+        this.controls.minDistance = 5;
+        this.controls.maxDistance = 500;
+        if (this.selectedPlanetId) {
+            const coords = this.activePlanetCoords.get(this.selectedPlanetId);
+            if (coords) {
+                const planetPos = new THREE.Vector3(...coords);
+                this.targetPosition.copy(planetPos).add(new THREE.Vector3(0, 5, 15));
+                this.targetLookAt.copy(planetPos);
+            }
+        } else {
+            this.targetPosition.set(0, 80, 250);
+            this.targetLookAt.set(0, 0, 0);
+        }
+    } else { // Intergalactic view
+        this.controls.minDistance = 200;
+        this.controls.maxDistance = 3000;
+        this.targetPosition.set(0, 400, 1500);
+        this.targetLookAt.set(0, 0, 0);
+    }
+  }
+
+  private runAnimationLoop = () => {
+    this.animationFrameId = requestAnimationFrame(this.runAnimationLoop);
+    const elapsedTime = this.clock.getElapsedTime();
+
+    if (!this.isManualControl && !this.isTransitioning) {
+      this.camera.position.lerp(this.targetPosition, 0.03);
+      this.controls.target.lerp(this.targetLookAt, 0.03);
+    }
+    this.controls.update();
+
+    // Update shaders
+    this.starfieldMaterial.uniforms.uTime.value = elapsedTime;
+
+    this.galaxyVisuals.forEach(group => {
+        const nebula = group.children[0] as THREE.Mesh;
+        if (nebula) {
+            const material = nebula.material as THREE.ShaderMaterial;
+            material.uniforms.uTime.value = elapsedTime;
+            material.uniforms.uCameraDistance.value = this.camera.position.distanceTo(group.position);
+        }
+    });
+
+    this.backgroundNebulae.forEach(nebula => {
+        const material = nebula.material as THREE.ShaderMaterial;
+        material.uniforms.uTime.value = elapsedTime;
+        material.uniforms.uCameraDistance.value = this.camera.position.distanceTo(nebula.position);
+    });
+
+    this.planetVisuals.forEach((group, id) => {
+        const highlightStartTime = this.highlightedPlanets.get(id);
+        const highlightAge = highlightStartTime ? (Date.now() - highlightStartTime) / 1000 : null;
+        
+        if (highlightAge !== null && highlightAge > 3.0) {
+            this.highlightedPlanets.delete(id);
+        }
+
+        group.traverse(child => {
+            if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
+                child.material.uniforms.uTime.value = elapsedTime;
+            }
+        });
+    });
+
+    this.localGalaxyPoints.rotation.y += 0.0003;
+    
+    this.shockwaves.forEach((shockwave, index) => {
+        const age = elapsedTime - shockwave.startTime;
+        if (age > 1.5) {
+            this.intergalacticGroup.remove(shockwave.mesh);
+            shockwave.mesh.geometry.dispose();
+            (shockwave.mesh.material as THREE.Material).dispose();
+            this.shockwaves.splice(index, 1);
+        } else {
+            const scale = 1.0 + age * 150.0;
+            shockwave.mesh.scale.set(scale, scale, scale);
+            (shockwave.mesh.material as THREE.ShaderMaterial).uniforms.opacity.value = 1.0 - (age / 1.5);
+        }
+    });
+
+    this.composer.render();
+  };
 
   private transitionView(isInitial = false) {
     this.isTransitioning = true;
@@ -174,13 +423,13 @@ export class CosmosVisualizer extends LitElement {
     const colors = new Float32Array(starCount * 3);
     const scales = new Float32Array(starCount);
     const color = new THREE.Color();
-    const range = 2000;
+    const range = 4000;
 
     for (let i = 0; i < starCount; i++) {
         const i3 = i * 3;
-        positions[i3] = (Math.random() - 0.5) * range * 2;
-        positions[i3 + 1] = (Math.random() - 0.5) * range * 2;
-        positions[i3 + 2] = (Math.random() - 0.5) * range * 2;
+        positions[i3] = (Math.random() - 0.5) * range;
+        positions[i3 + 1] = (Math.random() - 0.5) * range;
+        positions[i3 + 2] = (Math.random() - 0.5) * range;
         const randomHue = 0.55 + Math.random() * 0.15;
         const randomSaturation = 0.2 + Math.random() * 0.4;
         const randomLightness = 0.6 + Math.random() * 0.4;
@@ -234,62 +483,211 @@ export class CosmosVisualizer extends LitElement {
     this.galaxyGroup.add(this.localGalaxyPoints);
   }
 
+  private createBackgroundNebulae() {
+    const nebulaColors = [ { c1: '#1c0d2b', c2: '#682a5c' }, { c1: '#0d1b2b', c2: '#2a5c68' } ];
+    for (let i = 0; i < 8; i++) {
+        const colors = nebulaColors[i % nebulaColors.length];
+        const geometry = new THREE.PlaneGeometry(1000, 1000);
+        const material = new THREE.ShaderMaterial({
+            vertexShader: nebulaVs, fragmentShader: nebulaFs,
+            uniforms: {
+                uTime: { value: 0.0 }, uColor1: { value: new THREE.Color(colors.c1) }, uColor2: { value: new THREE.Color(colors.c2) },
+                uSeed: { value: Math.random() * 100 }, uCameraDistance: { value: 0.0 },
+            },
+            transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, opacity: 0.5,
+        });
+        const nebula = new THREE.Mesh(geometry, material);
+        nebula.position.set( (Math.random() - 0.5) * 5000, (Math.random() - 0.5) * 1000, (Math.random() - 0.5) * 5000 - 1500 );
+        nebula.scale.setScalar(2 + Math.random() * 3);
+        this.backgroundNebulae.push(nebula);
+        this.scene.add(nebula);
+    }
+  }
+
   private createGalaxyVisual(galaxy: GalaxyData) {
     const group = new THREE.Group();
-    const geometry = new THREE.PlaneGeometry(80, 80);
+    const geometry = new THREE.PlaneGeometry(120, 120);
     const material = new THREE.ShaderMaterial({
-      vertexShader: nebulaVs,
-      fragmentShader: nebulaFs,
+      vertexShader: nebulaVs, fragmentShader: nebulaFs,
       uniforms: {
-        uTime: {value: 0.0},
-        uColor1: {value: new THREE.Color(galaxy.visualization.color1)},
-        uColor2: {value: new THREE.Color(galaxy.visualization.color2)},
-        uSeed: {value: galaxy.visualization.nebulaSeed || Math.random() * 100},
-        uCameraDistance: {value: 0.0},
+        uTime: {value: 0.0}, uColor1: {value: new THREE.Color(galaxy.visualization.color1)}, uColor2: {value: new THREE.Color(galaxy.visualization.color2)},
+        uSeed: {value: galaxy.visualization.nebulaSeed || Math.random() * 100}, uCameraDistance: {value: 0.0},
       },
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      side: THREE.DoubleSide,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     });
     const nebulaMesh = new THREE.Mesh(geometry, material);
-    nebulaMesh.userData = { id: galaxy.id, isGalaxy: true };
+    nebulaMesh.userData = { id: galaxy.id };
 
-    const coreMaterial = new THREE.PointsMaterial({
-        color: galaxy.visualization.color1,
-        size: 20,
-        sizeAttenuation: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
+    const highlightRingGeometry = new THREE.RingGeometry(70, 72, 64);
+    const highlightRingMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, visible: false,
     });
-    const coreGeometry = new THREE.BufferGeometry();
-    coreGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0,0,0]), 3));
-    const corePoint = new THREE.Points(coreGeometry, coreMaterial);
-    corePoint.userData = { id: galaxy.id, isGalaxy: true };
-
+    const highlightRing = new THREE.Mesh(highlightRingGeometry, highlightRingMaterial);
+    highlightRing.userData.isHighlight = true;
+    
     group.add(nebulaMesh);
-    group.add(corePoint);
+    group.add(highlightRing);
     return group;
   }
 
   private updateGalaxyVisuals() {
-      const currentGalaxyIds = new Set(this.galaxies.map(g => g.id));
-      this.galaxyVisuals.forEach((group, id) => {
-          if (!currentGalaxyIds.has(id)) {
-              this.intergalacticGroup.remove(group);
-              this.galaxyVisuals.delete(id);
-          }
-      });
-      this.galaxies.forEach((galaxy, index) => {
-          if (!this.galaxyVisuals.has(galaxy.id)) {
-              const visual = this.createGalaxyVisual(galaxy);
-              visual.position.set((index % 5 - 2) * 200, 0, Math.floor(index / 5) * -200);
-              this.galaxyVisuals.set(galaxy.id, visual);
-              this.intergalacticGroup.add(visual);
-          }
-      });
+    const currentGalaxyIds = new Set(this.galaxies.map(g => g.id));
+    this.galaxyVisuals.forEach((group, id) => {
+        if (!currentGalaxyIds.has(id)) {
+            this.intergalacticGroup.remove(group);
+            this.galaxyVisuals.delete(id);
+        }
+    });
+
+    this.galaxies.forEach((galaxy, i) => {
+        let visual = this.galaxyVisuals.get(galaxy.id);
+        if (!visual) {
+            visual = this.createGalaxyVisual(galaxy);
+            this.galaxyVisuals.set(galaxy.id, visual);
+            this.intergalacticGroup.add(visual);
+        }
+        visual.position.set((i % 5 - 2) * 600, 0, Math.floor(i / 5) * -600);
+    });
   }
 
+  private updateGalaxyHighlights() {
+    this.galaxyVisuals.forEach((group, id) => {
+        const highlightRing = group.children.find(c => c.userData.isHighlight) as THREE.Mesh;
+        if (highlightRing) {
+            const isActive = id === this.activeGalaxyId || id === this.lastActiveGalaxyId;
+            highlightRing.visible = isActive;
+            if (isActive) {
+                (highlightRing.material as THREE.MeshBasicMaterial).opacity = id === this.activeGalaxyId ? 0.75 : 0.3;
+            }
+        }
+    });
+  }
+
+  private createPlanetVisual(planet: PlanetData): THREE.Group {
+    const group = new THREE.Group();
+    const { visualization, celestial_body_id } = planet;
+    
+    let seed = 0;
+    for (let i = 0; i < celestial_body_id.length; i++) seed += celestial_body_id.charCodeAt(i);
+    const seededRandom = (s: number) => { const x = Math.sin(s) * 10000; return x - Math.floor(x); };
+    const axialTilt = seededRandom(seed) * (Math.PI / 6);
+
+    const textureTypeMap: {[key: string]: number} = { TERRESTRIAL: 1, GAS_GIANT: 2, VOLCANIC: 3, ICY: 4 };
+    
+    const planetMaterial = new THREE.ShaderMaterial({
+        vertexShader: planetVs, fragmentShader: planetFs,
+        uniforms: {
+            uTime: { value: 0.0 }, uColor1: { value: new THREE.Color(visualization.color1) }, uColor2: { value: new THREE.Color(visualization.color2) },
+            uOceanColor: { value: new THREE.Color(visualization.oceanColor || '#000033') }, uCloudiness: { value: visualization.cloudiness || 0.0 }, uIceCoverage: { value: visualization.iceCoverage || 0.0 },
+            uTextureType: { value: textureTypeMap[visualization.surfaceTexture] || 1 }, uIsSelected: { value: false }, uIsHovered: { value: false }, uAxialTilt: { value: axialTilt },
+            uAtmosphereColor: { value: new THREE.Color(visualization.atmosphereColor) }, uLightDirection: { value: new THREE.Vector3(1, 0.5, 1).normalize() },
+        }
+    });
+    const sphereMesh = new THREE.Mesh(new THREE.SphereGeometry(2, 64, 64), planetMaterial);
+    sphereMesh.userData = { id: celestial_body_id, isPlanet: true };
+    group.add(sphereMesh);
+
+    const atmosphereMaterial = new THREE.ShaderMaterial({
+        vertexShader: atmosphereVs, fragmentShader: atmosphereFs,
+        uniforms: {
+            uAtmosphereColor: { value: new THREE.Color(visualization.atmosphereColor) }, uFresnelPower: { value: 4.0 }, uTime: { value: 0.0 },
+            uIsSelected: { value: false }, uHasAuroras: { value: visualization.surfaceTexture === 'ICY' || (visualization.surfaceTexture === 'TERRESTRIAL' && visualization.iceCoverage > 0.5) },
+        },
+        blending: THREE.AdditiveBlending, side: THREE.BackSide, transparent: true,
+    });
+    const atmosphereMesh = new THREE.Mesh(new THREE.SphereGeometry(2.1, 64, 64), atmosphereMaterial);
+    atmosphereMesh.userData = { id: celestial_body_id };
+    group.add(atmosphereMesh);
+    
+    if (visualization.hasRings) {
+      const ringGeometry = new THREE.RingGeometry(2.8, 4.5, 128);
+      const ringMaterial = new THREE.MeshBasicMaterial({ map: this.createRingTexture(), color: visualization.atmosphereColor, side: THREE.DoubleSide, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
+      const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
+      ringMesh.rotation.x = Math.PI / 2 - axialTilt - 0.1;
+      group.add(ringMesh);
+    }
+    return group;
+  }
+
+  private updatePlanetVisuals() {
+    if (!this.activeGalaxyId) {
+        this.planetVisuals.forEach(group => { this.galaxyGroup.remove(group); });
+        this.planetVisuals.clear();
+        this.planetOrbits.forEach(orbit => { this.galaxyGroup.remove(orbit); });
+        this.planetOrbits.clear();
+        return;
+    };
+
+    const currentPlanetIds = new Set(this.activePlanets.map((p) => p.celestial_body_id));
+
+    this.planetVisuals.forEach((group, id) => {
+      if (!currentPlanetIds.has(id)) {
+        this.galaxyGroup.remove(group);
+        this.planetVisuals.delete(id);
+      }
+    });
+    this.planetOrbits.forEach((orbit, id) => {
+        if (!currentPlanetIds.has(id)) {
+            this.galaxyGroup.remove(orbit);
+            this.planetOrbits.delete(id);
+        }
+    });
+
+    this.activePlanets.forEach((planet) => {
+      const coords = this.activePlanetCoords.get(planet.celestial_body_id);
+      if (!coords) return;
+
+      let planetGroup = this.planetVisuals.get(planet.celestial_body_id);
+
+      if (!planetGroup) {
+        planetGroup = this.createPlanetVisual(planet);
+        this.planetVisuals.set(planet.celestial_body_id, planetGroup);
+        this.galaxyGroup.add(planetGroup);
+      }
+      
+      planetGroup.position.set(...coords);
+
+      const planetMesh = planetGroup.children.find(c => c.userData.isPlanet) as THREE.Mesh;
+      if (planetMesh && planetMesh.material instanceof THREE.ShaderMaterial) {
+        planetMesh.material.uniforms.uIsSelected.value = planet.celestial_body_id === this.selectedPlanetId;
+        planetMesh.material.uniforms.uIsHovered.value = planet.celestial_body_id === this.hoveredObjectId;
+      }
+      const atmosphereMesh = planetGroup.children[1] as THREE.Mesh;
+      if (atmosphereMesh && atmosphereMesh.material instanceof THREE.ShaderMaterial) {
+        atmosphereMesh.material.uniforms.uIsSelected.value = planet.celestial_body_id === this.selectedPlanetId;
+      }
+
+      let orbitMesh = this.planetOrbits.get(planet.celestial_body_id);
+      const radius = new THREE.Vector3(...coords).length();
+      if (!orbitMesh) {
+          const orbitGeometry = new THREE.RingGeometry(radius, radius + 0.05, 128);
+          const orbitMaterial = new THREE.MeshBasicMaterial({ color: 0x4d7aa5, side: THREE.DoubleSide, transparent: true, opacity: 0.15, blending: THREE.AdditiveBlending, depthWrite: false });
+          orbitMesh = new THREE.Mesh(orbitGeometry, orbitMaterial);
+          orbitMesh.rotation.x = Math.PI / 2;
+          this.galaxyGroup.add(orbitMesh);
+          this.planetOrbits.set(planet.celestial_body_id, orbitMesh);
+      }
+    });
+  }
+
+  private updateNavigationRoute() {
+    if (this.routeLine) {
+      this.galaxyGroup.remove(this.routeLine);
+      this.routeLine.geometry.dispose();
+      (this.routeLine.material as THREE.Material).dispose();
+      this.routeLine = null;
+    }
+
+    if (!this.navigationRoute || this.navigationRoute.length < 2) return;
+
+    const points = this.navigationRoute.map((wp) => new THREE.Vector3(...wp.coords));
+    const curve = new THREE.CatmullRomCurve3(points);
+    const geometry = new THREE.TubeGeometry(curve, 64, 0.5, 8, false);
+    const material = new THREE.MeshBasicMaterial({ color: 0x61faff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending });
+    this.routeLine = new THREE.Mesh(geometry, material);
+    this.galaxyGroup.add(this.routeLine);
+  }
+  
   private createRingTexture(): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
@@ -311,235 +709,41 @@ export class CosmosVisualizer extends LitElement {
     return texture;
   }
 
-  private updatePlanetVisuals() {
-    const currentPlanetIds = new Set(this.activePlanets.map(p => p.celestial_body_id));
-    
-    // Clean up visuals for planets that no longer exist
-    this.planetVisuals.forEach((group, id) => {
-        if (!currentPlanetIds.has(id)) {
-            this.galaxyGroup.remove(group);
-            // dispose geometry and materials to prevent memory leaks
-            group.traverse((child) => {
-                if (child instanceof THREE.Mesh) {
-                    child.geometry.dispose();
-                    const material = child.material as THREE.Material | THREE.Material[];
-                    if (Array.isArray(material)) {
-                        material.forEach(m => m.dispose());
-                    } else {
-                        material.dispose();
-                    }
-                }
-            });
-            this.planetVisuals.delete(id);
+  private createShockwave(galaxyId: string) {
+    const visual = this.galaxyVisuals.get(galaxyId);
+    if (!visual) return;
 
-            // Also remove and dispose the corresponding orbit
-            const orbit = this.planetOrbits.get(id);
-            if (orbit) {
-                this.galaxyGroup.remove(orbit);
-                orbit.geometry.dispose();
-                (orbit.material as THREE.Material).dispose();
-                this.planetOrbits.delete(id);
-            }
-        }
+    const geometry = new THREE.SphereGeometry(1, 32, 32);
+    const material = new THREE.ShaderMaterial({
+        uniforms: { opacity: { value: 1.0 } },
+        vertexShader: `
+            varying vec3 vNormal; void main() { vNormal = normal;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        fragmentShader: `
+            varying vec3 vNormal; uniform float opacity; void main() {
+                float intensity = pow(0.8 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+                gl_FragColor = vec4(0.38, 0.98, 1.0, intensity * opacity); }`,
+        transparent: true, blending: THREE.AdditiveBlending,
     });
-
-    // Add/update visuals for current planets
-    this.activePlanets.forEach((planet) => {
-        const coords = this.activePlanetCoords.get(planet.celestial_body_id);
-        if (!coords) return;
-
-        let planetGroup = this.planetVisuals.get(planet.celestial_body_id);
-        if (!planetGroup) {
-            // --- Create Planet Group ---
-            planetGroup = new THREE.Group();
-            planetGroup.userData = { id: planet.celestial_body_id, isPlanet: true };
-
-            let seed = 0;
-            for (let i = 0; i < planet.celestial_body_id.length; i++) {
-                seed += planet.celestial_body_id.charCodeAt(i);
-            }
-            const seededRandom = (s: number) => { const x = Math.sin(s) * 10000; return x - Math.floor(x); };
-            const axialTilt = seededRandom(seed) * (Math.PI / 6);
-
-            const textureTypeMap: {[key: string]: number} = { TERRESTRIAL: 1, GAS_GIANT: 2, VOLCANIC: 3, ICY: 4 };
-
-            const planetMaterial = new THREE.ShaderMaterial({
-                vertexShader: planetVs, fragmentShader: planetFs,
-                uniforms: {
-                    uTime: {value: 0.0}, uColor1: {value: new THREE.Color(planet.visualization.color1)}, uColor2: {value: new THREE.Color(planet.visualization.color2)}, uOceanColor: {value: new THREE.Color(planet.visualization.oceanColor || '#000033')}, uCloudiness: {value: planet.visualization.cloudiness || 0.0}, uIceCoverage: {value: planet.visualization.iceCoverage || 0.0}, uTextureType: {value: textureTypeMap[planet.visualization.surfaceTexture] || 1}, uIsSelected: {value: false}, uAxialTilt: {value: axialTilt}, uAtmosphereColor: {value: new THREE.Color(planet.visualization.atmosphereColor)}, uLightDirection: {value: new THREE.Vector3(1, 1, 1).normalize()},
-                },
-            });
-            const sphereMesh = new THREE.Mesh(new THREE.SphereGeometry(2, 64, 64), planetMaterial);
-            sphereMesh.userData.isPlanetMesh = true;
-            planetGroup.add(sphereMesh);
-
-            const atmosphereMaterial = new THREE.ShaderMaterial({
-                vertexShader: atmosphereVs, fragmentShader: atmosphereFs,
-                uniforms: {
-                    uAtmosphereColor: { value: new THREE.Color(planet.visualization.atmosphereColor) }, uTime: { value: 0.0 }, uFresnelPower: { value: 4.0 }, uIsSelected: { value: false },
-                    uHasAuroras: { value: planet.visualization.surfaceTexture === 'ICY' || (planet.visualization.surfaceTexture === 'TERRESTRIAL' && planet.visualization.iceCoverage > 0.5) },
-                },
-                blending: THREE.AdditiveBlending, side: THREE.BackSide, transparent: true,
-            });
-            const atmosphereMesh = new THREE.Mesh(new THREE.SphereGeometry(2.1, 64, 64), atmosphereMaterial);
-            planetGroup.add(atmosphereMesh);
-
-            if (planet.visualization.hasRings) {
-                const ringGeometry = new THREE.RingGeometry(2.8, 4.5, 64);
-                const ringMaterial = new THREE.MeshBasicMaterial({ map: this.createRingTexture(), color: planet.visualization.atmosphereColor, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
-                const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
-                ringMesh.rotation.x = Math.PI / 2 - 0.2;
-                planetGroup.add(ringMesh);
-            }
-            // --- End Planet Group Creation ---
-
-            this.planetVisuals.set(planet.celestial_body_id, planetGroup);
-            this.galaxyGroup.add(planetGroup);
-
-            // --- Create Orbit ---
-            const radius = new THREE.Vector2(coords[0], coords[2]).length();
-            const orbitGeometry = new THREE.RingGeometry(radius, radius + 0.1, 128);
-            const orbitMaterial = new THREE.MeshBasicMaterial({
-                color: 0x61faff,
-                side: THREE.DoubleSide,
-                transparent: true,
-                opacity: 0.15,
-                blending: THREE.AdditiveBlending,
-                depthWrite: false,
-            });
-            const orbitMesh = new THREE.Mesh(orbitGeometry, orbitMaterial);
-            orbitMesh.rotation.x = Math.PI / 2;
-            this.planetOrbits.set(planet.celestial_body_id, orbitMesh);
-            this.galaxyGroup.add(orbitMesh);
-        }
-        
-        planetGroup.position.set(...coords);
-        
-        const radius = planet.planetRadiusEarths || 1;
-        const scale = 0.3 + Math.log1p(radius) * 0.4;
-        planetGroup.scale.set(scale, scale, scale);
-
-        const isSelected = planet.celestial_body_id === this.selectedPlanetId;
-        (planetGroup.children[0] as THREE.Mesh<any, THREE.ShaderMaterial>).material.uniforms.uIsSelected.value = isSelected;
-        (planetGroup.children[1] as THREE.Mesh<any, THREE.ShaderMaterial>).material.uniforms.uIsSelected.value = isSelected;
-
-        // Update orbit visual for selection
-        const orbit = this.planetOrbits.get(planet.celestial_body_id);
-        if (orbit) {
-            (orbit.material as THREE.MeshBasicMaterial).opacity = isSelected ? 0.4 : 0.15;
-            (orbit.material as THREE.MeshBasicMaterial).color.set(isSelected ? 0xffffff : 0x61faff);
-        }
-    });
+    const shockwave = {
+        mesh: new THREE.Mesh(geometry, material),
+        startTime: this.clock.getElapsedTime(),
+    };
+    shockwave.mesh.position.copy(visual.position);
+    this.shockwaves.push(shockwave);
+    this.intergalacticGroup.add(shockwave.mesh);
   }
-
-  private updateNavigationRoute() {
-    if (this.routeLine) {
-      this.galaxyGroup.remove(this.routeLine);
-      this.routeLine.geometry.dispose();
-      (this.routeLine.material as THREE.Material).dispose();
-      this.routeLine = null;
-    }
-    if (!this.navigationRoute || this.navigationRoute.length < 2) return;
-    const points = this.navigationRoute.map((wp) => new THREE.Vector3(...wp.coords));
-    const curve = new THREE.CatmullRomCurve3(points);
-    const geometry = new THREE.TubeGeometry(curve, 64, 0.5, 8, false);
-    const material = new THREE.MeshBasicMaterial({color: 0x61faff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending});
-    this.routeLine = new THREE.Mesh(geometry, material);
-    this.galaxyGroup.add(this.routeLine);
-  }
-
-  private updateTarget() {
-    this.isManualControl = false;
-    if (this.viewMode === 'galaxy') {
-        if (this.selectedPlanetId) {
-            const coords = this.activePlanetCoords.get(this.selectedPlanetId);
-            if (coords) {
-                const planetPos = new THREE.Vector3(...coords);
-                this.targetPosition.copy(planetPos).add(new THREE.Vector3(0, 5, 15));
-                this.targetLookAt.copy(planetPos);
-            }
-        } else {
-            this.targetPosition.set(0, 80, 250);
-            this.targetLookAt.set(0, 0, 0);
-        }
-        this.controls.minDistance = 5;
-        this.controls.maxDistance = 500;
-    } else { // Intergalactic
-        this.targetPosition.set(0, 400, 800);
-        this.targetLookAt.set(0, 0, 0);
-        this.controls.minDistance = 100;
-        this.controls.maxDistance = 2000;
-    }
-  }
-
-  private onPointerDown = () => { this.isManualControl = true; };
-
-  private onCanvasClick = (event: MouseEvent) => {
-    if (this.isTransitioning) return;
-    const pointer = new THREE.Vector2((event.clientX / this.canvas.clientWidth) * 2 - 1, -(event.clientY / this.canvas.clientHeight) * 2 + 1);
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(pointer, this.camera);
-
-    if (this.viewMode === 'galaxy') {
-        const planetMeshes = Array.from(this.planetVisuals.values()).map(g => g.children[0]);
-        const intersects = raycaster.intersectObjects(planetMeshes);
-        if (intersects.length > 0) {
-            const id = intersects[0].object.parent?.userData.id;
-            if (id) this.dispatchEvent(new CustomEvent('planet-selected', {detail: {planetId: id}, bubbles: true, composed: true}));
-        }
-    } else { // Intergalactic
-        const galaxyObjects = Array.from(this.galaxyVisuals.values()).flatMap(g => g.children);
-        const intersects = raycaster.intersectObjects(galaxyObjects, true);
-        if (intersects.length > 0) {
-            const id = intersects[0].object.userData.id;
-            this.dispatchEvent(new CustomEvent('galaxy-selected', {detail: {galaxyId: id}, bubbles: true, composed: true}));
-        }
-    }
-  };
-
-  private handleResize = () => {
-    this.camera.aspect = this.canvas.clientWidth / this.canvas.clientHeight;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
-    this.composer.setSize(this.clientWidth, this.clientHeight);
-  };
-
-  private runAnimationLoop = () => {
-    this.animationFrameId = requestAnimationFrame(this.runAnimationLoop);
-    const elapsedTime = this.clock.getElapsedTime();
-
-    if (!this.isManualControl && !this.isTransitioning) {
-        this.camera.position.lerp(this.targetPosition, 0.03);
-        this.controls.target.lerp(this.targetLookAt, 0.03);
-    }
-    this.controls.update();
-
-    this.intergalacticGroup.rotation.y += 0.0001;
-    this.galaxyGroup.rotation.y += 0.0002;
-    this.starfieldMaterial.uniforms.uTime.value = elapsedTime;
-
-    if (this.viewMode === 'intergalactic') {
-        this.galaxyVisuals.forEach((group) => {
-            const nebulaMesh = group.children[0] as THREE.Mesh;
-            if (nebulaMesh && nebulaMesh.material instanceof THREE.ShaderMaterial) {
-                const material = nebulaMesh.material;
-                material.uniforms.uTime.value = elapsedTime;
-                nebulaMesh.quaternion.copy(this.camera.quaternion);
-                const distance = this.camera.position.distanceTo(group.position);
-                material.uniforms.uCameraDistance.value = distance;
-            }
-        });
-    } else if (this.viewMode === 'galaxy') {
-        this.planetVisuals.forEach((group) => {
-            (group.children[0] as THREE.Mesh<any, THREE.ShaderMaterial>).material.uniforms.uTime.value = elapsedTime;
-            (group.children[1] as THREE.Mesh<any, THREE.ShaderMaterial>).material.uniforms.uTime.value = elapsedTime;
-        });
-    }
-
-    this.composer.render();
-  };
 
   render() {
-    return html`<canvas id="canvas"></canvas>`;
+    const tooltipClasses = { tooltip: true, visible: this.tooltipPosition.visible };
+    const tooltipStyles = {
+        left: `${this.tooltipPosition.x}px`,
+        top: `${this.tooltipPosition.y}px`,
+    };
+    return html`
+      <canvas id="canvas"></canvas>
+      <div class=${Object.keys(tooltipClasses).filter(k => (tooltipClasses as any)[k]).join(' ')} style=${Object.entries(tooltipStyles).map(([k,v])=>`${k}:${v}`).join(';')}>
+        ${this.hoveredObjectName}
+      </div>`;
   }
 }

@@ -30,6 +30,7 @@ export const fs = `
   uniform float uIceCoverage; // 0.0 to 1.0
   uniform int uTextureType; // 1: Terrestrial, 2: Gas Giant, 3: Volcanic, 4: Icy
   uniform bool uIsSelected;
+  uniform bool uIsHovered;
 
   // New uniforms for tilt and scattering
   uniform float uAxialTilt;
@@ -268,6 +269,12 @@ export const fs = `
         }
         
         litColor += nightGlow * nightMask;
+    }
+    
+    if (uIsHovered) {
+        float hoverFresnel = 1.0 - dot(viewDirection, normal);
+        hoverFresnel = pow(hoverFresnel, 2.0);
+        litColor += uAtmosphereColor * hoverFresnel * 0.5;
     }
 
     gl_FragColor = vec4(litColor, 1.0);

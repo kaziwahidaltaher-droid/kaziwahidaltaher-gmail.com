@@ -184,11 +184,13 @@ export class TutorialOverlay extends LitElement {
 
   private _onNext() {
     const isLastStep = this.step >= TUTORIAL_STEPS.length - 1;
-    this.dispatchEvent(new CustomEvent(isLastStep ? 'skip' : 'next'));
+    // FIX: Cast to unknown then EventTarget to satisfy TypeScript's strict type checking.
+    (this as unknown as EventTarget).dispatchEvent(new CustomEvent(isLastStep ? 'skip' : 'next'));
   }
 
   private _onSkip() {
-    this.dispatchEvent(new CustomEvent('skip'));
+    // FIX: Cast to unknown then EventTarget to satisfy TypeScript's strict type checking.
+    (this as unknown as EventTarget).dispatchEvent(new CustomEvent('skip'));
   }
 
   render() {
