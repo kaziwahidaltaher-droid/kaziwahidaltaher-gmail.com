@@ -83,15 +83,19 @@ export class AxeeAudioEngine extends LitElement {
 
       switch (this.mood) {
         case 'galaxy':
+          // FIX: Implement missing method.
           this.activeSound = this.createGalaxySound();
           break;
         case 'serene':
+          // FIX: Implement missing method.
           this.activeSound = this.createSereneSound();
           break;
         case 'tense':
+          // FIX: Implement missing method.
           this.activeSound = this.createTenseSound();
           break;
         case 'mysterious':
+          // FIX: Implement missing method.
           this.activeSound = this.createMysteriousSound();
           break;
       }
@@ -132,154 +136,172 @@ export class AxeeAudioEngine extends LitElement {
       lfoOsc.connect(lfoGain);
       nodes.forEach((node) => {
         if (node instanceof OscillatorNode) {
+          // FIX: Connect LFO gain to oscillator frequency for vibrato effect.
           lfoGain.connect(node.frequency);
         }
       });
       lfoOsc.start();
-      nodes.push(lfoOsc, lfoGain);
+      nodes.push(lfoOsc);
     }
-
-    const stop = () => {
-      gain.gain.linearRampToValueAtTime(0, actx.currentTime + 2);
-      setTimeout(() => {
-        nodes.forEach((node) => {
-          if (node instanceof OscillatorNode) node.stop();
-          node.disconnect();
-        });
-      }, 2100);
+    
+    // FIX: Add missing return statement.
+    return {
+        stop: () => {
+            gain.gain.linearRampToValueAtTime(0, actx.currentTime + 2);
+            setTimeout(() => {
+                nodes.forEach(node => {
+                    if (node instanceof OscillatorNode) {
+                        node.stop();
+                    }
+                    node.disconnect();
+                });
+                gain.disconnect();
+            }, 2100);
+        }
     };
-
-    return {stop};
   }
 
-  private createGalaxySound = () =>
-    this.createSound(
-      [{type: 'sine', freq: 40}],
-      {freq: 0.1, depth: 5},
-      0.2,
-    );
-  private createSereneSound = () =>
-    this.createSound(
+  // FIX: Implement missing sound creation methods.
+  private createGalaxySound(): ActiveSound {
+    return this.createSound(
       [
-        {type: 'sine', freq: 100, detune: -2},
-        {type: 'triangle', freq: 200, detune: 2},
+        {type: 'sine', freq: 60, detune: 0},
+        {type: 'sine', freq: 62, detune: 2},
+        {type: 'sawtooth', freq: 120, detune: -2},
       ],
-      {freq: 0.2, depth: 3},
-      0.15,
+      {freq: 0.05, depth: 20},
+      0.08,
     );
-  private createTenseSound = () =>
-    this.createSound(
-      [
-        {type: 'sawtooth', freq: 60},
-        {type: 'square', freq: 61},
-      ],
-      {freq: 0.5, depth: 2},
-      0.1,
-    );
-  private createMysteriousSound = () =>
-    this.createSound(
-      [
-        {type: 'triangle', freq: 220},
-        {type: 'sine', freq: 440, detune: 5},
-      ],
-      {freq: 0.05, depth: 10},
-      0.1,
-    );
+  }
 
-  /** Temporarily lowers the music volume. */
-  public duck(isDucking: boolean) {
-    if (!this.musicGain || !this.audioContext) return;
-    const targetVolume = isDucking ? 0.2 : 1.0;
-    this.musicGain.gain.linearRampToValueAtTime(
-      targetVolume,
-      this.audioContext.currentTime + 1.0, // 1 second fade
+  private createSereneSound(): ActiveSound {
+    return this.createSound(
+      [
+        {type: 'sine', freq: 100},
+        {type: 'sine', freq: 202},
+        {type: 'sine', freq: 305},
+      ],
+      {freq: 0.1, depth: 5},
+      0.12,
     );
+  }
+
+  private createTenseSound(): ActiveSound {
+    return this.createSound(
+      [
+        {type: 'sawtooth', freq: 55},
+        {type: 'sawtooth', freq: 58, detune: 10},
+      ],
+      {freq: 2, depth: 5},
+      0.07,
+    );
+  }
+
+  private createMysteriousSound(): ActiveSound {
+    return this.createSound(
+      [
+        {type: 'square', freq: 80},
+        {type: 'sine', freq: 165, detune: 5},
+      ],
+      {freq: 0.2, depth: 15},
+      0.09,
+    );
+  }
+
+  // --- PUBLIC METHODS FOR SFX & CONTROL ---
+
+  // FIX: Implement method to duck music volume.
+  public duck(isDucked: boolean) {
+    if (!this.musicGain || !this.audioContext) return;
+    const targetGain = isDucked ? 0.2 : 1.0;
+    this.musicGain.gain.linearRampToValueAtTime(
+      targetGain,
+      this.audioContext.currentTime + 0.5,
+    );
+  }
+
+  private playSfx(
+    type: OscillatorType,
+    freq: number,
+    duration: number,
+    volume = 0.2,
+    ramp: 'linear' | 'exponential' = 'exponential',
+    detune = 0
+  ) {
+    if (!this.audioContext || !this.masterGain) {
+      this.initializeAudio();
+      if (!this.audioContext || !this.masterGain) return;
+    }
+    const actx = this.audioContext;
+    const time = actx.currentTime;
+    const osc = actx.createOscillator();
+    const gain = actx.createGain();
+
+    osc.connect(gain);
+    // Connect SFX directly to master gain to avoid being ducked
+    gain.connect(this.masterGain);
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, time);
+    osc.detune.setValueAtTime(detune, time);
+    gain.gain.setValueAtTime(volume, time);
+
+    if (ramp === 'exponential') {
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+    } else {
+      gain.gain.linearRampToValueAtTime(0, time + duration);
+    }
+    
+    osc.start(time);
+    osc.stop(time + duration);
+
+    setTimeout(() => {
+        gain.disconnect();
+        osc.disconnect();
+    }, duration * 1000 + 100);
+  }
+
+  // FIX: Implement missing SFX methods.
+  public playInteractionSound() {
+    this.playSfx('sine', 880, 0.2, 0.1);
+  }
+
+  public playSuccessSound() {
+    this.playSfx('sine', 523.25, 0.2, 0.1); // C5
+    setTimeout(() => this.playSfx('sine', 659.25, 0.2, 0.1), 100); // E5
+    setTimeout(() => this.playSfx('sine', 783.99, 0.3, 0.1), 200); // G5
+  }
+
+  public playErrorSound() {
+    this.playSfx('sawtooth', 150, 0.3, 0.1, 'linear', 10);
+  }
+
+  public playClearSound() {
+    if (!this.audioContext || !this.masterGain) return;
+    const actx = this.audioContext;
+    const time = actx.currentTime;
+    const osc = actx.createOscillator();
+    const gain = actx.createGain();
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(880, time);
+    osc.frequency.exponentialRampToValueAtTime(110, time + 0.8);
+
+    gain.gain.setValueAtTime(0.15, time);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.8);
+
+    osc.start(time);
+    osc.stop(time + 0.8);
+
+    setTimeout(() => {
+        gain.disconnect();
+        osc.disconnect();
+    }, 900);
   }
   
-  /** Plays a short, crisp sound for UI interactions. */
-  public playInteractionSound() {
-    this.initializeAudio();
-    if (!this.audioContext || !this.masterGain) return;
-    const now = this.audioContext.currentTime;
-    const osc = this.audioContext.createOscillator();
-    const gain = this.audioContext.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, now);
-    gain.gain.setValueAtTime(0.15, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
-
-    osc.connect(gain);
-    // SFX connect directly to the master gain to bypass ducking
-    gain.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.15);
-  }
-
-  /** Plays a positive, ascending sound for successful synthesis. */
-  public playSuccessSound() {
-    this.initializeAudio();
-    if (!this.audioContext || !this.masterGain) return;
-    const now = this.audioContext.currentTime;
-
-    const frequencies = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
-    const gain = this.audioContext.createGain();
-    gain.gain.value = 0.2;
-    gain.connect(this.masterGain);
-
-    frequencies.forEach((freq, index) => {
-      const osc = this.audioContext!.createOscillator();
-      osc.type = 'triangle';
-      osc.frequency.value = freq;
-      const startTime = now + index * 0.08;
-      osc.connect(gain);
-      osc.start(startTime);
-      osc.stop(startTime + 0.1);
-    });
-  }
-
-  /** Plays a low, descending sound for errors. */
-  public playErrorSound() {
-    this.initializeAudio();
-    if (!this.audioContext || !this.masterGain) return;
-    const now = this.audioContext.currentTime;
-    const osc = this.audioContext.createOscillator();
-    const gain = this.audioContext.createGain();
-
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(160, now);
-    osc.frequency.exponentialRampToValueAtTime(80, now + 0.4);
-    gain.gain.setValueAtTime(0.25, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
-
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.4);
-  }
-
-  /** Plays a descending sweep for clearing the session. */
-  public playClearSound() {
-    this.initializeAudio();
-    if (!this.audioContext || !this.masterGain) return;
-    const now = this.audioContext.currentTime;
-    const osc = this.audioContext.createOscillator();
-    const gain = this.audioContext.createGain();
-
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(800, now);
-    osc.frequency.exponentialRampToValueAtTime(50, now + 0.8);
-    gain.gain.setValueAtTime(0.2, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.8);
-
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.8);
-  }
-
-  // This is a non-visual component.
-  createRenderRoot() {
-    return this;
+  public playToggleSound() {
+    this.playSfx('triangle', 1200, 0.1, 0.05, 'linear');
   }
 }

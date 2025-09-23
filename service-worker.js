@@ -30,6 +30,8 @@ const urlsToCache = [
   'deep-scan-visualizer.tsx',
   'exo-suit-visualizer.tsx',
   'planet-visualizer.tsx',
+  'weather-visualizer.tsx',
+  'shader-lab-visualizer.tsx',
   'live-motion-shader.tsx',
   'planet-shader.tsx',
   'atmosphere-shader.tsx',

@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame, Canvas } from '@react-three/fiber';
+import { galaxyVertexShader, galaxyFragmentShader } from './galaxy-point-shaders';
 
 interface GalaxyConfig {
   numStars: number;
@@ -40,8 +41,8 @@ const AurelionEngine: React.FC<AurelionEngineProps> = ({ config, isTransition = 
         moodIntensity: { value: config.moodIntensity || 0.5 },
         resonanceFrequency: { value: config.resonance || 1.0 },
       },
-      vertexShader: `/* your galaxyVertexShader here */`,
-      fragmentShader: `/* your galaxyFragmentShader here */`,
+      vertexShader: galaxyVertexShader,
+      fragmentShader: galaxyFragmentShader,
       blending: THREE.AdditiveBlending,
       depthTest: true,
       transparent: true,
@@ -49,7 +50,6 @@ const AurelionEngine: React.FC<AurelionEngineProps> = ({ config, isTransition = 
 
     useFrame(({ clock }) => {
       if (starfieldRef.current) {
-        // FIX: Cast material to THREE.ShaderMaterial to access uniforms.
         (starfieldRef.current.material as THREE.ShaderMaterial).uniforms.time.value = clock.getElapsedTime();
       }
     });

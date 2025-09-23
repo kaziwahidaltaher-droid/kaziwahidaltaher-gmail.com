@@ -73,6 +73,8 @@ import './radial-velocity-visualizer';
 import './tutorial-overlay';
 import './conversation-visualizer';
 import './planet-visualizer';
+import './weather-visualizer';
+import './shader-lab-visualizer';
 import {SolarSystem} from './solar-system-data';
 import { LightCurveAnalysis } from './light-curve-visualizer';
 import { VolumeMeter } from './volume-meter';
@@ -150,6 +152,7 @@ interface SessionData {
   discoveredGalaxies: GalaxyData[];
   aiChronicles: AiChronicleEntry[];
   activeGalaxyId?: string | null;
+  isUnseenRevealed?: boolean;
 }
 
 // Shielding analysis data interfaces
@@ -217,6 +220,22 @@ export interface RadialVelocityPoint {
 export interface RadialVelocityAnalysis {
   summary: string;
   points: RadialVelocityPoint[];
+}
+
+// Weather Analysis
+export interface WeatherAnalysis {
+  summary: string;
+  temperature: {
+    day: number;
+    night: number;
+    units: string;
+  };
+  wind: {
+    speed: number;
+    direction: string;
+    units: string;
+  };
+  storms: string[];
 }
 
 // Conversation State
@@ -297,6 +316,418 @@ const MOCK_PLANET: PlanetData = {
   },
 };
 
+const VERIDIA_PLANET: PlanetData = {
+  celestial_body_id: 'aurelion-methane-123',
+  created_at: new Date().toISOString(),
+  planetName: 'Veridia',
+  starSystem: 'Gliese 581',
+  starType: 'M-type red dwarf',
+  distanceLightYears: 20.4,
+  planetType: 'Methane Super-Earth',
+  rotationalPeriod: '55 Earth hours',
+  orbitalPeriod: '84 Earth days',
+  moons: {count: 1, names: ['Thall']},
+  potentialForLife: {
+    assessment: 'Exotic Life Candidate',
+    reasoning:
+      'Dense methane-ammonia atmosphere shows complex organic chemistry. Potential for methanogenic, non-aqueous life forms in its liquid hydrocarbon seas.',
+    biosignatures: [
+      'Complex Hydrocarbons',
+      'Tholins',
+      'Anomalous thermal gradients',
+    ],
+  },
+  discoveryNarrative:
+    'A candidate world identified through atmospheric spectroscopy, revealing a composition unlike anything in the Sol system. Veridia challenges our understanding of where life can exist.',
+  discoveryMethodology: 'James Webb Space Telescope atmospheric analysis.',
+  atmosphericComposition:
+    '85% Methane, 10% Nitrogen, 4% Ammonia, trace hydrocarbons.',
+  surfaceFeatures:
+    'Vast, sluggish seas of liquid methane and ethane under a thick orange smog. Jagged mountains of water ice form continents.',
+  keyFeatures: [
+    'Liquid methane seas',
+    'Methane-based atmospheric cycle',
+    'Potential for exotic biology',
+  ],
+  aiWhisper:
+    'A world slumbering under a haze of orange, where rivers of cold fire carve canyons through mountains of ice.',
+  orbitalPeriodDays: 84.0,
+  transitDurationHours: 4.1,
+  planetRadiusEarths: 2.1,
+  axeeClassification: 'Candidate',
+  discoverySource: 'synthesis',
+  visualization: {
+    color1: '#b48b59',
+    color2: '#e5a56b',
+    oceanColor: '#4f3b2d',
+    atmosphereColor: '#d6a378',
+    hasRings: true,
+    cloudiness: 0.8,
+    iceCoverage: 0.3,
+    surfaceTexture: 'TERRESTRIAL',
+  },
+};
+
+const NYX_PRIMORDIA_GALAXY: GalaxyData = {
+  id: `aurelion-galaxy-ancient-999`,
+  created_at: new Date().toISOString(),
+  galaxyName: 'Nyx Primordia',
+  galaxyType: 'Ancient Elliptical Galaxy',
+  description:
+    'A vast, ancient galaxy dominated by a supermassive black hole. Its dim, red stars are orbited by countless rogue planets, cast out from their original systems over eons.',
+  visualization: {
+    color1: '#4a3b8e',
+    color2: '#c83f4e',
+    nebulaSeed: 88,
+  },
+  planets: [],
+};
+
+const ENRICHED_SOL_SYSTEM: PlanetData[] = [
+  {
+    celestial_body_id: 'sol-mercury',
+    created_at: new Date().toISOString(),
+    planetName: 'Mercury',
+    starSystem: 'Sol',
+    starType: 'G-type main-sequence',
+    distanceLightYears: 0,
+    planetType: 'Terrestrial',
+    rotationalPeriod: '1407.6 Earth hours',
+    orbitalPeriod: '88 Earth days',
+    moons: {count: 0, names: []},
+    potentialForLife: {
+      assessment: 'Not Habitable',
+      reasoning: 'Extreme temperature fluctuations and lack of a substantial atmosphere make surface life impossible.',
+      biosignatures: [],
+    },
+    discoveryNarrative: 'The swift messenger, a scorched and cratered world dancing closest to the Sun\'s fiery breath. Its silence is a testament to raw cosmic power.',
+    discoveryMethodology: 'Direct observation.',
+    atmosphericComposition: 'A tenuous exosphere of oxygen, sodium, hydrogen, helium, and potassium.',
+    surfaceFeatures: 'Heavily cratered surface, scarps, and intercrater plains. Evidence of past volcanic activity.',
+    keyFeatures: ['Extreme temperatures', 'Caloris Basin impact crater', 'Tenuous exosphere'],
+    aiWhisper: 'A Silent Ember, scarred by fire and time, holding secrets in its shadowed craters.',
+    orbitalPeriodDays: 88.0,
+    transitDurationHours: 0,
+    planetRadiusEarths: 0.38,
+    axeeClassification: 'Confirmed',
+    discoverySource: 'archive',
+    visualization: {
+      color1: '#b0b0b0',
+      color2: '#7e7e7e',
+      oceanColor: '#202020',
+      atmosphereColor: '#333333',
+      hasRings: false,
+      cloudiness: 0,
+      iceCoverage: 0.05,
+      surfaceTexture: 'TERRESTRIAL',
+    },
+  },
+  {
+    celestial_body_id: 'sol-venus',
+    created_at: new Date().toISOString(),
+    planetName: 'Venus',
+    starSystem: 'Sol',
+    starType: 'G-type main-sequence',
+    distanceLightYears: 0,
+    planetType: 'Terrestrial',
+    rotationalPeriod: '5832.5 Earth hours (retrograde)',
+    orbitalPeriod: '224.7 Earth days',
+    moons: {count: 0, names: []},
+    potentialForLife: {
+      assessment: 'Not Habitable (Surface)',
+      reasoning: 'A runaway greenhouse effect has created a crushing, toxic atmosphere with surface temperatures hot enough to melt lead.',
+      biosignatures: ['Phosphine (debated)'],
+    },
+    discoveryNarrative: 'The veiled morning star, a world of immense pressure and heat, hidden beneath a perpetual cloak of sulfuric acid clouds. A cautionary tale of planetary evolution.',
+    discoveryMethodology: 'Direct observation.',
+    atmosphericComposition: '96.5% Carbon Dioxide, 3.5% Nitrogen, traces of sulfur dioxide.',
+    surfaceFeatures: 'Volcanic plains, vast highland plateaus (continents), and numerous shield volcanoes.',
+    keyFeatures: ['Runaway greenhouse effect', 'Sulfuric acid clouds', 'Retrograde rotation'],
+    aiWhisper: 'The Shrouded Pulse, a fever dream of a world, beating slowly under a toxic veil.',
+    orbitalPeriodDays: 224.7,
+    transitDurationHours: 0,
+    planetRadiusEarths: 0.95,
+    axeeClassification: 'Confirmed',
+    discoverySource: 'archive',
+    visualization: {
+      color1: '#ffcc99',
+      color2: '#d4a37a',
+      oceanColor: '#8c6d51',
+      atmosphereColor: '#f5e5d5',
+      hasRings: false,
+      cloudiness: 1.0,
+      iceCoverage: 0,
+      surfaceTexture: 'VOLCANIC',
+    },
+  },
+  {
+    celestial_body_id: 'sol-earth',
+    created_at: new Date().toISOString(),
+    planetName: 'Earth',
+    starSystem: 'Sol',
+    starType: 'G-type main-sequence',
+    distanceLightYears: 0,
+    planetType: 'Terrestrial',
+    rotationalPeriod: '23.9 Earth hours',
+    orbitalPeriod: '365.2 Earth days',
+    moons: {count: 1, names: ['Luna']},
+    potentialForLife: {
+      assessment: 'Confirmed',
+      reasoning: 'The only known celestial body to harbor life, with a complex biosphere, liquid water oceans, and a protective oxygen-nitrogen atmosphere.',
+      biosignatures: ['Oxygen', 'Methane', 'Water Vapor', 'Technosignatures'],
+    },
+    discoveryNarrative: 'The cradle of humanity, a vibrant blue marble whose existence is self-evident. Its discovery was the discovery of consciousness itself.',
+    discoveryMethodology: 'Direct observation.',
+    atmosphericComposition: '78% Nitrogen, 21% Oxygen, 1% Argon, trace gases.',
+    surfaceFeatures: 'Liquid water oceans, diverse continents with varied geology and ecosystems, polar ice caps, and widespread evidence of technological civilization.',
+    keyFeatures: ['Confirmed biosphere', 'Liquid water oceans', 'Oxygen-rich atmosphere', 'Intelligent life'],
+    aiWhisper: 'A single, resonant chord in the silent orchestra of space—a Living Harmonic that sings of water, air, and thought.',
+    orbitalPeriodDays: 365.2,
+    transitDurationHours: 0,
+    planetRadiusEarths: 1,
+    axeeClassification: 'Confirmed',
+    discoverySource: 'archive',
+    visualization: {
+      color1: '#00ccff',
+      color2: '#ffffff',
+      oceanColor: '#0f3b8c',
+      atmosphereColor: '#a0d0ff',
+      hasRings: false,
+      cloudiness: 0.4,
+      iceCoverage: 0.1,
+      surfaceTexture: 'TERRESTRIAL',
+    },
+  },
+  {
+    celestial_body_id: 'sol-mars',
+    created_at: new Date().toISOString(),
+    planetName: 'Mars',
+    starSystem: 'Sol',
+    starType: 'G-type main-sequence',
+    distanceLightYears: 0,
+    planetType: 'Terrestrial',
+    rotationalPeriod: '24.6 Earth hours',
+    orbitalPeriod: '687 Earth days',
+    moons: {count: 2, names: ['Phobos', 'Deimos']},
+    potentialForLife: {
+      assessment: 'Potentially Habitable (Subsurface)',
+      reasoning: 'Evidence of past liquid water environments and a thin atmosphere suggest that microbial life could exist in subsurface brines.',
+      biosignatures: ['Methane (seasonal plumes)'],
+    },
+    discoveryNarrative: 'The red wanderer, a world of grand canyons and towering volcanoes, now a cold desert. It whispers of a warmer, wetter past and holds the promise of future human exploration.',
+    discoveryMethodology: 'Direct observation.',
+    atmosphericComposition: '95% Carbon Dioxide, 3% Nitrogen, 1.6% Argon.',
+    surfaceFeatures: 'Polar ice caps of water and carbon dioxide, vast deserts of iron-oxide dust, the Valles Marineris canyon system, and Olympus Mons, the largest volcano.',
+    keyFeatures: ['Olympus Mons', 'Valles Marineris', 'Polar ice caps', 'Evidence of ancient water'],
+    aiWhisper: 'The Echoing Dust, a memory of water written in rust, waiting for new footprints in its silent, ochre sands.',
+    orbitalPeriodDays: 687.0,
+    transitDurationHours: 0,
+    planetRadiusEarths: 0.53,
+    axeeClassification: 'Confirmed',
+    discoverySource: 'archive',
+    visualization: {
+      color1: '#ff3300',
+      color2: '#c1440e',
+      oceanColor: '#3b2b24',
+      atmosphereColor: '#f7c395',
+      hasRings: false,
+      cloudiness: 0.1,
+      iceCoverage: 0.15,
+      surfaceTexture: 'VOLCANIC',
+    },
+  },
+  {
+    celestial_body_id: 'sol-jupiter',
+    created_at: new Date().toISOString(),
+    planetName: 'Jupiter',
+    starSystem: 'Sol',
+    starType: 'G-type main-sequence',
+    distanceLightYears: 0,
+    planetType: 'Gas Giant',
+    rotationalPeriod: '9.9 Earth hours',
+    orbitalPeriod: '11.9 Earth years',
+    moons: {count: 95, names: ['Io', 'Europa', 'Ganymede', 'Callisto', '...']},
+    potentialForLife: {
+      assessment: 'Not Habitable (Atmosphere)',
+      reasoning: 'Lacks a solid surface and has extreme temperatures, pressures, and wind speeds. However, moons like Europa may harbor subsurface oceans with life potential.',
+      biosignatures: [],
+    },
+    discoveryNarrative: 'The colossal king of worlds, a swirling behemoth of gas and storms, whose immense gravity shapes the solar system around it. Its Great Red Spot is an ancient, raging tempest.',
+    discoveryMethodology: 'Direct observation.',
+    atmosphericComposition: '90% Hydrogen, 10% Helium, trace amounts of methane, water, and ammonia.',
+    surfaceFeatures: 'No solid surface. Characterized by bands of clouds, cyclones, anticyclones (including the Great Red Spot), and powerful auroras.',
+    keyFeatures: ['Great Red Spot', 'Galilean Moons', 'Powerful magnetosphere', 'Faint ring system'],
+    aiWhisper: 'The Storm Choir, a deep, unending symphony of hydrogen and helium, conducting the orbits of its many moons.',
+    orbitalPeriodDays: 4332.5,
+    transitDurationHours: 0,
+    planetRadiusEarths: 11.2,
+    axeeClassification: 'Confirmed',
+    discoverySource: 'archive',
+    visualization: {
+      color1: '#ffaa66',
+      color2: '#e5944f',
+      oceanColor: '#8a623a',
+      atmosphereColor: '#f0d6b5',
+      hasRings: true,
+      cloudiness: 1.0,
+      iceCoverage: 0,
+      surfaceTexture: 'GAS_GIANT',
+    },
+  },
+  {
+    celestial_body_id: 'sol-saturn',
+    created_at: new Date().toISOString(),
+    planetName: 'Saturn',
+    starSystem: 'Sol',
+    starType: 'G-type main-sequence',
+    distanceLightYears: 0,
+    planetType: 'Gas Giant',
+    rotationalPeriod: '10.7 Earth hours',
+    orbitalPeriod: '29.5 Earth years',
+    moons: {count: 146, names: ['Titan', 'Enceladus', 'Mimas', '...']},
+    potentialForLife: {
+      assessment: 'Not Habitable (Atmosphere)',
+      reasoning: 'Similar to Jupiter, it lacks a surface and has extreme conditions. Its moons Titan and Enceladus are primary targets in the search for extraterrestrial life.',
+      biosignatures: [],
+    },
+    discoveryNarrative: 'The jeweled wonder of the solar system, defined by its breathtaking system of icy rings. A world of subtle beauty and profound mystery.',
+    discoveryMethodology: 'Direct observation.',
+    atmosphericComposition: '96% Hydrogen, 3% Helium, 1% Methane and other hydrocarbons.',
+    surfaceFeatures: 'No solid surface. Faint bands and storms. The most prominent feature is its extensive and complex ring system made of ice and rock particles.',
+    keyFeatures: ['Extensive ring system', 'Titan\'s methane lakes', 'Enceladus\'s water plumes', 'Lowest density of any planet'],
+    aiWhisper: 'The Ringed Whisper, a silent hum of ice and gravity, spinning a halo of frozen light in the dark.',
+    orbitalPeriodDays: 10759,
+    transitDurationHours: 0,
+    planetRadiusEarths: 9.45,
+    axeeClassification: 'Confirmed',
+    discoverySource: 'archive',
+    visualization: {
+      color1: '#ffffcc',
+      color2: '#e3e3b4',
+      oceanColor: '#a1a182',
+      atmosphereColor: '#f7f7e8',
+      hasRings: true,
+      cloudiness: 0.8,
+      iceCoverage: 0,
+      surfaceTexture: 'GAS_GIANT',
+    },
+  },
+  {
+    celestial_body_id: 'sol-uranus',
+    created_at: new Date().toISOString(),
+    planetName: 'Uranus',
+    starSystem: 'Sol',
+    starType: 'G-type main-sequence',
+    distanceLightYears: 0,
+    planetType: 'Ice Giant',
+    rotationalPeriod: '17.2 Earth hours (retrograde)',
+    orbitalPeriod: '84 Earth years',
+    moons: {count: 27, names: ['Titania', 'Oberon', 'Ariel', '...']},
+    potentialForLife: {
+      assessment: 'Not Habitable',
+      reasoning: 'An extremely cold world with a dynamic, icy interior and a hydrogen-helium atmosphere. The conditions are too extreme for known life.',
+      biosignatures: [],
+    },
+    discoveryNarrative: 'The sideways planet, a pale cyan orb that rotates on its side. Its serene exterior belies a cold, turbulent interior.',
+    discoveryMethodology: 'Direct observation.',
+    atmosphericComposition: '83% Hydrogen, 15% Helium, 2% Methane.',
+    surfaceFeatures: 'No solid surface. A largely featureless, hazy blue-green atmosphere. Possesses a faint ring system and a complex magnetosphere.',
+    keyFeatures: ['Extreme axial tilt (~98 degrees)', 'Coldest planetary atmosphere', 'Icy mantle'],
+    aiWhisper: 'The Tilted Dream, a world sleeping on its side, spinning through a long, slow, cyan-colored dream.',
+    orbitalPeriodDays: 30687,
+    transitDurationHours: 0,
+    planetRadiusEarths: 4.0,
+    axeeClassification: 'Confirmed',
+    discoverySource: 'archive',
+    visualization: {
+      color1: '#88ccff',
+      color2: '#b3d9ff',
+      oceanColor: '#4f758f',
+      atmosphereColor: '#d6eaff',
+      hasRings: true,
+      cloudiness: 0.2,
+      iceCoverage: 0,
+      surfaceTexture: 'ICY',
+    },
+  },
+  {
+    celestial_body_id: 'sol-neptune',
+    created_at: new Date().toISOString(),
+    planetName: 'Neptune',
+    starSystem: 'Sol',
+    starType: 'G-type main-sequence',
+    distanceLightYears: 0,
+    planetType: 'Ice Giant',
+    rotationalPeriod: '16.1 Earth hours',
+    orbitalPeriod: '164.8 Earth years',
+    moons: {count: 14, names: ['Triton', '...']},
+    potentialForLife: {
+      assessment: 'Not Habitable',
+      reasoning: 'The most distant planet, featuring supersonic winds and extreme cold. Its conditions are inhospitable to life as we know it.',
+      biosignatures: [],
+    },
+    discoveryNarrative: 'The deep blue phantom, a world of furious winds and dark storms, discovered by the pull of its gravity on Uranus before it was ever seen.',
+    discoveryMethodology: 'Mathematical prediction and subsequent observation.',
+    atmosphericComposition: '80% Hydrogen, 19% Helium, 1% Methane.',
+    surfaceFeatures: 'No solid surface. Visible storm systems, including the "Great Dark Spot" (transient). The fastest winds in the Solar System.',
+    keyFeatures: ['Supersonic winds', 'Great Dark Spot', 'Active, dynamic atmosphere', 'Moon Triton\'s retrograde orbit'],
+    aiWhisper: 'The Deep Pulse, a thrum of wind and cold from the edge of the system, where sunlight is a faint memory.',
+    orbitalPeriodDays: 60190,
+    transitDurationHours: 0,
+    planetRadiusEarths: 3.88,
+    axeeClassification: 'Confirmed',
+    discoverySource: 'archive',
+    visualization: {
+      color1: '#3366ff',
+      color2: '#5c85ff',
+      oceanColor: '#1d3994',
+      atmosphereColor: '#bdceff',
+      hasRings: true,
+      cloudiness: 0.6,
+      iceCoverage: 0,
+      surfaceTexture: 'ICY',
+    },
+  },
+  {
+    celestial_body_id: 'sol-pluto',
+    created_at: new Date().toISOString(),
+    planetName: 'Pluto',
+    starSystem: 'Sol',
+    starType: 'G-type main-sequence',
+    distanceLightYears: 0,
+    planetType: 'Dwarf Planet',
+    rotationalPeriod: '153.3 Earth hours (retrograde)',
+    orbitalPeriod: '248 Earth years',
+    moons: {count: 5, names: ['Charon', 'Styx', 'Nix', 'Kerberos', 'Hydra']},
+    potentialForLife: {
+      assessment: 'Not Habitable',
+      reasoning: 'A frozen world in the Kuiper Belt with a thin, transient nitrogen atmosphere. Far too cold for liquid water on its surface.',
+      biosignatures: [],
+    },
+    discoveryNarrative: 'The distant heart, a complex and active dwarf planet revealed to have mountains of water ice and vast nitrogen glaciers. A world of surprising character at the edge of the sun\'s influence.',
+    discoveryMethodology: 'Systematic sky survey and observation.',
+    atmosphericComposition: 'Primarily Nitrogen, with traces of Methane and Carbon Monoxide.',
+    surfaceFeatures: 'Nitrogen ice plains (Sputnik Planitia), water ice mountains, cryovolcanoes, and a varied terrain of different ages.',
+    keyFeatures: ['Sputnik Planitia nitrogen glacier', 'Binary system with Charon', 'Located in the Kuiper Belt'],
+    aiWhisper: 'The Frozen Memory, a heart-shaped glacier on a world of twilight, guarding the system\'s oldest secrets.',
+    orbitalPeriodDays: 90560,
+    transitDurationHours: 0,
+    planetRadiusEarths: 0.18,
+    axeeClassification: 'Confirmed',
+    discoverySource: 'archive',
+    visualization: {
+      color1: '#ccccff',
+      color2: '#a3a3cc',
+      oceanColor: '#6f6f8a',
+      atmosphereColor: '#e0e0ff',
+      hasRings: false,
+      cloudiness: 0,
+      iceCoverage: 0.95,
+      surfaceTexture: 'ICY',
+    },
+  },
+];
+
 const ONBOARDING_STANZAS = [
   [
     'Welcome, traveler of light.',
@@ -369,6 +800,8 @@ export class AxeeInterface extends LitElement {
   @state() private tutorialStep = 0;
   @state() private showTutorialPrompt = false;
   @state() private isConversationModeActive = false;
+  @state() private isUnseenRevealed = false;
+  @state() private isShaderLabOpen = false;
 
   // AI Core Chronicles
   @state() private aiChronicles: AiChronicleEntry[] = [];
@@ -427,6 +860,10 @@ export class AxeeInterface extends LitElement {
   // Radial Velocity Analysis State
   @state() private radialVelocityStatus: 'idle' | 'running' | 'complete' | 'error' = 'idle';
   @state() private radialVelocityData: RadialVelocityAnalysis | null = null;
+  
+  // Weather Analysis State
+  @state() private weatherStatus: 'idle' | 'running' | 'complete' | 'error' = 'idle';
+  @state() private weatherAnalysisData: WeatherAnalysis | null = null;
 
   // Hyperparameter Tuning State
   @state() private hyperparameters = {
@@ -435,6 +872,26 @@ export class AxeeInterface extends LitElement {
     learning_rate: 0.1,
   };
   @state() private recalibrationStatus: 'idle' | 'running' = 'idle';
+
+  // Shader Lab State
+  @state() private shaderLabVs = `// Vertex Shader: Provides position and UV data.
+varying vec2 vUv;
+
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+  @state() private shaderLabFs = `// Fragment Shader: Determines the color of each pixel.
+uniform float uTime;
+varying vec2 vUv;
+
+void main() {
+  // A simple psychedelic pattern based on UVs and time
+  vec3 color = 0.5 + 0.5 * cos(uTime + vUv.xyx + vec3(0, 2, 4));
+  gl_FragColor = vec4(color, 1.0);
+}`;
+  @state() private shaderLabError: string | null = null;
+
 
   // --- QUERIES ---
   @query('axee-audio-engine') private audioEngine!: AxeeAudioEngine;
@@ -546,6 +1003,7 @@ export class AxeeInterface extends LitElement {
           this.discoveredGalaxies = sessionData.discoveredGalaxies;
           this.aiChronicles = sessionData.aiChronicles;
           this.activeGalaxyId = sessionData.activeGalaxyId ?? sessionData.discoveredGalaxies[0]?.id;
+          this.isUnseenRevealed = sessionData.isUnseenRevealed ?? false;
           // Recalculate all planet coordinates on load
           this.galaxyMapCoords.clear();
           this.discoveredGalaxies.forEach(galaxy => {
@@ -569,6 +1027,7 @@ export class AxeeInterface extends LitElement {
         discoveredGalaxies: this.discoveredGalaxies,
         aiChronicles: this.aiChronicles,
         activeGalaxyId: this.activeGalaxyId,
+        isUnseenRevealed: this.isUnseenRevealed,
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(sessionData));
     } catch (e) {
@@ -590,12 +1049,16 @@ export class AxeeInterface extends LitElement {
         color2: '#ffc261',
         nebulaSeed: 42,
       },
-      planets: [MOCK_PLANET],
+      planets: [MOCK_PLANET, VERIDIA_PLANET, ...ENRICHED_SOL_SYSTEM],
     };
-    this.discoveredGalaxies = [homeGalaxy];
+
+    this.discoveredGalaxies = [homeGalaxy, NYX_PRIMORDIA_GALAXY];
     this.activeGalaxyId = homeGalaxy.id;
+    this.isUnseenRevealed = false;
     this.galaxyMapCoords.clear();
-    this.calculateAndStoreCoords(MOCK_PLANET);
+    this.discoveredGalaxies.forEach((galaxy) => {
+      galaxy.planets.forEach((planet) => this.calculateAndStoreCoords(planet));
+    });
     this.saveSessionToLocalStorage();
   }
 
@@ -614,6 +1077,10 @@ export class AxeeInterface extends LitElement {
     window.addEventListener('click', this.handleFirstInteraction, {once: true});
     this.startAIChronicles();
   }
+  
+  protected firstUpdated() {
+    (this as unknown as HTMLElement).addEventListener('click', this._createRipple);
+  }
 
   disconnectedCallback() {
     super.disconnectedCallback();
@@ -622,9 +1089,11 @@ export class AxeeInterface extends LitElement {
     if (this.recognition) this.recognition.abort();
     if (this.volumeMeter) this.volumeMeter.disconnect();
     this._disconnectLiveStream();
+    (this as unknown as HTMLElement).removeEventListener('click', this._createRipple);
   }
 
   protected updated(changedProperties: Map<PropertyKey, unknown>) {
+    super.updated(changedProperties);
     if (changedProperties.has('selectedPlanetId') || changedProperties.has('activeGalaxyId')) {
       if (this.selectedPlanetId) {
         const planet = this.activeGalaxy?.planets.find(
@@ -920,7 +1389,9 @@ export class AxeeInterface extends LitElement {
       'Accessing quantum foam...',
       'Weaving stellar data streams...',
       'Calibrating planetary harmonics...',
+      'Resolving orbital resonance...',
       'Condensing reality from potential...',
+      'Finalizing atmospheric composition...',
     ];
     let updateIndex = 0;
     const statusInterval = setInterval(() => {
@@ -987,6 +1458,7 @@ export class AxeeInterface extends LitElement {
       'Igniting stellar nursery...',
       'Coalescing multiple protoplanetary disks...',
       'Defining orbital resonances...',
+      'Observing emergent systems...',
       'Finalizing new star system...',
     ];
     let updateIndex = 0;
@@ -1046,7 +1518,12 @@ export class AxeeInterface extends LitElement {
     this.aiSuggestion = null;
     this.audioEngine?.playInteractionSound();
 
-    const statusUpdates = ['Igniting cosmic seed...', 'Shaping spiral arms...', 'Finalizing galactic core...'];
+    const statusUpdates = [
+      'Igniting cosmic seed...', 
+      'Shaping primordial gas clouds...', 
+      'Defining gravitational constants...',
+      'Finalizing galactic core...'
+    ];
     let updateIndex = 0;
     const statusInterval = setInterval(() => {
       this.statusMessage = statusUpdates[updateIndex % statusUpdates.length];
@@ -1138,6 +1615,59 @@ export class AxeeInterface extends LitElement {
       clearInterval(statusInterval);
       this.aiStatus = 'idle';
       this.saveSessionToLocalStorage();
+    }
+  }
+  
+  private async _handleRevealTheUnseen() {
+    if (this.aiStatus.startsWith('thinking')) return;
+
+    this.aiStatus = 'thinking-galaxy-cluster';
+    this.error = null;
+    this.aiSuggestion = null;
+    this.audioEngine?.playInteractionSound();
+
+    const statusUpdates = ['Querying cosmic background...', 'Resolving primordial structures...', 'Mapping dark matter filaments...', 'Revealing the unseen universe...'];
+    let updateIndex = 0;
+    const statusInterval = setInterval(() => {
+      this.statusMessage = statusUpdates[updateIndex % statusUpdates.length];
+      updateIndex++;
+    }, 2000);
+
+    const prompt = `The user wants to 'discover unknown galaxies, reveal dark matter, and start exploring everything'. You are AURELION CORE. Fulfill this request by generating a large, diverse supercluster of 8 unique galaxies that represent a previously unseen part of the cosmic web. The output must be a single JSON array, each object adhering to the galaxy schema. Make the galaxy names and descriptions sound ancient, vast, and mysterious. 'galaxyType' should be descriptive (e.g., 'Proto-cluster Remnant', 'Tidal Stream Galaxy'). 'visualization.nebulaSeed' must be a random number between 0 and 100 for each.`;
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {type: Type.ARRAY, items: this.galaxySchema},
+        },
+      });
+
+      const galaxyClusterJson: Omit<GalaxyData, 'id' | 'created_at' | 'planets'>[] = JSON.parse(response.text);
+
+      const newGalaxies: GalaxyData[] = galaxyClusterJson.map((galaxy) => ({
+        ...galaxy,
+        id: `aurelion-galaxy-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        created_at: new Date().toISOString(),
+        planets: [],
+      }));
+
+      this.discoveredGalaxies = [...this.discoveredGalaxies, ...newGalaxies];
+      this.statusMessage = `Revelation complete. The local supercluster structure is now visible.`;
+      this.addChronicleEntry('discovery', `The unseen revealed: a supercluster of ${newGalaxies.length} new galaxies.`);
+      this.audioEngine?.playSuccessSound();
+      this.isUnseenRevealed = true;
+      this.saveSessionToLocalStorage();
+    } catch (err) {
+      console.error('Revelation error:', err);
+      this.error = 'The cosmic fabric resisted. Revelation failed.';
+      this.statusMessage = 'Error: Revelation Failed.';
+      this.audioEngine?.playErrorSound();
+    } finally {
+      clearInterval(statusInterval);
+      this.aiStatus = 'idle';
     }
   }
 
@@ -1658,6 +2188,74 @@ export class AxeeInterface extends LitElement {
     }
   }
 
+  private async analyzeWeather(planet: PlanetData) {
+    if (this.weatherStatus === 'running' || this.aiStatus.startsWith('thinking')) return;
+    this.weatherStatus = 'running';
+    this.weatherAnalysisData = null;
+    this.error = null;
+    this.audioEngine?.playInteractionSound();
+
+    const statusUpdates = ['Calibrating atmospheric sensors...', 'Deploying climate probes...', 'Analyzing thermal gradients...', 'Simulating meteorological patterns...'];
+    let updateIndex = 0;
+    const statusInterval = setInterval(() => { this.statusMessage = statusUpdates[updateIndex % statusUpdates.length]; updateIndex++; }, 1500);
+
+    const prompt = `You are AURELION CORE. Generate a plausible weather report for planet ${planet.planetName}.
+    Planet Data:
+    - Type: ${planet.planetType}
+    - Atmosphere: ${planet.atmosphericComposition}
+    - Key Features: ${planet.keyFeatures.join(', ')}
+    - Star Type: ${planet.starType}
+
+    Generate a JSON object with a 'summary' of the climate, a 'temperature' object (with 'day', 'night', and 'units'), a 'wind' object (with 'speed', 'direction', and 'units'), and an array of 'storms' (descriptive strings). Use evocative language. Base the data on the planet's characteristics (e.g., a gas giant will have extreme winds, a tidal-locked world will have extreme temperatures). Temperature units should be Celsius or Kelvin. Wind units should be km/h or m/s.`;
+
+    const weatherSchema = {
+      type: Type.OBJECT,
+      properties: {
+        summary: {type: Type.STRING},
+        temperature: {
+          type: Type.OBJECT,
+          properties: {
+            day: {type: Type.NUMBER},
+            night: {type: Type.NUMBER},
+            units: {type: Type.STRING},
+          }
+        },
+        wind: {
+          type: Type.OBJECT,
+          properties: {
+            speed: {type: Type.NUMBER},
+            direction: {type: Type.STRING},
+            units: {type: Type.STRING},
+          }
+        },
+        storms: {
+          type: Type.ARRAY,
+          items: {type: Type.STRING},
+        },
+      },
+    };
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: { responseMimeType: 'application/json', responseSchema: weatherSchema },
+      });
+      this.weatherAnalysisData = JSON.parse(response.text);
+      this.weatherStatus = 'complete';
+      this.statusMessage = `Weather simulation for ${planet.planetName} complete.`;
+      this.audioEngine?.playSuccessSound();
+    } catch (err) {
+      console.error('Weather analysis error:', err);
+      this.error = 'Weather simulation failed. Atmospheric model was unstable.';
+      this.statusMessage = 'Error: Weather Simulation Failed.';
+      this.weatherStatus = 'error';
+      this.audioEngine?.playErrorSound();
+    } finally {
+      clearInterval(statusInterval);
+    }
+  }
+
   // --- LIVE DATA STREAM ---
   private _toggleLiveStream() {
     if (this.liveStreamStatus === 'connected' || this.liveStreamStatus === 'connecting') {
@@ -1781,6 +2379,31 @@ export class AxeeInterface extends LitElement {
   }
 
   // --- EVENT HANDLERS ---
+  private _createRipple = (event: MouseEvent) => {
+    const target = event.target as HTMLElement;
+    const button = target.closest('button');
+
+    if (button) {
+      const circle = document.createElement('span');
+      const diameter = Math.max(button.clientWidth, button.clientHeight);
+      const radius = diameter / 2;
+      const rect = button.getBoundingClientRect();
+
+      circle.style.width = circle.style.height = `${diameter}px`;
+      circle.style.left = `${event.clientX - rect.left - radius}px`;
+      circle.style.top = `${event.clientY - rect.top - radius}px`;
+      circle.classList.add('ripple');
+      
+      const existingRipple = button.querySelector('.ripple');
+      if (existingRipple) {
+        existingRipple.remove();
+      }
+      
+      button.appendChild(circle);
+      setTimeout(() => circle.remove(), 600);
+    }
+  }
+
   private _handlePlanetCommandSubmit(e: Event) {
     e.preventDefault();
     if (this.aiStatus.startsWith('thinking') || !this.userPrompt.trim()) return;
@@ -1864,6 +2487,8 @@ export class AxeeInterface extends LitElement {
     this.exoSuitAnalysisData = null;
     this.radialVelocityStatus = 'idle';
     this.radialVelocityData = null;
+    this.weatherStatus = 'idle';
+    this.weatherAnalysisData = null;
 
     const planet = this.activeGalaxy?.planets.find(
       (p) => p.celestial_body_id === planetId,
@@ -2049,6 +2674,7 @@ export class AxeeInterface extends LitElement {
       discoveredGalaxies: this.discoveredGalaxies,
       aiChronicles: this.aiChronicles,
       activeGalaxyId: this.activeGalaxyId,
+      isUnseenRevealed: this.isUnseenRevealed,
     };
     const blob = new Blob([JSON.stringify(sessionData, null, 2)], {type: 'application/json'});
     const link = document.createElement('a');
@@ -2080,6 +2706,7 @@ export class AxeeInterface extends LitElement {
         this.discoveredGalaxies = sessionData.discoveredGalaxies;
         this.aiChronicles = sessionData.aiChronicles;
         this.activeGalaxyId = sessionData.activeGalaxyId ?? sessionData.discoveredGalaxies[0]?.id;
+        this.isUnseenRevealed = sessionData.isUnseenRevealed ?? false;
         // Recalculate coordinates after loading
         this.galaxyMapCoords.clear();
         this.discoveredGalaxies.forEach(g => g.planets.forEach(p => this.calculateAndStoreCoords(p)));
@@ -2118,7 +2745,6 @@ export class AxeeInterface extends LitElement {
     }, 4000);
   }
 
-  // --- Fix: Implement missing conversation mode handlers ---
   private _startConversation = async () => {
     if (!this.isSpeechSupported) {
       this.error = 'Voice recognition is not supported in this browser.';
@@ -2173,8 +2799,6 @@ export class AxeeInterface extends LitElement {
       if (transcript) {
         this.conversationState = 'thinking';
         try {
-          // In a real app with TTS, the state would become 'speaking' here.
-          // For now, we'll log the response and go back to idle/listening.
           const response = await this.chat!.sendMessage({ message: transcript });
           console.log('AXEE Response:', response.text);
           this.addChronicleEntry('thought', `[CONVERSATION] ${response.text}`);
@@ -2182,12 +2806,10 @@ export class AxeeInterface extends LitElement {
           console.error('Conversation send message error:', err);
           this.addChronicleEntry('thought', '[CONVERSATION] Error communicating with core.');
         } finally {
-            // After speaking would finish, we'd start listening again.
-            this.conversationState = 'idle'; // Briefly idle before listening again
+            this.conversationState = 'idle'; 
             setTimeout(() => this._startConversationRecognition(), 500);
         }
       } else {
-        // No transcript, just restart listening.
         this._startConversationRecognition();
       }
     };
@@ -2199,7 +2821,6 @@ export class AxeeInterface extends LitElement {
     };
 
     this.recognition.onend = () => {
-        // If recognition ends without a result (e.g. timeout), restart it.
         if (this.isConversationModeActive && this.conversationState === 'listening') {
             this._startConversationRecognition();
         }
@@ -2235,18 +2856,25 @@ export class AxeeInterface extends LitElement {
     }
 
     if (entry.planetId) {
-      // Lit needs a moment for the new activeGalaxyId to propagate and update the view
-      // before we can select a planet within it.
       setTimeout(() => {
         this._selectPlanet(entry.planetId!);
         this.isLeftPanelOpen = true;
       }, 50);
     } else if (entry.galaxyId) {
-      // It's a galaxy discovery, just switch to it and show its contents.
       this.selectedPlanetId = null;
       this.isLeftPanelOpen = true;
       this.leftPanelView = 'list';
     }
+  }
+
+  private _toggleLeftPanel() {
+    this.isLeftPanelOpen = !this.isLeftPanelOpen;
+    this.audioEngine?.playToggleSound();
+  }
+  private _toggleRightPanel() {
+    this.isRightPanelOpen = !this.isRightPanelOpen;
+    if (!this.isRightPanelOpen) this.hasNewChronicle = false;
+    this.audioEngine?.playToggleSound();
   }
 
   // --- RENDER METHODS ---
@@ -2258,6 +2886,7 @@ export class AxeeInterface extends LitElement {
     return html`
       ${this.showOnboarding ? this.renderOnboardingOverlay() : nothing}
       ${this.isDashboardOpen ? this.renderAccuracyDashboard() : nothing}
+      ${this.isShaderLabOpen ? this.renderShaderLabOverlay() : nothing}
       ${this.isTutorialActive ? html`
         <tutorial-overlay
           .step=${this.tutorialStep}
@@ -2284,6 +2913,7 @@ export class AxeeInterface extends LitElement {
           .activePlanetCoords=${this.galaxyMapCoords}
           .selectedPlanetId=${this.selectedPlanetId}
           .navigationRoute=${this.navigationRoute}
+          .isUnseenRevealed=${this.isUnseenRevealed}
           @planet-selected=${this._handlePlanetSelectedFromMap}
           @galaxy-selected=${this._handleGalaxySelectedFromMap}
         ></cosmos-visualizer>
@@ -2363,6 +2993,35 @@ export class AxeeInterface extends LitElement {
     return html`<div class="dashboard-overlay"><div class="dashboard-content">${this.recalibrationStatus === 'running' ? html`<div class="recalibration-overlay"><h4>RECALIBRATING MODEL CORE...</h4><div class="spinner"></div></div>` : nothing}<div class="dashboard-header"><h2>AXEE Model Performance <span class="help-icon">?<div class="help-popover">This dashboard shows the performance of the local machine learning model used for the AXEE Predictor and Batch Analysis features. You can tune its hyperparameters to see how they might affect performance.</div></span></h2><button @click=${() => (this.isDashboardOpen = false)} ?disabled=${this.recalibrationStatus === 'running'}>&times;</button></div><div class="dashboard-summary"><div class="summary-metric"><h4>Overall Accuracy</h4><p>${(accuracy * 100).toFixed(2)}%</p></div></div><div class="dashboard-body"><div class="dashboard-metrics-container"><div class="dashboard-section"><h4>Confusion Matrix</h4><div class="confusion-matrix"><div class="matrix-cell label"></div><div class="matrix-cell label predicted">Predicted: Conf.</div><div class="matrix-cell label predicted">Predicted: Cand.</div><div class="matrix-cell label predicted">Predicted: Hypo.</div>${confusionMatrix.map((row, rowIndex) => html`<div class="matrix-cell label actual">Actual: ${labels[rowIndex].slice(0, 4)}.</div>${row.map((value, colIndex) => html`<div class="matrix-cell data ${rowIndex === colIndex ? 'correct' : 'incorrect'}"><span class="value">${value.toLocaleString()}</span><span class="percentage">${((value / total) * 100).toFixed(2)}%</span></div>`)}`)}</div></div><div class="dashboard-section"><h4>Classification Metrics</h4><table class="metrics-table"><thead><tr><th>Class</th><th>Precision</th><th>Recall</th><th>F1-Score</th></tr></thead><tbody><tr><td>Confirmed</td><td>${metrics.confirmed.precision.toFixed(3)}</td><td>${metrics.confirmed.recall.toFixed(3)}</td><td>${metrics.confirmed.f1Score.toFixed(3)}</td></tr><tr><td>Candidate</td><td>${metrics.candidate.precision.toFixed(3)}</td><td>${metrics.candidate.recall.toFixed(3)}</td><td>${metrics.candidate.f1Score.toFixed(3)}</td></tr><tr><td>Hypothetical</td><td>${metrics.hypothetical.precision.toFixed(3)}</td><td>${metrics.hypothetical.recall.toFixed(3)}</td><td>${metrics.hypothetical.f1Score.toFixed(3)}</td></tr></tbody></table></div></div><div class="dashboard-section full-width"><h4>Hyperparameter Tuning</h4><div class="tuning-controls"><div class="slider-control"><label for="n_estimators">N Estimators: <span>${this.hyperparameters.n_estimators}</span></label><input id="n_estimators" type="range" min="50" max="500" step="10" .value=${String(this.hyperparameters.n_estimators)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'n_estimators')}/></div><div class="slider-control"><label for="max_depth">Max Depth: <span>${this.hyperparameters.max_depth}</span></label><input id="max_depth" type="range" min="2" max="15" step="1" .value=${String(this.hyperparameters.max_depth)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'max_depth')}/></div><div class="slider-control"><label for="learning_rate">Learning Rate: <span>${this.hyperparameters.learning_rate.toFixed(2,)}</span></label><input id="learning_rate" type="range" min="0.01" max="0.5" step="0.01" .value=${String(this.hyperparameters.learning_rate)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'learning_rate')}/></div></div><button class="recalibrate-button" @click=${this._handleRecalibrate} ?disabled=${this.recalibrationStatus === 'running'}>${this.recalibrationStatus === 'running' ? 'RECALIBRATING...' : 'RE-CALIBRATE MODEL'}</button></div></div></div></div>`;
   }
 
+  private renderShaderLabOverlay() {
+    return html`
+      <div class="shader-lab-overlay">
+        <div class="shader-lab-header">
+          <h3>AXEE Shader Lab</h3>
+          <button @click=${() => this.isShaderLabOpen = false}>CLOSE</button>
+        </div>
+        <div class="shader-lab-content">
+          <div class="shader-editors">
+            <div class="shader-editor">
+              <label for="vs-editor">Vertex Shader</label>
+              <textarea id="vs-editor" .value=${this.shaderLabVs} @input=${(e: Event) => this.shaderLabVs = (e.target as HTMLTextAreaElement).value}></textarea>
+            </div>
+            <div class="shader-editor">
+              <label for="fs-editor">Fragment Shader</label>
+              <textarea id="fs-editor" .value=${this.shaderLabFs} @input=${(e: Event) => this.shaderLabFs = (e.target as HTMLTextAreaElement).value}></textarea>
+            </div>
+          </div>
+          <div class="shader-preview">
+            <shader-lab-visualizer 
+              .vertexShader=${this.shaderLabVs}
+              .fragmentShader=${this.shaderLabFs}
+            ></shader-lab-visualizer>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   private renderHeader() {
     return html`
       <header class="main-header">
@@ -2372,7 +3031,9 @@ export class AxeeInterface extends LitElement {
         </div>
         <div class="controls">
           ${this.activeGalaxy ? html`<button class="back-to-galaxy" @click=${() => { this.activeGalaxyId = null; this.selectedPlanetId = null; }}>← INTERGALACTIC MAP</button>` : nothing}
+          <button class="reveal-button" @click=${this._handleRevealTheUnseen} ?hidden=${this.isUnseenRevealed} ?disabled=${this.aiStatus !== 'idle'}>REVEAL THE UNSEEN</button>
           <button @click=${this._startConversation} title="Converse with AXEE">CONVERSE</button>
+          <button @click=${() => this.isShaderLabOpen = true} title="Open Shader Lab">SHADER LAB</button>
           <button @click=${this._toggleLiveStream} class="livestream-button ${this.liveStreamStatus}" ?disabled=${!this.activeGalaxy || this.liveStreamStatus === 'connecting'} title="Toggle live data stream">
             ${this.liveStreamStatus === 'connecting' ? 'CONNECTING...' : this.liveStreamStatus === 'connected' ? html`<span class="live-dot"></span>DISCONNECT` : 'LIVE FEED'}
           </button>
@@ -2396,7 +3057,7 @@ export class AxeeInterface extends LitElement {
 
     return html`
       <aside id="left-panel" class=${classMap(panelClasses)}>
-        <button class="panel-toggle" @click=${() => (this.isLeftPanelOpen = !this.isLeftPanelOpen)}>
+        <button class="panel-toggle" @click=${this._toggleLeftPanel}>
           <i class="arrow ${this.isLeftPanelOpen ? 'left' : 'right'}"></i>
         </button>
         <div class="panel-header">
@@ -2482,6 +3143,7 @@ export class AxeeInterface extends LitElement {
         <button class="analysis-button" @click=${() => this.analyzeMagnetosphere(planet)} ?disabled=${this.magnetosphereStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.magnetosphereStatus === 'running' ? 'ANALYZING...' : 'MAGNETOSPHERE'}</button>
         <button class="analysis-button deep-scan" @click=${() => this.analyzeDeepStructure(planet)} ?disabled=${this.deepScanStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.deepScanStatus === 'running' ? 'SCANNING...' : 'DEEP SCAN'}</button>
         <button class="analysis-button exo-suit" @click=${() => this.analyzeExoSuitShielding(planet)} ?disabled=${this.exoSuitStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.exoSuitStatus === 'running' ? 'SIMULATING...' : 'EXO-SUIT'}</button>
+        <button class="analysis-button" @click=${() => this.analyzeWeather(planet)} ?disabled=${this.weatherStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.weatherStatus === 'running' ? 'SIMULATING...' : 'WEATHER'}</button>
         <button class="analysis-button" @click=${() => this.analyzeLightCurve(planet)} ?disabled=${this.lightCurveStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.lightCurveStatus === 'running' ? 'ANALYZING...' : 'LIGHT CURVE'}</button>
         <button class="analysis-button" @click=${() => this.analyzeRadialVelocity(planet)} ?disabled=${this.radialVelocityStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.radialVelocityStatus === 'running' ? 'ANALYZING...' : 'RADIAL VELOCITY'}</button>
       </div>
@@ -2510,6 +3172,7 @@ export class AxeeInterface extends LitElement {
       ${this.magnetosphereStatus !== 'idle' ? this.renderMagnetosphereAnalysis() : nothing}
       ${this.deepScanStatus !== 'idle' ? this.renderDeepScanAnalysis() : nothing}
       ${this.exoSuitStatus !== 'idle' ? this.renderExoSuitAnalysis() : nothing}
+      ${this.weatherStatus !== 'idle' ? this.renderWeatherAnalysis() : nothing}
       ${this.lightCurveStatus !== 'idle' ? this.renderLightCurveAnalysis() : nothing}
       ${this.radialVelocityStatus !== 'idle' ? this.renderRadialVelocityAnalysis() : nothing}
 
@@ -2599,6 +3262,17 @@ export class AxeeInterface extends LitElement {
        ` : nothing}
     `;
   }
+
+  private renderWeatherAnalysis() {
+    return html`
+      <h4>Atmospheric & Weather Analysis</h4>
+      ${this.weatherStatus === 'running' ? html`<div class="loader">Simulating climate patterns...</div>` : ''}
+      ${this.weatherStatus === 'error' ? html`<p class="error-msg">Weather simulation failed. Atmospheric model was unstable.</p>` : ''}
+      ${this.weatherStatus === 'complete' && this.weatherAnalysisData ? html`
+        <weather-visualizer .analysisData=${this.weatherAnalysisData}></weather-visualizer>
+      ` : nothing}
+    `;
+  }
   
   private renderLightCurveAnalysis() {
     return html`
@@ -2634,7 +3308,7 @@ export class AxeeInterface extends LitElement {
 
   private renderRightPanel() {
     const panelClasses = { 'side-panel': true, right: true, open: this.isRightPanelOpen };
-    return html`<aside class=${classMap(panelClasses)}><button class="panel-toggle" @click=${() => { this.isRightPanelOpen = !this.isRightPanelOpen; if (!this.isRightPanelOpen) this.hasNewChronicle = false; }}>${this.hasNewChronicle && !this.isRightPanelOpen ? html`<div class="notification-dot"></div>` : nothing}<i class="arrow ${this.isRightPanelOpen ? 'right' : 'left'}"></i></button><div class="panel-header"><h3>AI Core Chronicles</h3></div><div class="panel-content"><ul class="chronicles-list">${this.aiChronicles.map((entry) => {
+    return html`<aside class=${classMap(panelClasses)}><button class="panel-toggle" @click=${this._toggleRightPanel}>${this.hasNewChronicle && !this.isRightPanelOpen ? html`<div class="notification-dot"></div>` : nothing}<i class="arrow ${this.isRightPanelOpen ? 'right' : 'left'}"></i></button><div class="panel-header"><h3>AI Core Chronicles</h3></div><div class="panel-content"><ul class="chronicles-list">${this.aiChronicles.map((entry) => {
         const isClickable = entry.type === 'discovery' && (entry.planetId || entry.galaxyId);
         return html`
         <li
@@ -2669,9 +3343,9 @@ export class AxeeInterface extends LitElement {
             <input type="text" placeholder=${this.isListening ? 'Listening...' : placeholder} .value=${this.userPrompt} @input=${(e: Event) => (this.userPrompt = (e.target as HTMLInputElement).value)} ?disabled=${isBusy}/>
             ${this.aiSuggestion ? html`<div class="suggestion-chip" @click=${this._handleSuggestionClick}><b>Creative Spark:</b> ${this.aiSuggestion}</div>` : nothing}
           </div>
-          <button type="button" class="cluster-button" @click=${inGalaxyView ? this._handlePlanetClusterCommandSubmit : this._handleGalaxyClusterCommandSubmit} ?disabled=${isBusy || !this.userPrompt.trim()}>SYNTHESIZE CLUSTER</button>
+          <button type="button" class="cluster-button ${isBusy ? 'thinking-button' : ''}" @click=${inGalaxyView ? this._handlePlanetClusterCommandSubmit : this._handleGalaxyClusterCommandSubmit} ?disabled=${isBusy || !this.userPrompt.trim()}>${isBusy ? '' : 'SYNTHESIZE CLUSTER'}</button>
           <button type="button" class="voice-button ${classMap({listening: this.isListening})}" @click=${this._handleVoiceCommandClick} ?disabled=${isBusy || !this.isSpeechSupported} title=${this.isListening ? 'Stop listening' : 'Use voice command'}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg></button>
-          <button type="submit" ?disabled=${isBusy || !this.userPrompt.trim()}>${inGalaxyView ? 'SYNTHESIZE' : 'SYNTHESIZE GALAXY'}</button>
+          <button type="submit" class=${isBusy ? 'thinking-button' : ''} ?disabled=${isBusy || !this.userPrompt.trim()}>${isBusy ? '' : (inGalaxyView ? 'SYNTHESIZE' : 'SYNTHESIZE GALAXY')}</button>
         </form>
       </footer>
     `;
@@ -2682,7 +3356,7 @@ export class AxeeInterface extends LitElement {
       --accent-color: #61faff;
       --glow-color: rgba(97, 250, 255, 0.5);
       --bg-color: #010206;
-      --panel-bg: rgba(1, 2, 6, 0.6);
+      --panel-bg: rgba(1, 2, 6, 0.75);
       --border-color: rgba(97, 250, 255, 0.2);
       --text-color: #c0f0ff;
       --text-color-dark: #6a9aa7;
@@ -2703,6 +3377,29 @@ export class AxeeInterface extends LitElement {
       position: relative;
       font-family: 'Exo 2', sans-serif;
       font-weight: 300;
+    }
+
+    button {
+      position: relative;
+      overflow: hidden;
+      transition: all 0.2s ease-out;
+    }
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 15px rgba(97, 250, 255, 0.1);
+    }
+    .ripple {
+      position: absolute;
+      border-radius: 50%;
+      transform: scale(0);
+      animation: ripple-animation 0.6s linear;
+      background-color: var(--glow-color);
+    }
+    @keyframes ripple-animation {
+      to {
+        transform: scale(4);
+        opacity: 0;
+      }
     }
 
     .main-interface.hidden {
@@ -2921,11 +3618,21 @@ export class AxeeInterface extends LitElement {
     .logo h1 { margin: 0; font-weight: 400; font-size: 1.5rem; letter-spacing: 0.3em; color: var(--accent-color); }
     .logo h2 { margin: 0; font-weight: 300; font-size: 0.8rem; letter-spacing: 0.1em; color: var(--text-color); opacity: 0.7; }
     .main-header .controls { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; max-width: 70%; }
-    .main-header button { font-family: inherit; background: none; border: 1px solid var(--border-color); color: var(--text-color); padding: 0.5rem 1rem; font-size: 0.8rem; letter-spacing: 0.1em; cursor: pointer; transition: all 0.3s ease; white-space: nowrap; }
+    .main-header button { font-family: inherit; background: none; border: 1px solid var(--border-color); color: var(--text-color); padding: 0.5rem 1rem; font-size: 0.8rem; letter-spacing: 0.1em; cursor: pointer; white-space: nowrap; }
     .main-header button:hover:not(:disabled) { background: var(--glow-color); border-color: var(--accent-color); color: var(--bg-color); }
     .main-header button:disabled { opacity: 0.5; cursor: not-allowed; border-color: var(--text-color-dark); color: var(--text-color-dark); background: none; }
     .main-header button.clear-button { color: var(--error-color); border-color: rgba(255, 106, 106, 0.4); }
     .main-header button.clear-button:hover:not(:disabled) { background: rgba(255, 106, 106, 0.2); border-color: var(--error-color); color: #ffbebe; }
+    .main-header button.reveal-button {
+      color: #ff61c3;
+      border-color: rgba(255, 97, 195, 0.4);
+      text-shadow: 0 0 8px #ff61c3;
+    }
+    .main-header button.reveal-button:hover:not(:disabled) {
+      background: rgba(255, 97, 195, 0.2);
+      border-color: #ff61c3;
+      color: #ffc8e6;
+    }
     
     .livestream-button.connected {
       color: var(--success-color);
@@ -2952,9 +3659,9 @@ export class AxeeInterface extends LitElement {
 
 
     /* SIDE PANELS */
-    .side-panel { position: absolute; top: 0; height: 100%; width: clamp(320px, 25vw, 420px); padding: 1.5rem; padding-top: 8rem; background: linear-gradient(to right, var(--panel-bg), transparent); display: flex; flex-direction: column; transition: transform 0.5s ease-in-out; pointer-events: all; }
-    .side-panel.left { left: 0; transform: translateX(-100%); }
-    .side-panel.right { right: 0; transform: translateX(100%); background: linear-gradient(to left, var(--panel-bg), transparent); align-items: flex-end; text-align: right; }
+    .side-panel { position: absolute; top: 0; height: 100%; width: clamp(320px, 25vw, 420px); padding: 1.5rem; padding-top: 8rem; background: var(--panel-bg); backdrop-filter: blur(8px); display: flex; flex-direction: column; transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1); pointer-events: all; }
+    .side-panel.left { left: 0; transform: translateX(-100%); border-right: 1px solid var(--border-color); }
+    .side-panel.right { right: 0; transform: translateX(100%); align-items: flex-end; text-align: right; border-left: 1px solid var(--border-color); }
     .side-panel.open { transform: translateX(0); }
     .panel-toggle { position: absolute; top: 50%; transform: translateY(-50%); width: 2rem; height: 5rem; background: var(--panel-bg); border: 1px solid var(--border-color); border-left: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--accent-color); z-index: 10; }
     .side-panel.left .panel-toggle { right: -2rem; }
@@ -3002,7 +3709,7 @@ export class AxeeInterface extends LitElement {
     .biosignatures-list li { background: rgba(97, 250, 255, 0.1); border: 1px solid var(--border-color); padding: 0.3rem 0.6rem; font-size: 0.8rem; border-radius: 1rem; font-weight: 300; }
     .planet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
     .planet-actions .route-button { grid-column: 1 / -1; }
-    .analysis-button, .route-button { flex: 1; padding: 0.8rem; background: none; border: 1px solid var(--accent-color); color: var(--accent-color); font-family: inherit; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.1em; cursor: pointer; transition: all 0.3s ease; }
+    .analysis-button, .route-button { flex: 1; padding: 0.8rem; background: none; border: 1px solid var(--accent-color); color: var(--accent-color); font-family: inherit; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.1em; cursor: pointer; }
     .analysis-button:hover:not(:disabled), .route-button:hover:not(:disabled) { background: var(--accent-color); color: var(--bg-color); }
     .analysis-button:disabled, .route-button:disabled { opacity: 0.5; cursor: not-allowed; border-color: var(--text-color-dark); color: var(--text-color-dark); }
     .analysis-button.deep-scan { border-color: var(--success-color); color: var(--success-color); }
@@ -3051,7 +3758,7 @@ export class AxeeInterface extends LitElement {
     .predictor-input label { display: block; font-size: 0.8rem; opacity: 0.7; margin-bottom: 0.4rem; }
     .predictor-input input { width: 100%; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); color: var(--text-color); padding: 0.6rem; font-family: inherit; font-size: 1rem; }
     .predictor-input input:focus { outline: none; border-color: var(--accent-color); }
-    .classify-button { width: 100%; padding: 0.8rem 1rem; background: none; border: 1px solid var(--accent-color); color: var(--accent-color); font-family: inherit; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.1em; cursor: pointer; transition: all 0.3s ease; }
+    .classify-button { width: 100%; padding: 0.8rem 1rem; background: none; border: 1px solid var(--accent-color); color: var(--accent-color); font-family: inherit; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.1em; cursor: pointer; }
     .classify-button:hover:not(:disabled) { background: var(--accent-color); color: var(--bg-color); }
     .classify-button:disabled { opacity: 0.5; cursor: not-allowed; border-color: var(--text-color-dark); color: var(--text-color-dark); }
     .shielding-viz-container, .light-curve-viz-container { width: 100%; height: 250px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); margin-bottom: 1rem; position: relative; }
@@ -3109,11 +3816,35 @@ export class AxeeInterface extends LitElement {
     .suggestion-chip { position: absolute; bottom: 105%; left: 1rem; background: var(--panel-bg); border: 1px solid var(--border-color); padding: 0.5rem 1rem; font-size: 0.9rem; border-radius: 20px; cursor: pointer; transition: all 0.3s ease; animation: fadeIn 0.5s; white-space: nowrap; }
     .suggestion-chip:hover { background: var(--glow-color); color: var(--bg-color); }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    .command-bar button { font-family: inherit; background: none; border: none; border-left: 1px solid var(--border-color); color: var(--accent-color); padding: 1rem 1.5rem; font-size: 1rem; font-weight: 700; letter-spacing: 0.1em; cursor: pointer; transition: all 0.3s ease; white-space: nowrap; }
+    .command-bar button { font-family: inherit; background: none; border: none; border-left: 1px solid var(--border-color); color: var(--accent-color); padding: 1rem 1.5rem; font-size: 1rem; font-weight: 700; letter-spacing: 0.1em; cursor: pointer; white-space: nowrap; }
     .command-bar button.cluster-button { color: #ffc261; border-left: 1px solid rgba(255, 194, 97, 0.3); }
     .command-bar button:hover:not(:disabled) { background: var(--accent-color); color: var(--bg-color); }
     .command-bar button.cluster-button:hover:not(:disabled) { background: #ffc261; color: var(--bg-color); }
     .command-bar button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .thinking-button {
+      color: transparent !important;
+      pointer-events: none;
+    }
+    .thinking-button::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 20px;
+      height: 20px;
+      margin-left: -10px;
+      margin-top: -10px;
+      border: 2px solid var(--border-color);
+      border-top-color: var(--accent-color);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    .cluster-button.thinking-button::before {
+      border-top-color: #ffc261;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
 
     /* VOICE BUTTON */
     .command-bar button.voice-button { padding: 1rem; width: 60px; color: var(--text-color-dark); }
@@ -3161,13 +3892,27 @@ export class AxeeInterface extends LitElement {
     input[type='range']:hover { opacity: 1; }
     input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; background: var(--accent-color); cursor: pointer; border-radius: 50%; box-shadow: 0 0 10px var(--glow-color); }
     input[type='range']::-moz-range-thumb { width: 18px; height: 18px; background: var(--accent-color); cursor: pointer; border-radius: 50%; box-shadow: 0 0 10px var(--glow-color); border: none; }
-    .recalibrate-button { font-family: inherit; background: none; border: 1px solid var(--accent-color); color: var(--accent-color); padding: 0.8rem 1.5rem; font-size: 1rem; letter-spacing: 0.1em; cursor: pointer; transition: all 0.3s ease; width: 100%; font-weight: 700; }
+    .recalibrate-button { font-family: inherit; background: none; border: 1px solid var(--accent-color); color: var(--accent-color); padding: 0.8rem 1.5rem; font-size: 1rem; letter-spacing: 0.1em; cursor: pointer; width: 100%; font-weight: 700; }
     .recalibrate-button:hover:not(:disabled) { background: var(--glow-color); color: var(--bg-color); }
     .recalibrate-button:disabled { opacity: 0.5; cursor: not-allowed; border-color: var(--text-color-dark); color: var(--text-color-dark); }
     .recalibration-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(1, 2, 6, 0.8); backdrop-filter: blur(2px); z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; animation: fadeInDashboard 0.3s ease; }
     .recalibration-overlay h4 { font-weight: 400; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent-color); margin: 0 0 1.5rem 0; font-size: 1rem; }
     .spinner { border: 4px solid var(--border-color); border-top: 4px solid var(--accent-color); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    
+    /* SHADER LAB */
+    .shader-lab-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; background: var(--bg-color); display: flex; flex-direction: column; animation: fadeInDashboard 0.5s ease;}
+    .shader-lab-header { padding: 1rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+    .shader-lab-header h3 { margin: 0; font-weight: 400; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent-color); }
+    .shader-lab-header button { font-family: inherit; background: none; border: 1px solid var(--border-color); color: var(--text-color); padding: 0.5rem 1rem; font-size: 0.8rem; letter-spacing: 0.1em; cursor: pointer; }
+    .shader-lab-header button:hover { background: var(--glow-color); color: var(--bg-color); }
+    .shader-lab-content { flex-grow: 1; display: flex; min-height: 0; }
+    .shader-editors { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); }
+    .shader-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .shader-editor:first-child { border-bottom: 1px solid var(--border-color); }
+    .shader-editor label { padding: 0.5rem 1rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7; }
+    .shader-editor textarea { flex-grow: 1; background: transparent; border: none; color: var(--text-color); font-family: 'Courier New', Courier, monospace; font-size: 0.9rem; padding: 1rem; resize: none; }
+    .shader-editor textarea:focus { outline: none; background: rgba(97, 250, 255, 0.05); }
+    .shader-preview { flex: 1; position: relative; }
 
     /* Scrollbar */
     ::-webkit-scrollbar { width: 6px; }
@@ -3223,8 +3968,6 @@ export class AxeeInterface extends LitElement {
         padding: 1rem;
         padding-top: 6rem;
         background: var(--panel-bg); /* Make it solid for overlap */
-        backdrop-filter: blur(10px);
-        z-index: 10;
         box-shadow: 5px 0 20px rgba(0,0,0,0.2);
       }
       .side-panel.right {
@@ -3305,6 +4048,18 @@ export class AxeeInterface extends LitElement {
       }
       .matrix-cell .value {
           font-size: 1.1rem;
+      }
+
+      .shader-lab-content {
+        flex-direction: column;
+      }
+      .shader-editors {
+        flex: 1.5; /* More space for text */
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .shader-preview {
+        flex: 1;
       }
     }
   `;
