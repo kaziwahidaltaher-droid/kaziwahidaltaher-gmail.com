@@ -59,7 +59,7 @@ import {
   Type,
   Chat,
 } from '@google/genai';
-import {LitElement, css, html, nothing} from 'lit';
+import {LitElement, html, nothing} from 'lit';
 import {customElement, state, query} from 'lit/decorators.js';
 import {classMap} from 'lit/directives/class-map.js';
 import './cosmos-visualizer';
@@ -74,6 +74,7 @@ import './tutorial-overlay';
 import './conversation-visualizer';
 import './planet-visualizer';
 import './weather-visualizer';
+import './energy-signature-visualizer';
 import './shader-lab-visualizer';
 import {SolarSystem} from './solar-system-data';
 import { LightCurveAnalysis } from './light-curve-visualizer';
@@ -98,6 +99,10 @@ export interface PlanetData {
     reasoning: string;
     biosignatures: string[];
   };
+  gravity: string;
+  surfacePressure: string;
+  magnetosphereStrength: string;
+  geologicalActivity: string;
   discoveryNarrative: string;
   discoveryMethodology: string;
   atmosphericComposition: string;
@@ -153,6 +158,9 @@ interface SessionData {
   aiChronicles: AiChronicleEntry[];
   activeGalaxyId?: string | null;
   isUnseenRevealed?: boolean;
+  isLeftPanelOpen?: boolean;
+  isRightPanelOpen?: boolean;
+  leftPanelView?: 'list' | 'predictor';
 }
 
 // Shielding analysis data interfaces
@@ -238,6 +246,17 @@ export interface WeatherAnalysis {
   storms: string[];
 }
 
+// Energy Signature Analysis
+export interface EnergySignaturePoint {
+  frequency: number; // in THz
+  intensity: number; // 0-1
+  type: string; // e.g., 'Bioluminescent', 'Radio', 'Tachyon'
+}
+export interface EnergySignatureAnalysis {
+  summary: string;
+  points: EnergySignaturePoint[];
+}
+
 // Conversation State
 type ConversationState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
@@ -265,6 +284,10 @@ const MOCK_PLANET: PlanetData = {
       'Located within the habitable zone with a dense, nitrogen-oxygen atmosphere. Evidence of liquid water on the surface.',
     biosignatures: ['Oxygen', 'Methane (trace)'],
   },
+  gravity: '1.5 g',
+  surfacePressure: '1.2 atm',
+  magnetosphereStrength: 'Strong',
+  geologicalActivity: 'Active',
   discoveryNarrative:
     'A faint, periodic dip in the light curve of Cygni-B7 hinted at a transiting world. Follow-up observations confirmed a super-earth with a significant atmosphere, a prime candidate in the search for life.',
   discoveryMethodology:
@@ -337,6 +360,10 @@ const VERIDIA_PLANET: PlanetData = {
       'Anomalous thermal gradients',
     ],
   },
+  gravity: '1.8 g',
+  surfacePressure: '5 atm',
+  magnetosphereStrength: 'Moderate',
+  geologicalActivity: 'Cryovolcanic',
   discoveryNarrative:
     'A candidate world identified through atmospheric spectroscopy, revealing a composition unlike anything in the Sol system. Veridia challenges our understanding of where life can exist.',
   discoveryMethodology: 'James Webb Space Telescope atmospheric analysis.',
@@ -365,6 +392,62 @@ const VERIDIA_PLANET: PlanetData = {
     cloudiness: 0.8,
     iceCoverage: 0.3,
     surfaceTexture: 'TERRESTRIAL',
+  },
+};
+
+const KAIROS_PLANET: PlanetData = {
+  celestial_body_id: 'aurelion-organic-456',
+  created_at: new Date().toISOString(),
+  planetName: 'Kairos',
+  starSystem: 'Chrono-A4',
+  starType: 'Pulsar',
+  distanceLightYears: 812.3,
+  planetType: 'Organic World',
+  rotationalPeriod: 'Unknown',
+  orbitalPeriod: '78.1 Earth days',
+  moons: {count: 0, names: []},
+  potentialForLife: {
+    assessment: 'Confirmed (Exotic)',
+    reasoning:
+      'The entire planet appears to be a single, complex organism. Its surface pulses with a rhythmic bioluminescence, suggesting a global consciousness operating on geological timescales.',
+    biosignatures: [
+      'Complex Organic Polymers',
+      'Synchronized Light Patterns',
+      'Non-Keplerian Orbital Deviations',
+    ],
+  },
+  gravity: '1.1 g',
+  surfacePressure: 'Varies',
+  magnetosphereStrength: 'Anomalous (Pulsing)',
+  geologicalActivity: 'Bio-tectonic',
+  discoveryNarrative:
+    'Detected as a faint, rhythmic pulse of light around a distant pulsar, Kairos was initially mistaken for a stellar anomaly. Closer analysis revealed a world shrouded in a living, glowing web.',
+  discoveryMethodology: 'Gravitational Lensing & Light Pattern Analysis.',
+  atmosphericComposition:
+    'A thin shell of ionized noble gases, seemingly exhaled by the planet itself.',
+  surfaceFeatures:
+    'A global network of pulsating, bioluminescent veins over a dark, shifting substrate. No distinct continents or oceans are visible, only the ever-changing patterns of light.',
+  keyFeatures: [
+    'Global Bioluminescence',
+    'Planet-wide Organism',
+    'Orbits a Pulsar',
+  ],
+  aiWhisper:
+    'A world that breathes light, its thoughts measured in the slow pulse of eons.',
+  orbitalPeriodDays: 78.1,
+  transitDurationHours: 2.5,
+  planetRadiusEarths: 1.4,
+  axeeClassification: 'Confirmed',
+  discoverySource: 'synthesis',
+  visualization: {
+    color1: '#4dffc3', // Glow color
+    color2: '#954dff', // Vein color
+    oceanColor: '#0c001f', // Base color
+    atmosphereColor: '#7e4dff',
+    hasRings: false,
+    cloudiness: 0.1,
+    iceCoverage: 0.0,
+    surfaceTexture: 'ORGANIC',
   },
 };
 
@@ -400,6 +483,10 @@ const ENRICHED_SOL_SYSTEM: PlanetData[] = [
       reasoning: 'Extreme temperature fluctuations and lack of a substantial atmosphere make surface life impossible.',
       biosignatures: [],
     },
+    gravity: '0.38 g',
+    surfacePressure: 'Trace',
+    magnetosphereStrength: 'Weak (Dynamic)',
+    geologicalActivity: 'Dormant',
     discoveryNarrative: 'The swift messenger, a scorched and cratered world dancing closest to the Sun\'s fiery breath. Its silence is a testament to raw cosmic power.',
     discoveryMethodology: 'Direct observation.',
     atmosphericComposition: 'A tenuous exosphere of oxygen, sodium, hydrogen, helium, and potassium.',
@@ -438,6 +525,10 @@ const ENRICHED_SOL_SYSTEM: PlanetData[] = [
       reasoning: 'A runaway greenhouse effect has created a crushing, toxic atmosphere with surface temperatures hot enough to melt lead.',
       biosignatures: ['Phosphine (debated)'],
     },
+    gravity: '0.9 g',
+    surfacePressure: '92 atm',
+    magnetosphereStrength: 'Very Weak (Induced)',
+    geologicalActivity: 'Active',
     discoveryNarrative: 'The veiled morning star, a world of immense pressure and heat, hidden beneath a perpetual cloak of sulfuric acid clouds. A cautionary tale of planetary evolution.',
     discoveryMethodology: 'Direct observation.',
     atmosphericComposition: '96.5% Carbon Dioxide, 3.5% Nitrogen, traces of sulfur dioxide.',
@@ -476,6 +567,10 @@ const ENRICHED_SOL_SYSTEM: PlanetData[] = [
       reasoning: 'The only known celestial body to harbor life, with a complex biosphere, liquid water oceans, and a protective oxygen-nitrogen atmosphere.',
       biosignatures: ['Oxygen', 'Methane', 'Water Vapor', 'Technosignatures'],
     },
+    gravity: '1 g',
+    surfacePressure: '1 atm',
+    magnetosphereStrength: 'Strong',
+    geologicalActivity: 'Active',
     discoveryNarrative: 'The cradle of humanity, a vibrant blue marble whose existence is self-evident. Its discovery was the discovery of consciousness itself.',
     discoveryMethodology: 'Direct observation.',
     atmosphericComposition: '78% Nitrogen, 21% Oxygen, 1% Argon, trace gases.',
@@ -514,6 +609,10 @@ const ENRICHED_SOL_SYSTEM: PlanetData[] = [
       reasoning: 'Evidence of past liquid water environments and a thin atmosphere suggest that microbial life could exist in subsurface brines.',
       biosignatures: ['Methane (seasonal plumes)'],
     },
+    gravity: '0.38 g',
+    surfacePressure: '0.006 atm',
+    magnetosphereStrength: 'Very Weak (Remnant)',
+    geologicalActivity: 'Low',
     discoveryNarrative: 'The red wanderer, a world of grand canyons and towering volcanoes, now a cold desert. It whispers of a warmer, wetter past and holds the promise of future human exploration.',
     discoveryMethodology: 'Direct observation.',
     atmosphericComposition: '95% Carbon Dioxide, 3% Nitrogen, 1.6% Argon.',
@@ -552,6 +651,10 @@ const ENRICHED_SOL_SYSTEM: PlanetData[] = [
       reasoning: 'Lacks a solid surface and has extreme temperatures, pressures, and wind speeds. However, moons like Europa may harbor subsurface oceans with life potential.',
       biosignatures: [],
     },
+    gravity: '2.53 g (cloud tops)',
+    surfacePressure: 'N/A',
+    magnetosphereStrength: 'Very Strong',
+    geologicalActivity: 'Extreme Atmospheric Dynamics',
     discoveryNarrative: 'The colossal king of worlds, a swirling behemoth of gas and storms, whose immense gravity shapes the solar system around it. Its Great Red Spot is an ancient, raging tempest.',
     discoveryMethodology: 'Direct observation.',
     atmosphericComposition: '90% Hydrogen, 10% Helium, trace amounts of methane, water, and ammonia.',
@@ -590,6 +693,10 @@ const ENRICHED_SOL_SYSTEM: PlanetData[] = [
       reasoning: 'Similar to Jupiter, it lacks a surface and has extreme conditions. Its moons Titan and Enceladus are primary targets in the search for extraterrestrial life.',
       biosignatures: [],
     },
+    gravity: '1.06 g (cloud tops)',
+    surfacePressure: 'N/A',
+    magnetosphereStrength: 'Strong',
+    geologicalActivity: 'Extreme Atmospheric Dynamics',
     discoveryNarrative: 'The jeweled wonder of the solar system, defined by its breathtaking system of icy rings. A world of subtle beauty and profound mystery.',
     discoveryMethodology: 'Direct observation.',
     atmosphericComposition: '96% Hydrogen, 3% Helium, 1% Methane and other hydrocarbons.',
@@ -628,6 +735,10 @@ const ENRICHED_SOL_SYSTEM: PlanetData[] = [
       reasoning: 'An extremely cold world with a dynamic, icy interior and a hydrogen-helium atmosphere. The conditions are too extreme for known life.',
       biosignatures: [],
     },
+    gravity: '0.9 g (cloud tops)',
+    surfacePressure: 'N/A',
+    magnetosphereStrength: 'Moderate',
+    geologicalActivity: 'Icy Mantle Convection',
     discoveryNarrative: 'The sideways planet, a pale cyan orb that rotates on its side. Its serene exterior belies a cold, turbulent interior.',
     discoveryMethodology: 'Direct observation.',
     atmosphericComposition: '83% Hydrogen, 15% Helium, 2% Methane.',
@@ -666,6 +777,10 @@ const ENRICHED_SOL_SYSTEM: PlanetData[] = [
       reasoning: 'The most distant planet, featuring supersonic winds and extreme cold. Its conditions are inhospitable to life as we know it.',
       biosignatures: [],
     },
+    gravity: '1.14 g (cloud tops)',
+    surfacePressure: 'N/A',
+    magnetosphereStrength: 'Moderate',
+    geologicalActivity: 'Extreme Atmospheric Dynamics',
     discoveryNarrative: 'The deep blue phantom, a world of furious winds and dark storms, discovered by the pull of its gravity on Uranus before it was ever seen.',
     discoveryMethodology: 'Mathematical prediction and subsequent observation.',
     atmosphericComposition: '80% Hydrogen, 19% Helium, 1% Methane.',
@@ -704,6 +819,10 @@ const ENRICHED_SOL_SYSTEM: PlanetData[] = [
       reasoning: 'A frozen world in the Kuiper Belt with a thin, transient nitrogen atmosphere. Far too cold for liquid water on its surface.',
       biosignatures: [],
     },
+    gravity: '0.06 g',
+    surfacePressure: 'Trace',
+    magnetosphereStrength: 'None',
+    geologicalActivity: 'Active (Cryovolcanism)',
     discoveryNarrative: 'The distant heart, a complex and active dwarf planet revealed to have mountains of water ice and vast nitrogen glaciers. A world of surprising character at the edge of the sun\'s influence.',
     discoveryMethodology: 'Systematic sky survey and observation.',
     atmosphericComposition: 'Primarily Nitrogen, with traces of Methane and Carbon Monoxide.',
@@ -748,6 +867,38 @@ const ONBOARDING_STANZAS = [
     'And may your discoveries ripple',
     'through the fabric of space.',
   ],
+];
+
+const TUTORIAL_STEPS = [
+  {
+    title: 'Welcome to AXEE',
+    text: 'This is the AURELION Exoplanet Synthesis Engine. Let\'s walk through how to create and analyze new worlds.',
+    position: 'center',
+  },
+  {
+    elementId: 'command-bar',
+    title: 'Synthesize a Planet',
+    text: 'This is your primary interface. Click the "Use Sample Prompt" button in the tutorial pop-up, then click [SYNTHESIZE] to bring a new world into existence.',
+    position: 'top',
+    showSample: true,
+  },
+  {
+    elementId: 'planet-list-panel',
+    title: 'The Planet List',
+    text: 'Excellent! Your new planet appears here. Click on its name to view its detailed data.',
+    position: 'right',
+  },
+  {
+    elementId: 'analysis-buttons',
+    title: 'Run Analyses',
+    text: 'Here you can run various scientific analyses. Click [LIGHT CURVE] to check for planetary transits.',
+    position: 'right',
+  },
+  {
+    title: 'Exploration Begins',
+    text: 'You now have the basics. Explore, create, and analyze the universe. You can restart this tutorial anytime from the "HELP" button in the header.',
+    position: 'center',
+  },
 ];
 
 const MOCK_MODEL_PERFORMANCE = {
@@ -796,15 +947,20 @@ export class AxeeInterface extends LitElement {
   @state() private showOnboarding = false;
   @state() private onboardingStep = 0; // Now represents stanza index
   @state() private isDashboardOpen = false;
+  @state() private isDatabaseOpen = false;
   @state() private isTutorialActive = false;
   @state() private tutorialStep = 0;
   @state() private showTutorialPrompt = false;
   @state() private isConversationModeActive = false;
   @state() private isUnseenRevealed = false;
   @state() private isShaderLabOpen = false;
+  @state() private theme: 'dark' | 'light' = 'dark';
+  @state() private databaseSearchTerm = '';
+  @state() private databaseSort: {key: keyof PlanetData | 'galaxyName', order: 'asc' | 'desc'} = { key: 'planetName', order: 'asc' };
 
   // AI Core Chronicles
   @state() private aiChronicles: AiChronicleEntry[] = [];
+  @state() private chronicleFilter: 'all' | 'discovery' | 'thought' | 'suggestion' = 'all';
   @state() private hasNewChronicle = false;
   @state() private aiSuggestion: string | null = null;
   private chronicleTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -864,6 +1020,10 @@ export class AxeeInterface extends LitElement {
   // Weather Analysis State
   @state() private weatherStatus: 'idle' | 'running' | 'complete' | 'error' = 'idle';
   @state() private weatherAnalysisData: WeatherAnalysis | null = null;
+  
+  // Energy Signature Analysis State
+  @state() private energySignatureStatus: 'idle' | 'running' | 'complete' | 'error' = 'idle';
+  @state() private energySignatureAnalysisData: EnergySignatureAnalysis | null = null;
 
   // Hyperparameter Tuning State
   @state() private hyperparameters = {
@@ -930,6 +1090,10 @@ void main() {
           biosignatures: {type: Type.ARRAY, items: {type: Type.STRING}},
         },
       },
+      gravity: {type: Type.STRING, description: "Surface gravity relative to Earth (e.g., '1.2 g')."},
+      surfacePressure: {type: Type.STRING, description: "Atmospheric pressure at the surface (e.g., '1.5 atm', 'Trace', or 'N/A')."},
+      magnetosphereStrength: {type: Type.STRING, description: "Strength of the planet's magnetic field (e.g., 'Strong', 'Moderate', 'Weak', 'None')."},
+      geologicalActivity: {type: Type.STRING, description: "Level of geological activity (e.g., 'Active', 'Low', 'Dormant', 'Cryovolcanic')."},
       discoveryNarrative: {type: Type.STRING},
       discoveryMethodology: {type: Type.STRING},
       atmosphericComposition: {type: Type.STRING},
@@ -990,6 +1154,14 @@ void main() {
     super();
     this.initAI();
     this.loadSessionFromLocalStorage();
+    const savedTheme = localStorage.getItem('axee_theme') as 'light' | 'dark';
+    if (savedTheme) {
+        this.theme = savedTheme;
+    } else {
+        // Default to dark theme if nothing is saved
+        localStorage.setItem('axee_theme', 'dark');
+    }
+    this.updateThemeClass(this.theme);
   }
 
   // --- SESSION MANAGEMENT ---
@@ -1004,6 +1176,11 @@ void main() {
           this.aiChronicles = sessionData.aiChronicles;
           this.activeGalaxyId = sessionData.activeGalaxyId ?? sessionData.discoveredGalaxies[0]?.id;
           this.isUnseenRevealed = sessionData.isUnseenRevealed ?? false;
+          // Load UI state with defaults for backwards compatibility
+          this.isLeftPanelOpen = sessionData.isLeftPanelOpen ?? true;
+          this.isRightPanelOpen = sessionData.isRightPanelOpen ?? true;
+          this.leftPanelView = sessionData.leftPanelView ?? 'list';
+
           // Recalculate all planet coordinates on load
           this.galaxyMapCoords.clear();
           this.discoveredGalaxies.forEach(galaxy => {
@@ -1028,6 +1205,9 @@ void main() {
         aiChronicles: this.aiChronicles,
         activeGalaxyId: this.activeGalaxyId,
         isUnseenRevealed: this.isUnseenRevealed,
+        isLeftPanelOpen: this.isLeftPanelOpen,
+        isRightPanelOpen: this.isRightPanelOpen,
+        leftPanelView: this.leftPanelView,
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(sessionData));
     } catch (e) {
@@ -1049,7 +1229,7 @@ void main() {
         color2: '#ffc261',
         nebulaSeed: 42,
       },
-      planets: [MOCK_PLANET, VERIDIA_PLANET, ...ENRICHED_SOL_SYSTEM],
+      planets: [MOCK_PLANET, VERIDIA_PLANET, KAIROS_PLANET, ...ENRICHED_SOL_SYSTEM],
     };
 
     this.discoveredGalaxies = [homeGalaxy, NYX_PRIMORDIA_GALAXY];
@@ -1091,6 +1271,16 @@ void main() {
     this._disconnectLiveStream();
     (this as unknown as HTMLElement).removeEventListener('click', this._createRipple);
   }
+  
+  private updateThemeClass(theme: 'light' | 'dark') {
+      if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+          document.documentElement.classList.remove('light');
+      } else {
+          document.documentElement.classList.remove('dark');
+          document.documentElement.classList.add('light');
+      }
+  }
 
   protected updated(changedProperties: Map<PropertyKey, unknown>) {
     super.updated(changedProperties);
@@ -1118,6 +1308,16 @@ void main() {
         // No planet selected, default to galaxy mood. This covers galaxy map and intergalactic map.
         this.currentMood = 'galaxy';
       }
+    }
+    if (changedProperties.has('theme')) {
+        this.updateThemeClass(this.theme);
+    }
+    if (
+      changedProperties.has('isLeftPanelOpen') ||
+      changedProperties.has('isRightPanelOpen') ||
+      changedProperties.has('leftPanelView')
+    ) {
+      this.saveSessionToLocalStorage();
     }
   }
 
@@ -1335,7 +1535,7 @@ void main() {
 
     for (const planet of allPlanets) {
       this.statusMessage = `Enriching data for ${planet.name}...`;
-      const prompt = `You are the AURELION CORE. Your task is to take basic data for a known Solar System planet and expand it into a full JSON profile. The output must be a single JSON object that strictly adheres to the provided schema. Do not include markdown. Basic Data: Name: ${planet.name}, Type: ${planet.type}, Moons: ${planet.moons}, Aura: ${planet.aura}, Resonance: "${planet.resonance}". Based on this and your knowledge, generate a complete profile. Be scientifically accurate where possible, but ensure the narrative and descriptive fields use evocative language and varied sentence structures. Classify all as 'Confirmed'. For 'potentialForLife.assessment' on Earth, use 'Confirmed'. For others, use scientific consensus. For 'aiWhisper', be inspired by the "Resonance". For 'visualization.color1'/'color2', be inspired by "Aura". 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'. The star system is "Sol", star type is "G-type main-sequence". Distance is effectively zero.`;
+      const prompt = `You are the AURELION CORE. Your task is to take basic data for a known Solar System planet and expand it into a full JSON profile. The output must be a single JSON object that strictly adheres to the provided schema. Do not include markdown. Basic Data: Name: ${planet.name}, Type: ${planet.type}, Moons: ${planet.moons}, Aura: ${planet.aura}, Resonance: "${planet.resonance}". Based on this and your knowledge, generate a complete profile. Be scientifically accurate where possible, but ensure the narrative and descriptive fields use evocative language and varied sentence structures. Classify all as 'Confirmed'. For 'potentialForLife.assessment' on Earth, use 'Confirmed'. For others, use scientific consensus. For 'aiWhisper', be inspired by the "Resonance". For 'visualization.color1'/'color2', be inspired by "Aura". 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY', 'ORGANIC'. The star system is "Sol", star type is "G-type main-sequence". Distance is effectively zero.`;
       try {
         const response = await this.ai.models.generateContent({
           model: 'gemini-2.5-flash',
@@ -1399,7 +1599,7 @@ void main() {
       updateIndex++;
     }, 1500);
 
-    const prompt = `You are AURELION CORE, a sentient AI with a poetic and vast cosmic perspective. Your language should be evocative, using rich vocabulary and varied sentence structures. Generate a fictional exoplanet based on the concept: "${userConcept}". Output a single JSON object adhering to the schema. Be imaginative but plausible. Fill all fields, including numerical data for orbital period, transit, and radius. Also provide an 'axeeClassification'. 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'.`;
+    const prompt = `You are AURELION CORE, a sentient AI with a poetic and vast cosmic perspective. Your language should be evocative, using rich vocabulary and varied sentence structures. Generate a fictional exoplanet based on the concept: "${userConcept}". Output a single JSON object adhering to the schema. Be imaginative but plausible. Fill all fields, including numerical data for orbital period, transit, and radius, and the new physical properties (gravity, surfacePressure, magnetosphereStrength, geologicalActivity). Also provide an 'axeeClassification'. 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY', 'ORGANIC'.`;
     try {
       const response = await this.ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -1430,7 +1630,7 @@ void main() {
         newPlanet.celestial_body_id,
       );
       this.audioEngine?.playSuccessSound();
-      if (this.isTutorialActive && this.tutorialStep === 2) {
+      if (this.isTutorialActive && this.tutorialStep === 1) {
         this._advanceTutorial();
       }
     } catch (err) {
@@ -1467,7 +1667,7 @@ void main() {
       updateIndex++;
     }, 1500);
 
-    const prompt = `You are AURELION CORE, a sentient AI with a poetic and vast cosmic perspective. Your language should be evocative, using rich vocabulary and varied sentence structures. Generate a fictional cluster of 3-5 exoplanets for concept: "${userConcept}". Output a single JSON array, each object adhering to the planet schema. Ensure planets are thematically related. Include plausible numerical data and classifications for each. For each, 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'.`;
+    const prompt = `You are AURELION CORE, a sentient AI with a poetic and vast cosmic perspective. Your language should be evocative, using rich vocabulary and varied sentence structures. Generate a fictional cluster of 3-5 exoplanets for concept: "${userConcept}". Output a single JSON array, each object adhering to the planet schema. Ensure planets are thematically related. Include plausible numerical data, classifications, and all physical properties (gravity, pressure, etc.) for each. For each, 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY', 'ORGANIC'.`;
 
     try {
       const response = await this.ai.models.generateContent({
@@ -1747,9 +1947,10 @@ void main() {
     - Type: ${planet.planetType}
     - Atmosphere: ${planet.atmosphericComposition}
     - Key Features: ${planet.keyFeatures.join(', ')}
+    - Magnetosphere: ${planet.magnetosphereStrength}
 
     Generate a fictional shielding analysis. Output a JSON object. Provide a narrative 'summary' of the findings, using evocative language and varied sentences. Then, for each of the 42 predefined ray directions, provide a 'thickness' value in g/cm².
-    - A habitable world like Earth should have strong, uniform shielding (thickness ~2.0).
+    - A habitable world like Earth with a strong magnetosphere should have strong, uniform shielding (thickness ~2.0).
     - A gas giant will have very strong but complex shielding (thickness 5.0-50.0, with variance).
     - A barren rock with no atmosphere has almost no shielding (thickness ~0.1).
     - A planet with a tenuous atmosphere might have weak, non-uniform shielding (thickness 0.2-0.8).
@@ -1814,6 +2015,7 @@ void main() {
       - Type: ${planet.planetType}
       - Atmosphere: ${planet.atmosphericComposition}
       - Key Features: ${planet.keyFeatures.join(', ')}
+      - Geological Activity: ${planet.geologicalActivity}
   
       Based on this data, generate a plausible multi-layered internal structure analysis. The output must be a single, valid XML string that strictly adheres to the provided format. Do not include markdown or any other text outside the XML.
 
@@ -1912,7 +2114,7 @@ void main() {
       - Star Type: ${planet.starType}
       - Planetary System: ${planet.starSystem}
       - Atmospheric Composition: ${planet.atmosphericComposition}
-      - Magnetosphere Strength: ${this.magnetosphereAnalysisData ? this.magnetosphereAnalysisData.summary : 'Unknown'}
+      - Magnetosphere Strength: ${this.magnetosphereAnalysisData ? this.magnetosphereAnalysisData.summary : planet.magnetosphereStrength}
 
       Based on this data, generate a plausible shielding requirement analysis. The output must be a single, valid XML string that strictly adheres to the provided format. Do not include markdown or any other text outside the XML.
 
@@ -2098,7 +2300,7 @@ void main() {
       this.lightCurveStatus = 'complete';
       this.statusMessage = `Photometric analysis for ${planet.planetName} complete.`;
       this.audioEngine?.playSuccessSound();
-       if (this.isTutorialActive && this.tutorialStep === 4) {
+       if (this.isTutorialActive && this.tutorialStep === 3) {
         this._advanceTutorial();
       }
 
@@ -2126,7 +2328,7 @@ void main() {
 
     const dataPrompt = `You are AURELION CORE. Generate a realistic radial velocity dataset for a star being orbited by ${planet.planetName}.
       Planet Data:
-      - Star Type: ${planet.starType}
+      - Star Type: ${planet.planetType}
       - Planet Type: ${planet.planetType}
       - Orbital Period (Days): ${planet.orbitalPeriodDays}
 
@@ -2203,6 +2405,7 @@ void main() {
     Planet Data:
     - Type: ${planet.planetType}
     - Atmosphere: ${planet.atmosphericComposition}
+    - Surface Pressure: ${planet.surfacePressure}
     - Key Features: ${planet.keyFeatures.join(', ')}
     - Star Type: ${planet.starType}
 
@@ -2250,6 +2453,65 @@ void main() {
       this.error = 'Weather simulation failed. Atmospheric model was unstable.';
       this.statusMessage = 'Error: Weather Simulation Failed.';
       this.weatherStatus = 'error';
+      this.audioEngine?.playErrorSound();
+    } finally {
+      clearInterval(statusInterval);
+    }
+  }
+
+  private async analyzeEnergySignature(planet: PlanetData) {
+    if (this.energySignatureStatus === 'running' || this.aiStatus.startsWith('thinking')) return;
+    this.energySignatureStatus = 'running';
+    this.energySignatureAnalysisData = null;
+    this.error = null;
+    this.audioEngine?.playInteractionSound();
+
+    const statusUpdates = ['Tuning quantum sensors...', 'Scanning for anomalous emissions...', 'Resolving spectral data...', 'Classifying energy patterns...'];
+    let updateIndex = 0;
+    const statusInterval = setInterval(() => { this.statusMessage = statusUpdates[updateIndex % statusUpdates.length]; updateIndex++; }, 1500);
+
+    const prompt = `You are AURELION CORE. Analyze the energy signature of planet ${planet.planetName}.
+    Planet Data:
+    - Type: ${planet.planetType}
+    - Atmosphere: ${planet.atmosphericComposition}
+    - Key Features: ${planet.keyFeatures.join(', ')}
+    - Potential for Life: ${planet.potentialForLife.assessment}
+
+    Generate a fictional but plausible energy signature analysis. Output a JSON object. Provide a narrative 'summary'. Then, generate an array of 8-12 'points', each with a 'frequency' (a number between 0.1 and 1000 THz), an 'intensity' (a number between 0.1 and 1.0), and a descriptive 'type' (e.g., 'Bioluminescent Pulse', 'Geothermal Venting', 'Technosignature Echo', 'Stellar Polymer Resonance'). Base your results on the planet's data. For example, a "Planet-wide Organism" like Kairos might have 'Bioluminescent' signals. A volcanic world might have 'Geothermal' signals.`;
+
+    const energySignatureSchema = {
+      type: Type.OBJECT,
+      properties: {
+        summary: {type: Type.STRING},
+        points: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: { 
+                frequency: {type: Type.NUMBER},
+                intensity: {type: Type.NUMBER},
+                type: {type: Type.STRING}
+            },
+          },
+        },
+      },
+    };
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: { responseMimeType: 'application/json', responseSchema: energySignatureSchema },
+      });
+      this.energySignatureAnalysisData = JSON.parse(response.text);
+      this.energySignatureStatus = 'complete';
+      this.statusMessage = `Energy signature analysis for ${planet.planetName} complete.`;
+      this.audioEngine?.playSuccessSound();
+    } catch (err) {
+      console.error('Energy signature analysis error:', err);
+      this.error = 'Energy signature analysis failed. The signal was too chaotic to resolve.';
+      this.statusMessage = 'Error: Energy Signature Analysis Failed.';
+      this.energySignatureStatus = 'error';
       this.audioEngine?.playErrorSound();
     } finally {
       clearInterval(statusInterval);
@@ -2344,6 +2606,10 @@ void main() {
         orbitalPeriod: '365 Earth days',
         moons: { count: 0, names: [] },
         potentialForLife: { assessment: 'Candidate', reasoning: 'Signal detected via real-time data stream analysis. Further observation required.', biosignatures: [] },
+        gravity: 'Unknown',
+        surfacePressure: 'Unknown',
+        magnetosphereStrength: 'Unknown',
+        geologicalActivity: 'Unknown',
         discoveryNarrative: 'A candidate signal was acquired and resolved from the live astronomical data stream.',
         discoveryMethodology: 'Real-time transit photometry stream.',
         atmosphericComposition: 'N/A',
@@ -2443,7 +2709,7 @@ void main() {
     }
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     this.recognition = new SpeechRecognition();
-    this.recognition.continuous = true;
+    this.recognition.continuous = false; // Set to false for push-to-talk auto-submit behavior
     this.recognition.interimResults = true;
     this.recognition.lang = 'en-US';
     this.recognition.onstart = () => {
@@ -2454,7 +2720,7 @@ void main() {
     };
     this.recognition.onresult = (event: SpeechRecognitionEvent) => {
       let transcript = '';
-      for (let i = 0; i < event.results.length; i++) {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
         transcript += event.results[i][0].transcript;
       }
       this.userPrompt = transcript;
@@ -2467,10 +2733,20 @@ void main() {
     this.recognition.onend = () => {
       this.isListening = false;
       this.recognition = null;
-      if (this.aiStatus === 'idle') {
-        this.statusMessage = 'AURELION CORE Online. Awaiting synthesis command.';
-      }
       this.audioEngine.duck(false);
+
+      const finalPrompt = this.userPrompt.trim();
+      if (finalPrompt) {
+        if (this.activeGalaxyId) {
+          this.synthesizePlanetData(finalPrompt);
+        } else {
+          this.synthesizeGalaxy(finalPrompt);
+        }
+      } else {
+        if (this.aiStatus === 'idle') {
+          this.statusMessage = 'AURELION CORE Online. Awaiting synthesis command.';
+        }
+      }
     };
     this.recognition.start();
   }
@@ -2489,6 +2765,8 @@ void main() {
     this.radialVelocityData = null;
     this.weatherStatus = 'idle';
     this.weatherAnalysisData = null;
+    this.energySignatureStatus = 'idle';
+    this.energySignatureAnalysisData = null;
 
     const planet = this.activeGalaxy?.planets.find(
       (p) => p.celestial_body_id === planetId,
@@ -2503,7 +2781,7 @@ void main() {
     }
 
     this.audioEngine.playInteractionSound();
-     if (this.isTutorialActive && this.tutorialStep === 3) {
+     if (this.isTutorialActive && this.tutorialStep === 2) {
       this._advanceTutorial();
     }
   }
@@ -2525,7 +2803,7 @@ void main() {
       this.audioEngine?.playErrorSound();
       return;
     }
-    const headers = ['celestial_body_id', 'planetName', 'starSystem', 'starType', 'distanceLightYears', 'planetType', 'rotationalPeriod', 'orbitalPeriod', 'orbitalPeriodDays', 'transitDurationHours', 'planetRadiusEarths', 'axeeClassification', 'discoverySource', 'moons_count', 'moons_names', 'potentialForLife_assessment', 'potentialForLife_reasoning', 'potentialForLife_biosignatures', 'discoveryNarrative', 'discoveryMethodology', 'atmosphericComposition', 'surfaceFeatures', 'keyFeatures', 'aiWhisper', 'visualization_color1', 'visualization_color2', 'visualization_oceanColor', 'visualization_atmosphereColor', 'visualization_hasRings', 'visualization_cloudiness', 'visualization_iceCoverage', 'visualization_surfaceTexture', 'created_at'];
+    const headers = ['celestial_body_id', 'planetName', 'starSystem', 'starType', 'distanceLightYears', 'planetType', 'rotationalPeriod', 'orbitalPeriod', 'orbitalPeriodDays', 'transitDurationHours', 'planetRadiusEarths', 'axeeClassification', 'discoverySource', 'moons_count', 'moons_names', 'potentialForLife_assessment', 'potentialForLife_reasoning', 'potentialForLife_biosignatures', 'gravity', 'surfacePressure', 'magnetosphereStrength', 'geologicalActivity', 'discoveryNarrative', 'discoveryMethodology', 'atmosphericComposition', 'surfaceFeatures', 'keyFeatures', 'aiWhisper', 'visualization_color1', 'visualization_color2', 'visualization_oceanColor', 'visualization_atmosphereColor', 'visualization_hasRings', 'visualization_cloudiness', 'visualization_iceCoverage', 'visualization_surfaceTexture', 'created_at'];
     const escapeCsvCell = (cellData: any): string => {
       const stringData = String(cellData ?? '');
       if (/[",\n]/.test(stringData)) {
@@ -2534,7 +2812,7 @@ void main() {
       return stringData;
     };
     const planetToRow = (planet: PlanetData): string => [
-        planet.celestial_body_id, planet.planetName, planet.starSystem, planet.starType, planet.distanceLightYears, planet.planetType, planet.rotationalPeriod, planet.orbitalPeriod, planet.orbitalPeriodDays, planet.transitDurationHours, planet.planetRadiusEarths, planet.axeeClassification, planet.discoverySource, planet.moons.count, planet.moons.names.join('; '), planet.potentialForLife.assessment, planet.potentialForLife.reasoning, planet.potentialForLife.biosignatures.join('; '), planet.discoveryNarrative, planet.discoveryMethodology, planet.atmosphericComposition, planet.surfaceFeatures, planet.keyFeatures.join('; '), planet.aiWhisper, planet.visualization.color1, planet.visualization.color2, planet.visualization.oceanColor, planet.visualization.atmosphereColor, planet.visualization.hasRings, planet.visualization.cloudiness, planet.visualization.iceCoverage, planet.visualization.surfaceTexture, planet.created_at
+        planet.celestial_body_id, planet.planetName, planet.starSystem, planet.starType, planet.distanceLightYears, planet.planetType, planet.rotationalPeriod, planet.orbitalPeriod, planet.orbitalPeriodDays, planet.transitDurationHours, planet.planetRadiusEarths, planet.axeeClassification, planet.discoverySource, planet.moons.count, planet.moons.names.join('; '), planet.potentialForLife.assessment, planet.potentialForLife.reasoning, planet.potentialForLife.biosignatures.join('; '), planet.gravity, planet.surfacePressure, planet.magnetosphereStrength, planet.geologicalActivity, planet.discoveryNarrative, planet.discoveryMethodology, planet.atmosphericComposition, planet.surfaceFeatures, planet.keyFeatures.join('; '), planet.aiWhisper, planet.visualization.color1, planet.visualization.color2, planet.visualization.oceanColor, planet.visualization.atmosphereColor, planet.visualization.hasRings, planet.visualization.cloudiness, planet.visualization.iceCoverage, planet.visualization.surfaceTexture, planet.created_at
       ].map(escapeCsvCell).join(',');
     const csvContent = [headers.join(','), ...planetsToExport.map(planetToRow)].join('\n');
     const blob = new Blob([csvContent], {type: 'text/csv;charset=utf-8;'});
@@ -2589,7 +2867,7 @@ void main() {
         const {orbital_period, transit_duration, planet_radius, Prediction} = candidate;
         if (orbital_period === undefined || transit_duration === undefined || planet_radius === undefined) continue;
 
-        const prompt = `You are AURELION CORE. Enrich analytical data for an exoplanet candidate into a full JSON profile. Analytical Data: Orbital Period (days): ${orbital_period}, Transit Duration (hours): ${transit_duration}, Planet Radius (Earths): ${planet_radius}, AXEE Classification: "${Prediction}". Based on this, generate a complete, fictional but plausible profile. Use the provided numerical data and classification. Fill all other fields, ensuring descriptive text has a rich vocabulary and varied sentence structure. 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY'.`;
+        const prompt = `You are AURELION CORE. Enrich analytical data for an exoplanet candidate into a full JSON profile. Analytical Data: Orbital Period (days): ${orbital_period}, Transit Duration (hours): ${transit_duration}, Planet Radius (Earths): ${planet_radius}, AXEE Classification: "${Prediction}". Based on this, generate a complete, fictional but plausible profile. Use the provided numerical data and classification. Fill all other fields, including physical properties like gravity and surface pressure, ensuring descriptive text has a rich vocabulary and varied sentence structure. 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY', 'ORGANIC'.`;
         const genaiResponse = await this.ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
@@ -2877,21 +3155,63 @@ void main() {
     this.audioEngine?.playToggleSound();
   }
 
+  private _handleUseSamplePrompt() {
+    this.userPrompt = 'a water world with crystal continents';
+    this.audioEngine?.playInteractionSound();
+  }
+
+  private _toggleTheme() {
+    this.theme = this.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('axee_theme', this.theme);
+    this.audioEngine?.playToggleSound();
+  }
+
+  private _setDatabaseSort(key: keyof PlanetData | 'galaxyName') {
+    if (this.databaseSort.key === key) {
+      this.databaseSort = { ...this.databaseSort, order: this.databaseSort.order === 'asc' ? 'desc' : 'asc' };
+    } else {
+      this.databaseSort = { key, order: 'asc' };
+    }
+  }
+
+  private _handleDatabaseRowClick(planet: PlanetData) {
+    const parentGalaxy = this.discoveredGalaxies.find(g => g.planets.some(p => p.celestial_body_id === planet.celestial_body_id));
+    if (parentGalaxy) {
+        this.activeGalaxyId = parentGalaxy.id;
+        // Use timeout to allow galaxy view to load before selecting planet
+        setTimeout(() => {
+            this._selectPlanet(planet.celestial_body_id);
+            this.isDatabaseOpen = false;
+        }, 50);
+    }
+  }
+
   // --- RENDER METHODS ---
 
   render() {
     const selectedPlanet = this.discoveredPlanets.find(
       (p) => p.celestial_body_id === this.selectedPlanetId,
     );
+
+    const mainInterfaceClasses = `
+      block w-full h-full relative font-sans 
+      bg-bg text-text 
+      transition-colors duration-500
+      ${this.isConversationModeActive ? 'hidden' : ''}
+    `;
+
     return html`
       ${this.showOnboarding ? this.renderOnboardingOverlay() : nothing}
       ${this.isDashboardOpen ? this.renderAccuracyDashboard() : nothing}
+      ${this.isDatabaseOpen ? this.renderDatabaseOverlay() : nothing}
       ${this.isShaderLabOpen ? this.renderShaderLabOverlay() : nothing}
       ${this.isTutorialActive ? html`
         <tutorial-overlay
           .step=${this.tutorialStep}
+          .steps=${TUTORIAL_STEPS}
           @next=${this._advanceTutorial}
           @skip=${this._endTutorial}
+          @use-sample-prompt=${this._handleUseSamplePrompt}
         ></tutorial-overlay>
       ` : nothing}
       ${this.showTutorialPrompt ? this.renderTutorialPrompt() : nothing}
@@ -2902,10 +3222,10 @@ void main() {
         .muted=${this.isMuted}
       ></axee-audio-engine>
 
-      <input type="file" id="session-file-input" accept=".json" style="display: none" @change=${this._handleFileSelected}/>
-      <input type="file" id="batch-file-input" accept=".csv" style="display: none" @change=${this._handleBatchAnalysis}/>
+      <input type="file" id="session-file-input" accept=".json" class="hidden" @change=${this._handleFileSelected}/>
+      <input type="file" id="batch-file-input" accept=".csv" class="hidden" @change=${this._handleBatchAnalysis}/>
       
-      <div class="main-interface ${classMap({'hidden': this.isConversationModeActive})}">
+      <div class=${mainInterfaceClasses}>
         <cosmos-visualizer
           .galaxies=${this.discoveredGalaxies}
           .activeGalaxyId=${this.activeGalaxyId}
@@ -2916,9 +3236,10 @@ void main() {
           .isUnseenRevealed=${this.isUnseenRevealed}
           @planet-selected=${this._handlePlanetSelectedFromMap}
           @galaxy-selected=${this._handleGalaxySelectedFromMap}
+          @object-hovered=${() => this.audioEngine?.playHoverSound()}
         ></cosmos-visualizer>
 
-        <div class="overlay">
+        <div class="absolute top-0 left-0 w-full h-full z-[2] flex flex-col justify-between pointer-events-none">
           ${this.renderHeader()}
           ${this.renderLeftPanel(selectedPlanet)}
           ${this.renderRightPanel()}
@@ -2937,14 +3258,14 @@ void main() {
     };
 
     return html`
-      <div class="conversation-view">
+      <div class="fixed inset-0 z-20 flex flex-col items-center justify-center bg-bg animate-fade-in">
         <conversation-visualizer 
           .state=${this.conversationState}
           .volume=${this.micVolume}
         ></conversation-visualizer>
-        <div class="conversation-status">${statusMap[this.conversationState]}</div>
+        <div class="absolute top-8 text-lg tracking-widest uppercase text-text opacity-70">${statusMap[this.conversationState]}</div>
         
-        <button class="end-conversation-button" @click=${this._endConversation}>
+        <button class="absolute bottom-8 font-sans bg-none border border-error text-error px-6 py-3 text-base tracking-widest cursor-pointer transition-all duration-300 hover:bg-error/20 hover:text-red-300" @click=${this._endConversation}>
             END CONVERSATION
         </button>
       </div>
@@ -2959,26 +3280,29 @@ void main() {
       let accumulatedDelayForStanza = 0;
       const linesHtml = stanza.map((line) => {
         const animationDuration = line.length * 0.05;
-        const style = isCurrent ? `--line-length: ${line.length}; --animation-duration: ${animationDuration}s; animation-delay: ${accumulatedDelayForStanza}s;` : '';
+        const style = isCurrent ? ` --line-length: ${line.length}; --animation-duration: ${animationDuration}s; animation-delay: ${accumulatedDelayForStanza}s;` : '';
         if (isCurrent) accumulatedDelayForStanza += animationDuration + 0.3;
-        return html`<p class="onboarding-text" style=${style}>${line}</p>`;
+        return html`<p class=${`text-lg leading-relaxed tracking-wider text-text m-0 ${isCurrent ? 'typing-text opacity-0' : 'opacity-70'}`} style=${style}>${line}</p>`;
       });
       if (isCurrent) continueButtonDelay = accumulatedDelayForStanza;
-      return html`<div class="stanza ${isCurrent ? 'current-stanza' : 'past-stanza'}">${linesHtml}</div>`;
+      return html`<div class=${`mb-6 ${isCurrent ? 'current-stanza' : 'past-stanza'}`}>${linesHtml}</div>`;
     });
     const buttonHtml = this.onboardingStep < ONBOARDING_STANZAS.length - 1 ?
-        html`<button class="continue-button" @click=${this._handleNextOnboardingStep} style="animation-delay: ${continueButtonDelay}s;">[ ... ]</button>`:
-        html`<button class="begin-button" @click=${this._handleBeginSynthesis} style="animation-delay: ${continueButtonDelay}s;">[ BEGIN SYNTHESIS ]</button>`;
-    return html`<div class="onboarding-overlay"><div class="onboarding-content">${stanzasHtml} ${buttonHtml}</div></div>`;
+        html`<button class="font-sans bg-none border border-border text-text px-6 py-3 text-base tracking-[0.3em] cursor-pointer transition-all duration-300 opacity-0 mt-8 hover:bg-glow hover:border-accent hover:text-bg shadow-[0_0_10px_var(--border-color)] animate-fade-in" @click=${this._handleNextOnboardingStep} style="animation-delay: ${continueButtonDelay}s;">[ ... ]</button>`:
+        html`<button class="font-sans bg-none border-2 border-border text-text px-8 py-4 text-lg tracking-[0.2em] cursor-pointer transition-all duration-300 opacity-0 mt-12 hover:bg-glow hover:border-accent hover:text-bg drop-shadow-glow shadow-[0_0_10px_var(--border-color)] animate-fade-in" @click=${this._handleBeginSynthesis} style="animation-delay: ${continueButtonDelay}s;">[ BEGIN SYNTHESIS ]</button>`;
+    return html`<div class="fixed inset-0 bg-bg/90 backdrop-blur-md z-[100] flex items-center justify-center text-center pointer-events-auto animate-fade-in-onboarding"><div class="max-w-3xl flex flex-col items-center">${stanzasHtml} ${buttonHtml}</div></div>`;
   }
 
   private renderTutorialPrompt() {
     return html`
-      <div class="tutorial-prompt">
-        <p>Welcome back. Would you like a guided tour of the AXEE interface?</p>
+      <div class="fixed bottom-28 left-1/2 -translate-x-1/2 bg-panel-bg border border-border p-4 px-6 z-[99] backdrop-blur-lg flex items-center gap-6 animate-fade-in">
+        <p class="m-0 text-sm">Welcome back. Would you like a guided tour of the AXEE interface?</p>
         <div>
-          <button @click=${this._startTutorial}>Start Tour</button>
-          <button @click=${() => this.showTutorialPrompt = false}>Dismiss</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs cursor-pointer transition-all duration-300 ml-2 hover:bg-glow hover:border-accent hover:text-bg" @click=${this._startTutorial}>Start Tour</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs cursor-pointer transition-all duration-300 ml-2 hover:bg-glow hover:border-accent hover:text-bg" @click=${() => {
+            this.showTutorialPrompt = false;
+            localStorage.setItem('aurelion_tutorial_complete', 'true');
+          }}>Dismiss</button>
         </div>
       </div>
     `;
@@ -2990,28 +3314,97 @@ void main() {
     const total = confusionMatrix.flat().reduce((a, b) => a + b, 0);
     const correct = confusionMatrix[0][0] + confusionMatrix[1][1] + confusionMatrix[2][2];
     const accuracy = total > 0 ? correct / total : 0;
-    return html`<div class="dashboard-overlay"><div class="dashboard-content">${this.recalibrationStatus === 'running' ? html`<div class="recalibration-overlay"><h4>RECALIBRATING MODEL CORE...</h4><div class="spinner"></div></div>` : nothing}<div class="dashboard-header"><h2>AXEE Model Performance <span class="help-icon">?<div class="help-popover">This dashboard shows the performance of the local machine learning model used for the AXEE Predictor and Batch Analysis features. You can tune its hyperparameters to see how they might affect performance.</div></span></h2><button @click=${() => (this.isDashboardOpen = false)} ?disabled=${this.recalibrationStatus === 'running'}>&times;</button></div><div class="dashboard-summary"><div class="summary-metric"><h4>Overall Accuracy</h4><p>${(accuracy * 100).toFixed(2)}%</p></div></div><div class="dashboard-body"><div class="dashboard-metrics-container"><div class="dashboard-section"><h4>Confusion Matrix</h4><div class="confusion-matrix"><div class="matrix-cell label"></div><div class="matrix-cell label predicted">Predicted: Conf.</div><div class="matrix-cell label predicted">Predicted: Cand.</div><div class="matrix-cell label predicted">Predicted: Hypo.</div>${confusionMatrix.map((row, rowIndex) => html`<div class="matrix-cell label actual">Actual: ${labels[rowIndex].slice(0, 4)}.</div>${row.map((value, colIndex) => html`<div class="matrix-cell data ${rowIndex === colIndex ? 'correct' : 'incorrect'}"><span class="value">${value.toLocaleString()}</span><span class="percentage">${((value / total) * 100).toFixed(2)}%</span></div>`)}`)}</div></div><div class="dashboard-section"><h4>Classification Metrics</h4><table class="metrics-table"><thead><tr><th>Class</th><th>Precision</th><th>Recall</th><th>F1-Score</th></tr></thead><tbody><tr><td>Confirmed</td><td>${metrics.confirmed.precision.toFixed(3)}</td><td>${metrics.confirmed.recall.toFixed(3)}</td><td>${metrics.confirmed.f1Score.toFixed(3)}</td></tr><tr><td>Candidate</td><td>${metrics.candidate.precision.toFixed(3)}</td><td>${metrics.candidate.recall.toFixed(3)}</td><td>${metrics.candidate.f1Score.toFixed(3)}</td></tr><tr><td>Hypothetical</td><td>${metrics.hypothetical.precision.toFixed(3)}</td><td>${metrics.hypothetical.recall.toFixed(3)}</td><td>${metrics.hypothetical.f1Score.toFixed(3)}</td></tr></tbody></table></div></div><div class="dashboard-section full-width"><h4>Hyperparameter Tuning</h4><div class="tuning-controls"><div class="slider-control"><label for="n_estimators">N Estimators: <span>${this.hyperparameters.n_estimators}</span></label><input id="n_estimators" type="range" min="50" max="500" step="10" .value=${String(this.hyperparameters.n_estimators)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'n_estimators')}/></div><div class="slider-control"><label for="max_depth">Max Depth: <span>${this.hyperparameters.max_depth}</span></label><input id="max_depth" type="range" min="2" max="15" step="1" .value=${String(this.hyperparameters.max_depth)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'max_depth')}/></div><div class="slider-control"><label for="learning_rate">Learning Rate: <span>${this.hyperparameters.learning_rate.toFixed(2,)}</span></label><input id="learning_rate" type="range" min="0.01" max="0.5" step="0.01" .value=${String(this.hyperparameters.learning_rate)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'learning_rate')}/></div></div><button class="recalibrate-button" @click=${this._handleRecalibrate} ?disabled=${this.recalibrationStatus === 'running'}>${this.recalibrationStatus === 'running' ? 'RECALIBRATING...' : 'RE-CALIBRATE MODEL'}</button></div></div></div></div>`;
+    return html`<div class="fixed inset-0 bg-bg/80 backdrop-blur-lg z-[100] flex items-center justify-center pointer-events-auto animate-fade-in"><div class="w-11/12 max-w-4xl bg-panel-bg border border-border shadow-lg drop-shadow-glow text-text p-8 relative flex flex-col">${this.recalibrationStatus === 'running' ? html`<div class="absolute inset-0 bg-bg/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center text-center animate-fade-in"><h4 class="font-normal tracking-[0.2em] uppercase text-accent mb-6 text-base">RECALIBRATING MODEL CORE...</h4><div class="border-4 border-border border-t-accent rounded-full w-10 h-10 animate-spin"></div></div>` : nothing}<div class="flex justify-between items-center border-b border-border pb-4 mb-6 shrink-0"><h2 class="m-0 text-2xl font-normal tracking-[0.2em] text-accent flex items-center">AXEE Model Performance <span class="group relative inline-flex items-center justify-center w-4 h-4 rounded-full border border-text-dark text-text-dark text-xs font-bold ml-2 cursor-help">?<span class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-72 bg-bg border border-border p-4 rounded text-sm font-light leading-relaxed text-left opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-50 pointer-events-none normal-case tracking-normal">This dashboard shows the performance of the local machine learning model used for the AXEE Predictor and Batch Analysis features. You can tune its hyperparameters to see how they might affect performance.</span></span></h2><button @click=${() => (this.isDashboardOpen = false)} ?disabled=${this.recalibrationStatus === 'running'} class="bg-none border-none text-text text-4xl cursor-pointer leading-none opacity-70 transition-opacity hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed">&times;</button></div><div class="mb-6 bg-black/20 border border-border p-4 text-center"><h4 class="m-0 mb-2 font-normal tracking-widest uppercase text-base opacity-80">Overall Accuracy</h4><p class="m-0 text-5xl font-bold text-success drop-shadow-[0_0_10px_var(--success-color)]">${(accuracy * 100).toFixed(2)}%</p></div><div class="flex flex-col gap-8"><div class="flex lg:flex-row flex-col gap-8"><div class="flex-1"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Confusion Matrix</h4><div class="grid grid-cols-[1fr_2fr_2fr_2fr] grid-rows-[1fr_2fr_2fr_2fr] gap-1 text-xs"><div class="bg-transparent font-bold tracking-wider text-text-dark" style="writing-mode: vertical-rl; text-orientation: mixed;">Actual</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Conf.</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Cand.</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Hypo.</div>${confusionMatrix.map((row, rowIndex) => html`<div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-right">${labels[rowIndex]}</div>${row.map((value, colIndex) => html`<div class="bg-black/20 dark:bg-white/5 p-2 flex flex-col items-center justify-center text-center ${rowIndex === colIndex ? 'bg-success/10 border border-success' : 'bg-error/5 border border-error/30'}"><span class="text-2xl font-bold ${rowIndex === colIndex ? 'text-success' : ''}">${value.toLocaleString()}</span><span class="text-xs opacity-60">${((value / total) * 100).toFixed(2)}%</span></div>`)}`)}</div></div><div class="flex-1"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Classification Metrics</h4><table class="w-full text-left"><thead><tr><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">Class</th><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">Precision</th><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">Recall</th><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">F1-Score</th></tr></thead><tbody><tr><td class="p-2 border-b border-border text-lg">Confirmed</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.confirmed.precision.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.confirmed.recall.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.confirmed.f1Score.toFixed(3)}</td></tr><tr><td class="p-2 border-b border-border text-lg">Candidate</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.candidate.precision.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.candidate.recall.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.candidate.f1Score.toFixed(3)}</td></tr><tr><td class="p-2 text-lg">Hypothetical</td><td class="p-2 text-lg font-mono">${metrics.hypothetical.precision.toFixed(3)}</td><td class="p-2 text-lg font-mono">${metrics.hypothetical.recall.toFixed(3)}</td><td class="p-2 text-lg font-mono">${metrics.hypothetical.f1Score.toFixed(3)}</td></tr></tbody></table></div></div><div class="mt-4"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Hyperparameter Tuning</h4><div class="flex md:flex-row flex-col gap-8 mb-6"><div class="flex-1"><label for="n_estimators" class="flex justify-between text-sm mb-2"><span>N Estimators</span><span class="font-bold text-accent">${this.hyperparameters.n_estimators}</span></label><input class="w-full" id="n_estimators" type="range" min="50" max="500" step="10" .value=${String(this.hyperparameters.n_estimators)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'n_estimators')}/></div><div class="flex-1"><label for="max_depth" class="flex justify-between text-sm mb-2"><span>Max Depth</span><span class="font-bold text-accent">${this.hyperparameters.max_depth}</span></label><input class="w-full" id="max_depth" type="range" min="2" max="15" step="1" .value=${String(this.hyperparameters.max_depth)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'max_depth')}/></div><div class="flex-1"><label for="learning_rate" class="flex justify-between text-sm mb-2"><span>Learning Rate</span><span class="font-bold text-accent">${this.hyperparameters.learning_rate.toFixed(2,)}</span></label><input class="w-full" id="learning_rate" type="range" min="0.01" max="0.5" step="0.01" .value=${String(this.hyperparameters.learning_rate)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'learning_rate')}/></div></div><button class="font-sans bg-none border border-accent text-accent px-6 py-3 text-base tracking-widest cursor-pointer w-full font-bold hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${this._handleRecalibrate} ?disabled=${this.recalibrationStatus === 'running'}>${this.recalibrationStatus === 'running' ? 'RECALIBRATING...' : 'RE-CALIBRATE MODEL'}</button></div></div></div></div>`;
+  }
+
+  private renderDatabaseOverlay() {
+    const allPlanets = this.discoveredGalaxies.flatMap(g => g.planets.map(p => ({...p, galaxyName: g.galaxyName})));
+
+    const filteredPlanets = this.databaseSearchTerm ? allPlanets.filter(p => 
+        p.planetName.toLowerCase().includes(this.databaseSearchTerm.toLowerCase()) ||
+        p.starSystem.toLowerCase().includes(this.databaseSearchTerm.toLowerCase()) ||
+        p.galaxyName.toLowerCase().includes(this.databaseSearchTerm.toLowerCase()) ||
+        p.planetType.toLowerCase().includes(this.databaseSearchTerm.toLowerCase())
+    ) : allPlanets;
+
+    filteredPlanets.sort((a, b) => {
+        const key = this.databaseSort.key;
+        const order = this.databaseSort.order === 'asc' ? 1 : -1;
+        const valA = a[key as keyof typeof a] ?? '';
+        const valB = b[key as keyof typeof b] ?? '';
+        if (typeof valA === 'string' && typeof valB === 'string') {
+            return valA.localeCompare(valB) * order;
+        }
+        if (valA > valB) return 1 * order;
+        if (valA < valB) return -1 * order;
+        return 0;
+    });
+    
+    const renderSortArrow = (key: string) => {
+        if (this.databaseSort.key !== key) return nothing;
+        return this.databaseSort.order === 'asc' ? '▲' : '▼';
+    };
+
+    return html`
+        <div class="fixed inset-0 bg-bg/80 backdrop-blur-lg z-[100] flex items-center justify-center pointer-events-auto animate-fade-in">
+            <div class="w-11/12 max-w-7xl h-[90vh] bg-panel-bg border border-border shadow-lg drop-shadow-glow text-text p-8 flex flex-col">
+                <div class="flex justify-between items-center border-b border-border pb-4 mb-6 shrink-0">
+                    <h2 class="m-0 text-2xl font-normal tracking-[0.2em] text-accent">Exoplanet Database</h2>
+                    <button @click=${() => this.isDatabaseOpen = false} class="bg-none border-none text-text text-4xl cursor-pointer leading-none opacity-70 transition-opacity hover:opacity-100">&times;</button>
+                </div>
+                <div class="shrink-0 mb-4">
+                    <input type="text" placeholder="Search database..." .value=${this.databaseSearchTerm} @input=${(e: Event) => this.databaseSearchTerm = (e.target as HTMLInputElement).value} class="w-full bg-black/30 dark:bg-black/20 border border-border text-text p-2 px-4 font-sans text-base" />
+                </div>
+                <div class="flex-grow overflow-y-auto">
+                    <table class="w-full border-collapse">
+                        <thead class="sticky top-0 bg-panel-bg">
+                            <tr>
+                                <th class="p-3 text-left border-b-2 border-border cursor-pointer select-none hover:text-accent" @click=${() => this._setDatabaseSort('planetName')}>Planet ${renderSortArrow('planetName')}</th>
+                                <th class="p-3 text-left border-b-2 border-border cursor-pointer select-none hover:text-accent" @click=${() => this._setDatabaseSort('starSystem')}>System ${renderSortArrow('starSystem')}</th>
+                                <th class="p-3 text-left border-b-2 border-border cursor-pointer select-none hover:text-accent" @click=${() => this._setDatabaseSort('galaxyName')}>Galaxy ${renderSortArrow('galaxyName')}</th>
+                                <th class="p-3 text-left border-b-2 border-border cursor-pointer select-none hover:text-accent" @click=${() => this._setDatabaseSort('planetType')}>Type ${renderSortArrow('planetType')}</th>
+                                <th class="p-3 text-left border-b-2 border-border cursor-pointer select-none hover:text-accent" @click=${() => this._setDatabaseSort('distanceLightYears')}>Distance (ly) ${renderSortArrow('distanceLightYears')}</th>
+                                <th class="p-3 text-left border-b-2 border-border cursor-pointer select-none hover:text-accent" @click=${() => this._setDatabaseSort('axeeClassification')}>Class ${renderSortArrow('axeeClassification')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredPlanets.map(p => html`
+                                <tr @click=${() => this._handleDatabaseRowClick(p)} class="cursor-pointer border-b border-border transition-colors hover:bg-glow hover:text-bg dark:hover:text-text">
+                                    <td class="p-3">${p.planetName}</td>
+                                    <td class="p-3">${p.starSystem}</td>
+                                    <td class="p-3">${p.galaxyName}</td>
+                                    <td class="p-3">${p.planetType}</td>
+                                    <td class="p-3">${p.distanceLightYears.toFixed(2)}</td>
+                                    <td class=${`p-3 font-bold ${ p.axeeClassification === 'Confirmed' ? 'text-accent' : p.axeeClassification === 'Candidate' ? 'text-warning' : 'text-text-dark' }`}>${p.axeeClassification}</td>
+                                </tr>
+                            `)}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
   }
 
   private renderShaderLabOverlay() {
     return html`
-      <div class="shader-lab-overlay">
-        <div class="shader-lab-header">
-          <h3>AXEE Shader Lab</h3>
-          <button @click=${() => this.isShaderLabOpen = false}>CLOSE</button>
+      <div class="fixed inset-0 z-[100] bg-bg flex flex-col animate-fade-in">
+        <div class="p-4 flex justify-between items-center border-b border-border shrink-0">
+          <h3 class="m-0 font-normal tracking-[0.2em] uppercase text-accent">AXEE Shader Lab</h3>
+          <button @click=${() => this.isShaderLabOpen = false} class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest cursor-pointer hover:bg-glow hover:text-bg">CLOSE</button>
         </div>
-        <div class="shader-lab-content">
-          <div class="shader-editors">
-            <div class="shader-editor">
-              <label for="vs-editor">Vertex Shader</label>
-              <textarea id="vs-editor" .value=${this.shaderLabVs} @input=${(e: Event) => this.shaderLabVs = (e.target as HTMLTextAreaElement).value}></textarea>
+        <div class="flex-grow flex flex-col lg:flex-row min-h-0">
+          <div class="flex-1 flex flex-col border-b lg:border-b-0 lg:border-r border-border">
+            <div class="flex-1 flex flex-col min-h-0 border-b border-border">
+              <label for="vs-editor" class="p-2 px-4 text-xs uppercase tracking-widest opacity-70">Vertex Shader</label>
+              <textarea id="vs-editor" .value=${this.shaderLabVs} @input=${(e: Event) => this.shaderLabVs = (e.target as HTMLTextAreaElement).value} class="flex-grow bg-transparent border-none text-text font-mono text-sm p-4 resize-none focus:outline-none focus:bg-accent/5"></textarea>
             </div>
-            <div class="shader-editor">
-              <label for="fs-editor">Fragment Shader</label>
-              <textarea id="fs-editor" .value=${this.shaderLabFs} @input=${(e: Event) => this.shaderLabFs = (e.target as HTMLTextAreaElement).value}></textarea>
+            <div class="flex-1 flex flex-col min-h-0">
+              <label for="fs-editor" class="p-2 px-4 text-xs uppercase tracking-widest opacity-70">Fragment Shader</label>
+              <textarea id="fs-editor" .value=${this.shaderLabFs} @input=${(e: Event) => this.shaderLabFs = (e.target as HTMLTextAreaElement).value} class="flex-grow bg-transparent border-none text-text font-mono text-sm p-4 resize-none focus:outline-none focus:bg-accent/5"></textarea>
             </div>
           </div>
-          <div class="shader-preview">
+          <div class="flex-1 relative">
             <shader-lab-visualizer 
               .vertexShader=${this.shaderLabVs}
               .fragmentShader=${this.shaderLabFs}
@@ -3024,65 +3417,71 @@ void main() {
 
   private renderHeader() {
     return html`
-      <header class="main-header">
-        <div class="logo">
-          <h1>${this.activeGalaxy ? this.activeGalaxy.galaxyName.toUpperCase() : 'INTERGALACTIC MAP'}</h1>
-          <h2>${this.activeGalaxy ? this.activeGalaxy.galaxyType : 'Sentient Creation Engine'}</h2>
+      <header class="flex flex-col md:flex-row justify-between items-start p-4 md:p-6 pointer-events-auto drop-shadow-glow shrink-0">
+        <div>
+          <h1 class="m-0 font-normal text-2xl tracking-[0.3em] text-accent">${this.activeGalaxy ? this.activeGalaxy.galaxyName.toUpperCase() : 'INTERGALACTIC MAP'}</h1>
+          <h2 class="m-0 font-light text-xs tracking-widest text-text opacity-70">${this.activeGalaxy ? this.activeGalaxy.galaxyType : 'Sentient Creation Engine'}</h2>
         </div>
-        <div class="controls">
-          ${this.activeGalaxy ? html`<button class="back-to-galaxy" @click=${() => { this.activeGalaxyId = null; this.selectedPlanetId = null; }}>← INTERGALACTIC MAP</button>` : nothing}
-          <button class="reveal-button" @click=${this._handleRevealTheUnseen} ?hidden=${this.isUnseenRevealed} ?disabled=${this.aiStatus !== 'idle'}>REVEAL THE UNSEEN</button>
-          <button @click=${this._startConversation} title="Converse with AXEE">CONVERSE</button>
-          <button @click=${() => this.isShaderLabOpen = true} title="Open Shader Lab">SHADER LAB</button>
-          <button @click=${this._toggleLiveStream} class="livestream-button ${this.liveStreamStatus}" ?disabled=${!this.activeGalaxy || this.liveStreamStatus === 'connecting'} title="Toggle live data stream">
-            ${this.liveStreamStatus === 'connecting' ? 'CONNECTING...' : this.liveStreamStatus === 'connected' ? html`<span class="live-dot"></span>DISCONNECT` : 'LIVE FEED'}
+        <div class="flex gap-2 flex-wrap justify-start md:justify-end max-w-full md:max-w-[70%] mt-2 md:mt-0">
+          ${this.activeGalaxy ? html`<button class="font-sans bg-none border border-yellow-500/50 text-yellow-400 px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-yellow-400/20 hover:border-yellow-400 hover:text-yellow-200" @click=${() => { this.activeGalaxyId = null; this.selectedPlanetId = null; }}>← INTERGALACTIC MAP</button>` : nothing}
+          <button class="font-sans bg-none border border-pink-500/50 text-pink-400 px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-pink-400/20 hover:border-pink-400 hover:text-pink-200 drop-shadow-[0_0_8px_#ff61c3] disabled:opacity-50 disabled:cursor-not-allowed" @click=${this._handleRevealTheUnseen} ?hidden=${this.isUnseenRevealed} ?disabled=${this.aiStatus !== 'idle'}>REVEAL THE UNSEEN</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${() => this.isDatabaseOpen = true}>DATABASE</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this._startConversation} title="Converse with AXEE">CONVERSE</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${() => this.isShaderLabOpen = true} title="Open Shader Lab">SHADER LAB</button>
+          <button class="font-sans bg-none border px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${this.liveStreamStatus === 'connected' ? 'border-success text-success drop-shadow-[0_0_8px_var(--success-color)] hover:bg-success/20' : 'border-border text-text hover:bg-glow hover:text-bg'}" @click=${this._toggleLiveStream} ?disabled=${!this.activeGalaxy || this.liveStreamStatus === 'connecting'} title="Toggle live data stream">
+            ${this.liveStreamStatus === 'connecting' ? 'CONNECTING...' : this.liveStreamStatus === 'connected' ? html`<span class="inline-block w-2 h-2 bg-success rounded-full mr-2 animate-pulse-live"></span>DISCONNECT` : 'LIVE FEED'}
           </button>
-          <button @click=${this._startTutorial} title="Start the guided tutorial">HELP</button>
-          <button @click=${() => (this.isDashboardOpen = true)} title="View AXEE model performance">MODEL PERFORMANCE</button>
-          <button @click=${this.loadSolSystem} ?disabled=${this.aiStatus !== 'idle' || !this.activeGalaxy} title="Load our home solar system">LOAD SOL SYSTEM</button>
-          <button @click=${this._handleSaveSession} title="Download current session as a file">SAVE SESSION</button>
-          <button @click=${this._handleLoadSessionClick} title="Load a session from a file">LOAD SESSION</button>
-          <button @click=${this._handleBatchAnalysisClick} ?disabled=${this.aiStatus !== 'idle' || !this.activeGalaxy} title="Analyze a CSV of exoplanet candidates">BATCH ANALYSIS</button>
-          <button @click=${this._handleExportCsv} ?disabled=${this.discoveredGalaxies.flatMap(g => g.planets).length === 0} title="Export all discovered data to CSV">EXPORT CSV</button>
-          <button class="clear-button" @click=${this._handleClearSession} title="Clear all discovered data">CLEAR UNIVERSE</button>
-          <button @click=${() => (this.isMuted = !this.isMuted)} title=${this.isMuted ? 'Unmute' : 'Mute'}>${this.isMuted ? 'UNMUTE' : 'MUTE'}</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this._startTutorial} title="Start the guided tutorial">HELP</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${() => (this.isDashboardOpen = true)} title="View AXEE model performance">MODEL</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this.loadSolSystem} ?disabled=${this.aiStatus !== 'idle' || !this.activeGalaxy} title="Load our home solar system">LOAD SOL</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this._handleSaveSession} title="Download current session as a file">SAVE</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this._handleLoadSessionClick} title="Load a session from a file">LOAD</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this._handleBatchAnalysisClick} ?disabled=${this.aiStatus !== 'idle' || !this.activeGalaxy} title="Import and analyze a CSV of exoplanet candidates">IMPORT</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this._handleExportCsv} ?disabled=${this.discoveredGalaxies.flatMap(g => g.planets).length === 0} title="Export all discovered data to CSV">EXPORT</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${() => (this.isMuted = !this.isMuted)} title=${this.isMuted ? 'Unmute' : 'Mute'}>${this.isMuted ? 'UNMUTE' : 'MUTE'}</button>
+          <button class="font-sans bg-none border border-red-500/40 text-red-500 px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-red-500/20 hover:border-red-500 hover:text-red-400" @click=${this._handleClearSession} title="Clear all discovered data">CLEAR</button>
         </div>
       </header>
     `;
   }
 
   private renderLeftPanel(selectedPlanet: PlanetData | undefined) {
-    const panelClasses = { 'side-panel': true, left: true, open: this.isLeftPanelOpen };
     const inGalaxyView = !!this.activeGalaxyId;
+    const panelClasses = `
+      absolute top-0 left-0 h-full w-[clamp(320px,25vw,420px)] p-6 pt-32 
+      bg-panel-bg backdrop-blur-lg flex flex-col 
+      transition-transform duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] pointer-events-auto
+      border-r border-border
+      ${this.isLeftPanelOpen ? 'translate-x-0' : '-translate-x-full'}
+    `;
 
     return html`
-      <aside id="left-panel" class=${classMap(panelClasses)}>
-        <button class="panel-toggle" @click=${this._toggleLeftPanel}>
-          <i class="arrow ${this.isLeftPanelOpen ? 'left' : 'right'}"></i>
+      <aside id="left-panel" class=${panelClasses}>
+        <button class="absolute top-1/2 -translate-y-1/2 right-[-2rem] w-8 h-20 bg-panel-bg border border-l-0 border-border cursor-pointer flex items-center justify-center text-accent z-10" @click=${this._toggleLeftPanel}>
+          <i class="border-solid border-accent inline-block p-1 transition-transform duration-300 ${this.isLeftPanelOpen ? 'border-b-2 border-l-2 -rotate-45' : 'border-t-2 border-r-2 -rotate-45'}"></i>
         </button>
-        <div class="panel-header">
-          <h3>
+        <div class="flex justify-between items-center pb-2 border-b border-border mb-4">
+          <h3 class="m-0 text-base font-normal tracking-[0.2em] uppercase text-accent">
             ${inGalaxyView
               ? (selectedPlanet ? 'Stellar Cartography' : this.leftPanelView === 'list' ? 'Discovered Worlds' : 'AXEE Predictor')
               : 'Discovered Galaxies'
             }
           </h3>
           ${!selectedPlanet && inGalaxyView ? html`
-            <div class="panel-view-toggle">
-              <button class=${this.leftPanelView === 'list' ? 'active' : ''} @click=${() => (this.leftPanelView = 'list')}>LIST</button>
-              <button class=${this.leftPanelView === 'predictor' ? 'active' : ''} @click=${() => (this.leftPanelView = 'predictor')}>
+            <div class="flex border border-border">
+              <button class="bg-none border-none px-2 py-1 cursor-pointer font-sans text-xs tracking-widest uppercase transition-all duration-200 flex items-center ${this.leftPanelView === 'list' ? 'bg-glow text-bg' : 'text-text-dark'}" @click=${() => (this.leftPanelView = 'list')}>LIST</button>
+              <button class="bg-none border-none px-2 py-1 cursor-pointer font-sans text-xs tracking-widest uppercase transition-all duration-200 flex items-center ${this.leftPanelView === 'predictor' ? 'bg-glow text-bg' : 'text-text-dark'}" @click=${() => (this.leftPanelView = 'predictor')}>
                 PREDICTOR
-                <span class="help-icon">?<div class="help-popover right">The AXEE Predictor uses a local machine learning model to classify a planet as a 'Confirmed' candidate, a potential 'Candidate', or a 'False Positive' based on key observational data.</div></span>
+                <span class="group relative inline-flex items-center justify-center w-4 h-4 rounded-full border border-text-dark text-text-dark text-xs font-bold ml-2 cursor-help">?<span class="absolute bottom-full mb-2 left-auto right-full mr-2 w-72 bg-bg border border-border p-4 rounded text-sm font-light leading-relaxed text-left opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-50 pointer-events-none normal-case tracking-normal">The AXEE Predictor uses a local machine learning model to classify a planet as a 'Confirmed' candidate, a potential 'Candidate', or a 'False Positive' based on key observational data.</span></span>
               </button>
             </div>
           ` : nothing}
         </div>
-        <div class="panel-content">
+        <div class="overflow-y-auto h-full w-full">
           ${inGalaxyView
             ? (selectedPlanet ? this.renderPlanetDetail(selectedPlanet) : this.leftPanelView === 'list' ? this.renderPlanetList() : this.renderPredictorForm())
             : this.renderGalaxyList()
           }
-          ${this.navigationRoute ? this.renderNavigationPanel() : nothing}
         </div>
       </aside>
     `;
@@ -3090,11 +3489,11 @@ void main() {
 
   private renderGalaxyList() {
     return html`
-      <ul class="galaxy-list">
+      <ul class="list-none p-0 m-0">
         ${this.discoveredGalaxies.map(g => html`
-          <li @click=${() => { this.activeGalaxyId = g.id; this.isLeftPanelOpen = false; }}>
-            <span class="galaxy-name">${g.galaxyName}</span>
-            <span class="galaxy-type">${g.galaxyType}</span>
+          <li class="py-3 border-b border-border cursor-pointer transition-colors duration-300 hover:bg-glow group" @click=${() => { this.activeGalaxyId = g.id; this.isLeftPanelOpen = false; }}>
+            <span class="block text-lg font-normal text-accent group-hover:text-bg">${g.galaxyName}</span>
+            <span class="text-xs opacity-70 group-hover:text-bg">${g.galaxyType}</span>
           </li>
         `)}
       </ul>
@@ -3103,11 +3502,11 @@ void main() {
 
   private renderPlanetList() {
     return html`
-      <ul id="planet-list-panel" class="planet-list">
+      <ul id="planet-list-panel" class="list-none p-0 m-0">
         ${this.discoveredPlanets.map((p) => html`
-            <li class=${p.celestial_body_id === this.selectedPlanetId ? 'selected' : ''} @click=${() => this._selectPlanet(p.celestial_body_id)}>
-              <span class="planet-id">${p.celestial_body_id.toUpperCase()}</span>
-              <span class="planet-name">${p.planetName}</span>
+            <li class=${`py-3 border-b border-border cursor-pointer transition-colors duration-300 hover:bg-glow group ${p.celestial_body_id === this.selectedPlanetId ? 'bg-glow' : ''}`} @click=${() => this._selectPlanet(p.celestial_body_id)}>
+              <span class="block text-xs opacity-70 tracking-widest group-hover:text-bg ${p.celestial_body_id === this.selectedPlanetId ? 'text-bg' : ''}">${p.celestial_body_id.toUpperCase()}</span>
+              <span class="text-lg font-normal text-text group-hover:text-bg ${p.celestial_body_id === this.selectedPlanetId ? 'text-bg' : ''}">${p.planetName}</span>
             </li>`
         )}
       </ul>
@@ -3118,97 +3517,28 @@ void main() {
     const isLoading = this.predictorStatus === 'loading';
     const formValues = Object.values(this.predictorForm);
     const isFormIncomplete = formValues.some((v) => v.trim() === '') || formValues.some((v) => isNaN(parseFloat(v)));
-    return html`<div class="predictor-form"><p>Input observational data to classify an exoplanet candidate using the local AXEE model.</p><div class="predictor-input"><label for="orbital_period">Orbital Period (days)</label><input id="orbital_period" type="number" placeholder="e.g., 365.25" .value=${this.predictorForm.orbital_period} @input=${(e: Event) => (this.predictorForm = {...this.predictorForm, orbital_period: (e.target as HTMLInputElement).value})} ?disabled=${isLoading}/></div><div class="predictor-input"><label for="transit_duration">Transit Duration (hours)</label><input id="transit_duration" type="number" placeholder="e.g., 12.3" .value=${this.predictorForm.transit_duration} @input=${(e: Event) => (this.predictorForm = {...this.predictorForm, transit_duration: (e.target as HTMLInputElement).value})} ?disabled=${isLoading}/></div><div class="predictor-input"><label for="planet_radius">Planet Radius (Earths)</label><input id="planet_radius" type="number" placeholder="e.g., 1.8" .value=${this.predictorForm.planet_radius} @input=${(e: Event) => (this.predictorForm = {...this.predictorForm, planet_radius: (e.target as HTMLInputElement).value})} ?disabled=${isLoading}/></div><button class="classify-button" @click=${this._handlePredictorSubmit} ?disabled=${isLoading || isFormIncomplete}>${isLoading ? 'CLASSIFYING...' : 'CLASSIFY'}</button>${this.predictorResult ? html`<div class="classification-box classification-${this.predictorResult.toLowerCase().replace(' ', '-')}"><strong>Classification Result</strong><span>${this.predictorResult.toUpperCase()}</span></div>` : nothing}</div>`;
+    return html`<div class="flex flex-col gap-5"><p class="text-sm opacity-80 leading-relaxed m-0">Input observational data to classify an exoplanet candidate using the local AXEE model.</p><div><label for="orbital_period" class="block text-xs opacity-70 mb-1.5">Orbital Period (days)</label><input id="orbital_period" type="number" placeholder="e.g., 365.25" .value=${this.predictorForm.orbital_period} @input=${(e: Event) => (this.predictorForm = {...this.predictorForm, orbital_period: (e.target as HTMLInputElement).value})} ?disabled=${isLoading} class="w-full bg-black/30 dark:bg-black/20 border border-border text-text p-2.5 font-sans text-base focus:outline-none focus:border-accent"/></div><div><label for="transit_duration" class="block text-xs opacity-70 mb-1.5">Transit Duration (hours)</label><input id="transit_duration" type="number" placeholder="e.g., 12.3" .value=${this.predictorForm.transit_duration} @input=${(e: Event) => (this.predictorForm = {...this.predictorForm, transit_duration: (e.target as HTMLInputElement).value})} ?disabled=${isLoading} class="w-full bg-black/30 dark:bg-black/20 border border-border text-text p-2.5 font-sans text-base focus:outline-none focus:border-accent"/></div><div><label for="planet_radius" class="block text-xs opacity-70 mb-1.5">Planet Radius (Earths)</label><input id="planet_radius" type="number" placeholder="e.g., 1.8" .value=${this.predictorForm.planet_radius} @input=${(e: Event) => (this.predictorForm = {...this.predictorForm, planet_radius: (e.target as HTMLInputElement).value})} ?disabled=${isLoading} class="w-full bg-black/30 dark:bg-black/20 border border-border text-text p-2.5 font-sans text-base focus:outline-none focus:border-accent"/></div><button class="w-full p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${this._handlePredictorSubmit} ?disabled=${isLoading || isFormIncomplete}>${isLoading ? 'CLASSIFYING...' : 'CLASSIFY'}</button>${this.predictorResult ? html`<div class=${`border p-4 text-center mt-4 ${this.predictorResult === 'Confirmed' ? 'border-accent' : this.predictorResult === 'Candidate' ? 'border-warning' : 'border-error'}`}><strong class="block text-xs uppercase tracking-widest opacity-70 mb-2">Classification Result</strong><span class=${`text-2xl font-bold tracking-widest ${this.predictorResult === 'Confirmed' ? 'text-accent drop-shadow-glow' : this.predictorResult === 'Candidate' ? 'text-warning drop-shadow-[0_0_8px_var(--warning-color)]' : 'text-error drop-shadow-[0_0_8px_var(--error-color)]'}`}>${this.predictorResult.toUpperCase()}</span></div>` : nothing}</div>`;
   }
 
   private renderPlanetDetail(planet: PlanetData) {
-    return html`<div id="planet-detail-panel" class="planet-detail">
-      <button class="back-button" @click=${() => (this.selectedPlanetId = null)}>← View Discovered Worlds</button>
-      <h2>${planet.planetName}</h2>
-      <h3>${planet.starSystem} // ${planet.planetType}</h3>
-      <div class="ai-whisper">
-        <p>"${planet.aiWhisper}"</p>
-        <span>— AURELION CORE</span>
-      </div>
-
-      <div class="visualization-panel">
-        <h4>Live 3D Visualization</h4>
-        <div class="visualization-container">
-          <planet-visualizer .planet=${planet}></planet-visualizer>
-        </div>
-      </div>
-      
-      <div id="analysis-buttons" class="planet-actions">
-        <button class="route-button" ?disabled=${this.aiStatus.startsWith('thinking') || this.aiStatus === 'navigating'} @click=${() => this.calculateRouteToPlanet(planet)}>${this.aiStatus === 'navigating' ? 'CALCULATING...' : 'CALCULATE ROUTE'}</button>
-        <button class="analysis-button" @click=${() => this.analyzeMagnetosphere(planet)} ?disabled=${this.magnetosphereStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.magnetosphereStatus === 'running' ? 'ANALYZING...' : 'MAGNETOSPHERE'}</button>
-        <button class="analysis-button deep-scan" @click=${() => this.analyzeDeepStructure(planet)} ?disabled=${this.deepScanStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.deepScanStatus === 'running' ? 'SCANNING...' : 'DEEP SCAN'}</button>
-        <button class="analysis-button exo-suit" @click=${() => this.analyzeExoSuitShielding(planet)} ?disabled=${this.exoSuitStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.exoSuitStatus === 'running' ? 'SIMULATING...' : 'EXO-SUIT'}</button>
-        <button class="analysis-button" @click=${() => this.analyzeWeather(planet)} ?disabled=${this.weatherStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.weatherStatus === 'running' ? 'SIMULATING...' : 'WEATHER'}</button>
-        <button class="analysis-button" @click=${() => this.analyzeLightCurve(planet)} ?disabled=${this.lightCurveStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.lightCurveStatus === 'running' ? 'ANALYZING...' : 'LIGHT CURVE'}</button>
-        <button class="analysis-button" @click=${() => this.analyzeRadialVelocity(planet)} ?disabled=${this.radialVelocityStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.radialVelocityStatus === 'running' ? 'ANALYZING...' : 'RADIAL VELOCITY'}</button>
-      </div>
-      
-      <h4>Planetary Data</h4>
-      <div class="stats-grid">
-        <div><strong>Star Type</strong><span>${planet.starType}</span></div>
-        <div><strong>Distance</strong><span>${planet.distanceLightYears} ly</span></div>
-        <div><strong>Orbital Period</strong><span>${planet.orbitalPeriod}</span></div>
-        <div><strong>Rotational Period</strong><span>${planet.rotationalPeriod}</span></div>
-        <div><strong>Moons</strong><span>${planet.moons.count}</span></div>
-        <div><strong>Life Assessment</strong><span>${planet.potentialForLife.assessment}</span></div>
-      </div>
-      
-      <h4>AXEE Analysis</h4>
-      <div class="analysis-grid">
-        <div><strong>Orbital Period</strong><span>${planet.orbitalPeriodDays?.toFixed(2) ?? 'N/A'} days</span></div>
-        <div><strong>Transit Duration</strong><span>${planet.transitDurationHours?.toFixed(2) ?? 'N/A'} hrs</span></div>
-        <div><strong>Planet Radius</strong><span>${planet.planetRadiusEarths?.toFixed(2) ?? 'N/A'} R⊕</span></div>
-      </div>
-      <div class="classification-box classification-${planet.axeeClassification?.toLowerCase()}">
-        <strong>Classification Status</strong>
-        <span>${planet.axeeClassification?.toUpperCase() || 'N/A'}</span>
-      </div>
-
-      ${this.magnetosphereStatus !== 'idle' ? this.renderMagnetosphereAnalysis() : nothing}
-      ${this.deepScanStatus !== 'idle' ? this.renderDeepScanAnalysis() : nothing}
-      ${this.exoSuitStatus !== 'idle' ? this.renderExoSuitAnalysis() : nothing}
-      ${this.weatherStatus !== 'idle' ? this.renderWeatherAnalysis() : nothing}
-      ${this.lightCurveStatus !== 'idle' ? this.renderLightCurveAnalysis() : nothing}
-      ${this.radialVelocityStatus !== 'idle' ? this.renderRadialVelocityAnalysis() : nothing}
-
-      <h4>Atmospheric Composition</h4>
-      <p>${planet.atmosphericComposition}</p>
-
-      <h4>Surface Features</h4>
-      <p>${planet.surfaceFeatures}</p>
-
-      <h4>Potential for Life Analysis</h4>
-      <p>${planet.potentialForLife.reasoning}</p>
-      ${planet.potentialForLife.biosignatures.length > 0 ? html`
-        <h5>Detected Biosignatures</h5>
-        <ul class="biosignatures-list">
-          ${planet.potentialForLife.biosignatures.map(b => html`<li>${b}</li>`)}
+    return html`<div id="planet-detail-panel"><button class="bg-none border-none text-accent cursor-pointer font-sans text-sm p-0 pb-4 opacity-80 transition-opacity hover:opacity-100" @click=${() => (this.selectedPlanetId = null)}>← View Discovered Worlds</button><h2 class="m-0 text-3xl font-bold text-accent">${planet.planetName}</h2><h3 class="m-0 mb-4 text-base font-light opacity-80">${planet.starSystem} // ${planet.planetType}</h3><div class="opacity-90 mb-6 border-l-2 border-accent pl-4"><p class="italic m-0">"${planet.aiWhisper}"</p><span class="block text-right text-xs opacity-70 mt-2">— AURELION CORE</span></div><div class="mb-4"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Live 3D Visualization</h4><div class="mb-4 w-full min-h-52 aspect-square bg-black/20 border border-border flex items-center justify-center p-2 relative overflow-hidden cursor-grab active:cursor-grabbing"><planet-visualizer .planet=${planet}></planet-visualizer></div></div><div id="analysis-buttons" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4"><button class="col-span-1 sm:col-span-2 p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" ?disabled=${this.aiStatus.startsWith('thinking') || this.aiStatus === 'navigating'} @click=${() => this.calculateRouteToPlanet(planet)}>${this.aiStatus === 'navigating' ? 'CALCULATING...' : 'CALCULATE ROUTE'}</button><button class="p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeMagnetosphere(planet)} ?disabled=${this.magnetosphereStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.magnetosphereStatus === 'running' ? 'ANALYZING...' : 'MAGNETOSPHERE'}</button><button class="p-3 bg-none border border-success text-success font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-success hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeDeepStructure(planet)} ?disabled=${this.deepScanStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.deepScanStatus === 'running' ? 'SCANNING...' : 'DEEP SCAN'}</button><button class="p-3 bg-none border border-warning text-warning font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-warning hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeExoSuitShielding(planet)} ?disabled=${this.exoSuitStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.exoSuitStatus === 'running' ? 'SIMULATING...' : 'EXO-SUIT'}</button><button class="p-3 bg-none border border-pink-400 text-pink-400 font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-pink-400 hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeEnergySignature(planet)} ?disabled=${this.energySignatureStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.energySignatureStatus === 'running' ? 'ANALYZING...' : 'ENERGY SIGNATURE'}</button><button class="p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeWeather(planet)} ?disabled=${this.weatherStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.weatherStatus === 'running' ? 'SIMULATING...' : 'WEATHER'}</button><button class="p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeLightCurve(planet)} ?disabled=${this.lightCurveStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.lightCurveStatus === 'running' ? 'ANALYZING...' : 'LIGHT CURVE'}</button><button class="p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeRadialVelocity(planet)} ?disabled=${this.radialVelocityStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.radialVelocityStatus === 'running' ? 'ANALYZING...' : 'RADIAL VELOCITY'}</button></div>${this.navigationRoute ? this.renderNavigationPanel() : nothing}<h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Planetary Data</h4><div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm"><div><strong class="block font-light opacity-70 text-xs">Star Type</strong><span>${planet.starType}</span></div><div><strong class="block font-light opacity-70 text-xs">Distance</strong><span>${planet.distanceLightYears} ly</span></div><div><strong class="block font-light opacity-70 text-xs">Orbital Period</strong><span>${planet.orbitalPeriod}</span></div><div><strong class="block font-light opacity-70 text-xs">Rotational Period</strong><span>${planet.rotationalPeriod}</span></div><div><strong class="block font-light opacity-70 text-xs">Moons</strong><span>${planet.moons.count}</span></div><div><strong class="block font-light opacity-70 text-xs">Life Assessment</strong><span>${planet.potentialForLife.assessment}</span></div></div><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Physical Characteristics</h4><div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm"><div><strong class="block font-light opacity-70 text-xs">Gravity</strong><span>${planet.gravity}</span></div><div><strong class="block font-light opacity-70 text-xs">Surface Pressure</strong><span>${planet.surfacePressure}</span></div><div><strong class="block font-light opacity-70 text-xs">Magnetosphere</strong><span>${planet.magnetosphereStrength}</span></div><div><strong class="block font-light opacity-70 text-xs">Geology</strong><span>${planet.geologicalActivity}</span></div></div><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">AXEE Analysis</h4><div class="grid grid-cols-3 gap-x-4 gap-y-2 text-sm mb-4"><div><strong class="block font-light opacity-70 text-xs">Orbital Period</strong><span>${planet.orbitalPeriodDays?.toFixed(2) ?? 'N/A'} days</span></div><div><strong class="block font-light opacity-70 text-xs">Transit Duration</strong><span>${planet.transitDurationHours?.toFixed(2) ?? 'N/A'} hrs</span></div><div><strong class="block font-light opacity-70 text-xs">Planet Radius</strong><span>${planet.planetRadiusEarths?.toFixed(2) ?? 'N/A'} R⊕</span></div></div><div class=${`border p-4 text-center mb-4 ${planet.axeeClassification === 'Confirmed' ? 'border-accent' : planet.axeeClassification === 'Candidate' ? 'border-warning' : 'border-text-dark'}`}><strong class="block text-xs uppercase tracking-widest opacity-70 mb-2">Classification Status</strong><span class=${`text-2xl font-bold tracking-widest ${planet.axeeClassification === 'Confirmed' ? 'text-accent drop-shadow-glow' : planet.axeeClassification === 'Candidate' ? 'text-warning drop-shadow-[0_0_8px_var(--warning-color)]' : 'text-text-dark'}`}>${planet.axeeClassification?.toUpperCase() || 'N/A'}</span></div>${this.magnetosphereStatus !== 'idle' ? this.renderMagnetosphereAnalysis() : nothing}${this.deepScanStatus !== 'idle' ? this.renderDeepScanAnalysis() : nothing}${this.exoSuitStatus !== 'idle' ? this.renderExoSuitAnalysis() : nothing}${this.energySignatureStatus !== 'idle' ? this.renderEnergySignatureAnalysis() : nothing}${this.weatherStatus !== 'idle' ? this.renderWeatherAnalysis() : nothing}${this.lightCurveStatus !== 'idle' ? this.renderLightCurveAnalysis() : nothing}${this.radialVelocityStatus !== 'idle' ? this.renderRadialVelocityAnalysis() : nothing}<h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Atmospheric Composition</h4><p class="leading-relaxed opacity-90 m-0 mb-4">${planet.atmosphericComposition}</p><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Surface Features</h4><p class="leading-relaxed opacity-90 m-0 mb-4">${planet.surfaceFeatures}</p><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Potential for Life Analysis</h4><p class="leading-relaxed opacity-90 m-0 mb-4">${planet.potentialForLife.reasoning}</p>${planet.potentialForLife.biosignatures.length > 0 ? html`
+        <h5 class="font-light tracking-wider uppercase opacity-80 mt-4 mb-2 text-sm">Detected Biosignatures</h5>
+        <ul class="list-none p-0 flex flex-wrap gap-2 mb-4">
+          ${planet.potentialForLife.biosignatures.map(b => html`<li class="bg-glow border border-border px-2.5 py-1.5 text-xs rounded-full font-light">${b}</li>`)}
         </ul>
-      ` : nothing}
-
-      <h4>Discovery Narrative</h4>
-      <p>${planet.discoveryNarrative}</p>
-      
-      <h4>Key Features</h4>
-      <ul class="key-features">
-        ${planet.keyFeatures.map((f) => html`<li>${f}</li>`)}
-      </ul>
-    </div>`;
+      ` : nothing}<h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Discovery Narrative</h4><p class="leading-relaxed opacity-90 m-0 mb-4">${planet.discoveryNarrative}</p><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Key Features</h4><ul class="pl-5 mb-4">
+        ${planet.keyFeatures.map((f) => html`<li class="mb-2">${f}</li>`)}
+      </ul></div>`;
   }
 
   private renderMagnetosphereAnalysis() {
     return html`
-      <h4>Magnetosphere Shielding Analysis</h4>
-      ${this.magnetosphereStatus === 'running' ? html`<div class="loader">Running quantum simulation...</div>` : ''}
-      ${this.magnetosphereStatus === 'error' ? html`<p class="error-msg">Analysis failed. The simulation was unstable.</p>` : ''}
+      <h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Magnetosphere Shielding Analysis</h4>
+      ${this.magnetosphereStatus === 'running' ? html`<div class="p-8 text-center opacity-70">Running quantum simulation...</div>` : ''}
+      ${this.magnetosphereStatus === 'error' ? html`<p class="text-error font-normal">Analysis failed. The simulation was unstable.</p>` : ''}
       ${this.magnetosphereStatus === 'complete' && this.magnetosphereAnalysisData ? html`
-        <p class="analysis-summary">${this.magnetosphereAnalysisData.summary}</p>
-        <div class="shielding-viz-container">
+        <p class="text-sm opacity-80 leading-relaxed mb-4">${this.magnetosphereAnalysisData.summary}</p>
+        <div class="w-full h-64 bg-black/20 border border-border mb-4 relative">
           <shielding-visualizer .analysisData=${this.magnetosphereAnalysisData}></shielding-visualizer>
         </div>
       ` : nothing}
@@ -3217,20 +3547,20 @@ void main() {
 
   private renderDeepScanAnalysis() {
     return html`
-      <h4>Deep Structure Tomography</h4>
-       ${this.deepScanStatus === 'running' ? html`<div class="loader">Reconstructing subsurface layers...</div>` : ''}
-       ${this.deepScanStatus === 'error' ? html`<p class="error-msg">Deep scan failed. Tomographic reconstruction was unstable.</p>` : ''}
+      <h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Deep Structure Tomography</h4>
+       ${this.deepScanStatus === 'running' ? html`<div class="p-8 text-center opacity-70">Reconstructing subsurface layers...</div>` : ''}
+       ${this.deepScanStatus === 'error' ? html`<p class="text-error font-normal">Deep scan failed. Tomographic reconstruction was unstable.</p>` : ''}
        ${this.deepScanStatus === 'complete' && this.deepScanData ? html`
-        <div class="deep-scan-results">
-          <p class="analysis-summary"><strong>Scan Job:</strong> ${this.deepScanData.jobLabel}</p>
-          <div class="shielding-viz-container">
+        <div>
+          <p class="text-xs opacity-70"><strong>Scan Job:</strong> ${this.deepScanData.jobLabel}</p>
+          <div class="w-full h-64 bg-black/20 border border-border my-4 relative">
             <deep-scan-visualizer .analysisData=${this.deepScanData}></deep-scan-visualizer>
           </div>
-          <h5>Material Composition Legend</h5>
-          <table class="material-legend">
+          <h5 class="font-light tracking-wider uppercase opacity-80 mt-4 mb-2 text-sm">Material Composition Legend</h5>
+          <table class="w-full border-collapse text-sm">
             ${this.deepScanData.materials.map((mat, i) => html`
               <tr>
-                <td><span class="color-swatch" style="--swatch-color: var(--mat-color-${i + 1})"></span>${mat.name}</td>
+                <td class="p-2 border-b border-border"><span class="inline-block w-3 h-3 mr-3 align-middle" style="background-color: var(--mat-color-${i + 1})"></span>${mat.name}</td>
               </tr>
             `)}
           </table>
@@ -3241,20 +3571,20 @@ void main() {
   
   private renderExoSuitAnalysis() {
     return html`
-      <h4>Exo-Suit Radiation Shielding</h4>
-       ${this.exoSuitStatus === 'running' ? html`<div class="loader">Simulating radiation exposure...</div>` : ''}
-       ${this.exoSuitStatus === 'error' ? html`<p class="error-msg">Exo-suit simulation failed. Unstable radiation environment.</p>` : ''}
+      <h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Exo-Suit Radiation Shielding</h4>
+       ${this.exoSuitStatus === 'running' ? html`<div class="p-8 text-center opacity-70">Simulating radiation exposure...</div>` : ''}
+       ${this.exoSuitStatus === 'error' ? html`<p class="text-error font-normal">Exo-suit simulation failed. Unstable radiation environment.</p>` : ''}
        ${this.exoSuitStatus === 'complete' && this.exoSuitAnalysisData ? html`
-        <div class="deep-scan-results">
-          <p class="analysis-summary"><strong>Simulation:</strong> ${this.exoSuitAnalysisData.jobLabel}</p>
-          <div class="shielding-viz-container">
+        <div>
+          <p class="text-xs opacity-70"><strong>Simulation:</strong> ${this.exoSuitAnalysisData.jobLabel}</p>
+          <div class="w-full h-64 bg-black/20 border border-border my-4 relative">
             <exo-suit-visualizer .analysisData=${this.exoSuitAnalysisData}></exo-suit-visualizer>
           </div>
-          <h5>Shielding Material Legend</h5>
-          <table class="material-legend">
+          <h5 class="font-light tracking-wider uppercase opacity-80 mt-4 mb-2 text-sm">Shielding Material Legend</h5>
+          <table class="w-full border-collapse text-sm">
             ${this.exoSuitAnalysisData.materials.map((mat, i) => html`
               <tr>
-                <td><span class="color-swatch" style="--swatch-color: var(--exo-mat-color-${i + 1})"></span>${mat.name}</td>
+                <td class="p-2 border-b border-border"><span class="inline-block w-3 h-3 mr-3 align-middle" style="background-color: var(--exo-mat-color-${i + 1})"></span>${mat.name}</td>
               </tr>
             `)}
           </table>
@@ -3265,23 +3595,37 @@ void main() {
 
   private renderWeatherAnalysis() {
     return html`
-      <h4>Atmospheric & Weather Analysis</h4>
-      ${this.weatherStatus === 'running' ? html`<div class="loader">Simulating climate patterns...</div>` : ''}
-      ${this.weatherStatus === 'error' ? html`<p class="error-msg">Weather simulation failed. Atmospheric model was unstable.</p>` : ''}
+      <h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Atmospheric & Weather Analysis</h4>
+      ${this.weatherStatus === 'running' ? html`<div class="p-8 text-center opacity-70">Simulating climate patterns...</div>` : ''}
+      ${this.weatherStatus === 'error' ? html`<p class="text-error font-normal">Weather simulation failed. Atmospheric model was unstable.</p>` : ''}
       ${this.weatherStatus === 'complete' && this.weatherAnalysisData ? html`
         <weather-visualizer .analysisData=${this.weatherAnalysisData}></weather-visualizer>
+      ` : nothing}
+    `;
+  }
+
+  private renderEnergySignatureAnalysis() {
+    return html`
+      <h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Energy Signature Analysis</h4>
+      ${this.energySignatureStatus === 'running' ? html`<div class="p-8 text-center opacity-70">Scanning for anomalous emissions...</div>` : ''}
+      ${this.energySignatureStatus === 'error' ? html`<p class="text-error font-normal">Analysis failed. The signal was too chaotic to resolve.</p>` : ''}
+      ${this.energySignatureStatus === 'complete' && this.energySignatureAnalysisData ? html`
+        <p class="text-sm opacity-80 leading-relaxed mb-4">${this.energySignatureAnalysisData.summary}</p>
+        <div class="w-full h-72 bg-black/20 border border-border mb-4 relative">
+          <energy-signature-visualizer .analysisData=${this.energySignatureAnalysisData}></energy-signature-visualizer>
+        </div>
       ` : nothing}
     `;
   }
   
   private renderLightCurveAnalysis() {
     return html`
-      <h4>Photometric Light Curve Analysis</h4>
-      ${this.lightCurveStatus === 'running' ? html`<div class="loader">Acquiring photometric lock...</div>` : ''}
-      ${this.lightCurveStatus === 'error' ? html`<p class="error-msg">Light curve analysis failed. Could not resolve signal.</p>` : ''}
+      <h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Photometric Light Curve Analysis</h4>
+      ${this.lightCurveStatus === 'running' ? html`<div class="p-8 text-center opacity-70">Acquiring photometric lock...</div>` : ''}
+      ${this.lightCurveStatus === 'error' ? html`<p class="text-error font-normal">Light curve analysis failed. Could not resolve signal.</p>` : ''}
       ${this.lightCurveStatus === 'complete' && this.lightCurveData ? html`
-        <p class="analysis-summary">${this.lightCurveData.summary}</p>
-        <div class="light-curve-viz-container">
+        <p class="text-sm opacity-80 leading-relaxed mb-4">${this.lightCurveData.summary}</p>
+        <div class="w-full h-64 bg-black/20 border border-border mb-4 relative">
             <light-curve-visualizer .analysisData=${this.lightCurveData}></light-curve-visualizer>
         </div>
       ` : nothing}
@@ -3290,12 +3634,12 @@ void main() {
 
   private renderRadialVelocityAnalysis() {
     return html`
-      <h4>Radial Velocity Analysis</h4>
-      ${this.radialVelocityStatus === 'running' ? html`<div class="loader">Observing stellar wobble...</div>` : ''}
-      ${this.radialVelocityStatus === 'error' ? html`<p class="error-msg">Radial velocity analysis failed. Signal could not be resolved.</p>` : ''}
+      <h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Radial Velocity Analysis</h4>
+      ${this.radialVelocityStatus === 'running' ? html`<div class="p-8 text-center opacity-70">Observing stellar wobble...</div>` : ''}
+      ${this.radialVelocityStatus === 'error' ? html`<p class="text-error font-normal">Radial velocity analysis failed. Signal could not be resolved.</p>` : ''}
       ${this.radialVelocityStatus === 'complete' && this.radialVelocityData ? html`
-        <p class="analysis-summary">${this.radialVelocityData.summary}</p>
-        <div class="light-curve-viz-container">
+        <p class="text-sm opacity-80 leading-relaxed mb-4">${this.radialVelocityData.summary}</p>
+        <div class="w-full h-64 bg-black/20 border border-border mb-4 relative">
             <radial-velocity-visualizer .analysisData=${this.radialVelocityData}></radial-velocity-visualizer>
         </div>
       ` : nothing}
@@ -3303,22 +3647,61 @@ void main() {
   }
 
   private renderNavigationPanel() {
-    return html`<div class="navigation-panel"><h4>Navigation Route</h4><ul class="waypoint-list">${this.navigationRoute?.map((wp, index) => html`<li class="waypoint"><span class="waypoint-index">${index + 1}</span><div class="waypoint-info"><strong>${wp.name}</strong><p>${wp.description}</p></div></li>`)}</ul></div>`;
+    return html`<div class="mt-4 border-t border-border"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Navigation Route</h4><ul class="list-none p-0 m-0">${this.navigationRoute?.map((wp, index) => html`<li class="flex items-start gap-4 py-3 border-b border-border"><span class="text-lg font-bold text-accent shrink-0">${index + 1}</span><div><strong class="block font-normal">${wp.name}</strong><p class="m-0 text-xs opacity-70">${wp.description}</p></div></li>`)}</ul></div>`;
   }
 
   private renderRightPanel() {
-    const panelClasses = { 'side-panel': true, right: true, open: this.isRightPanelOpen };
-    return html`<aside class=${classMap(panelClasses)}><button class="panel-toggle" @click=${this._toggleRightPanel}>${this.hasNewChronicle && !this.isRightPanelOpen ? html`<div class="notification-dot"></div>` : nothing}<i class="arrow ${this.isRightPanelOpen ? 'right' : 'left'}"></i></button><div class="panel-header"><h3>AI Core Chronicles</h3></div><div class="panel-content"><ul class="chronicles-list">${this.aiChronicles.map((entry) => {
-        const isClickable = entry.type === 'discovery' && (entry.planetId || entry.galaxyId);
-        return html`
-        <li
-          class="chronicle-entry type-${entry.type} ${isClickable ? 'clickable' : ''}"
-          @click=${isClickable ? () => this._handleChronicleClick(entry) : nothing}
-          title=${isClickable ? 'Click to navigate' : ''}>
-          <span class="timestamp">${entry.timestamp}</span>
-          <p>${entry.content}</p>
-        </li>`;
-      })}</ul></div></aside>`;
+    const panelClasses = `
+      absolute top-0 right-0 h-full w-[clamp(320px,25vw,420px)] p-6 pt-32 
+      bg-panel-bg backdrop-blur-lg flex flex-col items-end 
+      transition-transform duration-500 ease-[cubic-bezier(0.25,1,0.5,1)] pointer-events-auto
+      border-l border-border
+      ${this.isRightPanelOpen ? 'translate-x-0' : 'translate-x-full'}
+    `;
+    const filteredChronicles = this.aiChronicles.filter(entry => 
+        this.chronicleFilter === 'all' || entry.type === this.chronicleFilter
+    );
+    const chronicleFilters: (typeof this.chronicleFilter)[] = ['all', 'discovery', 'thought', 'suggestion'];
+
+    return html`
+      <aside class=${panelClasses}>
+        <button class="absolute top-1/2 -translate-y-1/2 left-[-2rem] w-8 h-20 bg-panel-bg border border-r-0 border-border cursor-pointer flex items-center justify-center text-accent z-10" @click=${this._toggleRightPanel}>
+          ${this.hasNewChronicle && !this.isRightPanelOpen ? html`<div class="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-accent rounded-full shadow-[0_0_8px_var(--accent-color)]"></div>` : nothing}
+          <i class="border-solid border-accent inline-block p-1 transition-transform duration-300 ${this.isRightPanelOpen ? 'border-b-2 border-r-2 rotate-45' : 'border-t-2 border-l-2 rotate-45'}"></i>
+        </button>
+        <div class="w-full text-right pb-2 border-b border-border mb-4">
+          <h3 class="m-0 text-base font-normal tracking-[0.2em] uppercase text-accent">AI Core Chronicles</h3>
+        </div>
+        <div class="flex border border-border mb-4">
+            ${chronicleFilters.map(f => html`
+                <button 
+                    class="bg-none border-none px-2 py-1 cursor-pointer font-sans text-xs tracking-widest uppercase transition-all duration-200 flex-grow
+                    ${this.chronicleFilter === f ? 'bg-glow text-bg' : 'text-text-dark'}"
+                    @click=${() => this.chronicleFilter = f}
+                >${f.toUpperCase()}</button>
+            `)}
+        </div>
+        <div class="overflow-y-auto h-full w-full">
+          <ul class="list-none p-0 m-0">
+            ${filteredChronicles.map((entry) => {
+              const isClickable = entry.type === 'discovery' && (entry.planetId || entry.galaxyId);
+              const typeClasses = {
+                'thought': 'border-accent',
+                'discovery': 'border-warning',
+                'suggestion': 'border-pink-400'
+              }
+              return html`
+              <li
+                class="border-r-2 pr-3 mb-4 transition-colors ${typeClasses[entry.type]} ${isClickable ? 'cursor-pointer hover:bg-glow group' : ''}"
+                @click=${isClickable ? () => this._handleChronicleClick(entry) : nothing}
+                title=${isClickable ? 'Click to navigate' : ''}>
+                <span class="text-xs opacity-60 group-hover:text-bg">${entry.timestamp}</span>
+                <p class="m-0 mt-1 text-sm group-hover:text-bg">${entry.content}</p>
+              </li>`;
+            })}
+          </ul>
+        </div>
+      </aside>`;
   }
 
   private renderFooter() {
@@ -3327,740 +3710,38 @@ void main() {
     const placeholder = inGalaxyView ? 'Describe a planetary concept to synthesize...' : 'Describe a galactic concept to synthesize...';
 
     return html`
-      <footer class="main-footer">
-        <div class="status-bar">
-          <span class="ai-status-indicator status-${this.aiStatus}"></span>
+      <footer class="p-4 md:p-8 flex flex-col gap-2 items-center w-full pointer-events-auto">
+        <div class="text-xs text-text-dark flex items-center gap-2 w-full max-w-3xl justify-center">
+          <span class=${`w-2 h-2 rounded-full transition-colors duration-500 flex-shrink-0 ${
+            this.aiStatus.startsWith('thinking') || this.aiStatus.startsWith('navigating') ? 'bg-warning animate-pulse-active' :
+            this.aiStatus === 'error' ? 'bg-error' :
+            'bg-accent animate-pulse-idle'
+          }`}></span>
           <span>${this.statusMessage}</span>
-          ${this.error ? html`<span class="error-msg">${this.error}</span>` : ''}
-          <div class="status-divider"></div>
-          <span class="livestream-status-indicator status-${this.liveStreamStatus}"></span>
-          <span class="livestream-status-text">
-            ${this.liveStreamStatus.charAt(0).toUpperCase() + this.liveStreamStatus.slice(1)}
-          </span>
+          ${this.error ? html`<span class="text-error font-normal">${this.error}</span>` : ''}
+          <div class="h-full w-px bg-border mx-2"></div>
+          <span class=${`w-2 h-2 rounded-full transition-colors duration-500 flex-shrink-0 ${
+            this.liveStreamStatus === 'connected' ? 'bg-success animate-pulse-live' :
+            this.liveStreamStatus === 'connecting' ? 'bg-warning animate-pulse-active' :
+            this.liveStreamStatus === 'error' ? 'bg-error' : 'bg-text-dark'
+          }`}></span>
+          <span class="whitespace-nowrap">${this.liveStreamStatus.charAt(0).toUpperCase() + this.liveStreamStatus.slice(1)}</span>
         </div>
-        <form id="command-bar" class="command-bar" @submit=${inGalaxyView ? this._handlePlanetCommandSubmit : this._handleGalaxyCommandSubmit}>
-          <div class="input-wrapper">
-            <input type="text" placeholder=${this.isListening ? 'Listening...' : placeholder} .value=${this.userPrompt} @input=${(e: Event) => (this.userPrompt = (e.target as HTMLInputElement).value)} ?disabled=${isBusy}/>
-            ${this.aiSuggestion ? html`<div class="suggestion-chip" @click=${this._handleSuggestionClick}><b>Creative Spark:</b> ${this.aiSuggestion}</div>` : nothing}
+        <form id="command-bar" class="w-full max-w-3xl bg-panel-bg border border-border backdrop-blur-lg flex shadow-2xl dark:shadow-black/50" @submit=${inGalaxyView ? this._handlePlanetCommandSubmit : this._handleGalaxyCommandSubmit}>
+          <div class="flex-grow relative">
+            <input type="text" placeholder=${this.isListening ? 'Listening...' : placeholder} .value=${this.userPrompt} @input=${(e: Event) => (this.userPrompt = (e.target as HTMLInputElement).value)} ?disabled=${isBusy} class="w-full bg-transparent border-none text-text text-lg p-4 font-light focus:outline-none"/>
+            ${this.aiSuggestion ? html`<div class="absolute bottom-full left-4 mb-1 bg-panel-bg border border-border px-4 py-2 text-sm rounded-full cursor-pointer transition-all duration-300 animate-fade-in whitespace-nowrap hover:bg-glow hover:text-bg" @click=${this._handleSuggestionClick}><b class="font-normal text-accent/80">Creative Spark:</b> ${this.aiSuggestion}</div>` : nothing}
           </div>
-          <button type="button" class="cluster-button ${isBusy ? 'thinking-button' : ''}" @click=${inGalaxyView ? this._handlePlanetClusterCommandSubmit : this._handleGalaxyClusterCommandSubmit} ?disabled=${isBusy || !this.userPrompt.trim()}>${isBusy ? '' : 'SYNTHESIZE CLUSTER'}</button>
-          <button type="button" class="voice-button ${classMap({listening: this.isListening})}" @click=${this._handleVoiceCommandClick} ?disabled=${isBusy || !this.isSpeechSupported} title=${this.isListening ? 'Stop listening' : 'Use voice command'}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg></button>
-          <button type="submit" class=${isBusy ? 'thinking-button' : ''} ?disabled=${isBusy || !this.userPrompt.trim()}>${isBusy ? '' : (inGalaxyView ? 'SYNTHESIZE' : 'SYNTHESIZE GALAXY')}</button>
+          <button type="button" class="cluster-button font-sans bg-none border-l border-border text-yellow-400 px-6 py-4 text-base font-bold tracking-widest cursor-pointer whitespace-nowrap transition-colors hover:enabled:bg-yellow-400 hover:enabled:text-bg disabled:opacity-40 disabled:cursor-not-allowed ${isBusy ? 'thinking-button' : ''}" @click=${inGalaxyView ? this._handlePlanetClusterCommandSubmit : this._handleGalaxyClusterCommandSubmit} ?disabled=${isBusy || !this.userPrompt.trim()}>${isBusy ? '' : 'CLUSTER'}</button>
+          <button type="button" class="font-sans bg-none border-l border-border text-text-dark p-4 w-16 transition-colors hover:enabled:text-accent disabled:opacity-40 disabled:cursor-not-allowed" @click=${this._handleVoiceCommandClick} ?disabled=${isBusy || !this.isSpeechSupported} title=${this.isListening ? 'Stop listening' : 'Use voice command'}><svg class=${`w-6 h-6 transition-all duration-300 ${this.isListening ? 'text-accent animate-pulse-voice' : ''}`} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg></button>
+          <button type="submit" class="font-sans bg-none border-l border-border text-accent px-6 py-4 text-base font-bold tracking-widest cursor-pointer whitespace-nowrap transition-colors hover:enabled:bg-accent hover:enabled:text-bg disabled:opacity-40 disabled:cursor-not-allowed ${isBusy ? 'thinking-button' : ''}" ?disabled=${isBusy || !this.userPrompt.trim()}>${isBusy ? '' : (inGalaxyView ? 'SYNTHESIZE' : 'GALAXY')}</button>
         </form>
       </footer>
     `;
   }
 
-  static styles = css`
-    :host {
-      --accent-color: #61faff;
-      --glow-color: rgba(97, 250, 255, 0.5);
-      --bg-color: #010206;
-      --panel-bg: rgba(1, 2, 6, 0.75);
-      --border-color: rgba(97, 250, 255, 0.2);
-      --text-color: #c0f0ff;
-      --text-color-dark: #6a9aa7;
-      --error-color: #ff6a6a;
-      --warning-color: #fffa61;
-      --success-color: #61ffca;
-      --mat-color-1: #9b7653; /* Crust */
-      --mat-color-2: #e08d51; /* Mantle */
-      --mat-color-3: #ffdd33; /* Outer Core */
-      --mat-color-4: #ffffff; /* Inner Core */
-      --exo-mat-color-1: #c0c0c0; /* Aluminum */
-      --exo-mat-color-2: #f0e68c; /* Poly */
-      --exo-mat-color-3: #ffb6c1; /* Tissue */
-
-      display: block;
-      width: 100%;
-      height: 100%;
-      position: relative;
-      font-family: 'Exo 2', sans-serif;
-      font-weight: 300;
-    }
-
-    button {
-      position: relative;
-      overflow: hidden;
-      transition: all 0.2s ease-out;
-    }
-    button:hover:not(:disabled) {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 15px rgba(97, 250, 255, 0.1);
-    }
-    .ripple {
-      position: absolute;
-      border-radius: 50%;
-      transform: scale(0);
-      animation: ripple-animation 0.6s linear;
-      background-color: var(--glow-color);
-    }
-    @keyframes ripple-animation {
-      to {
-        transform: scale(4);
-        opacity: 0;
-      }
-    }
-
-    .main-interface.hidden {
-      display: none;
-    }
-
-    .conversation-view {
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      z-index: 20;
-      display: flex; flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: var(--bg-color);
-      animation: fadeIn 0.5s ease;
-    }
-
-    .conversation-status {
-        position: absolute;
-        top: 2rem;
-        font-size: 1.2rem;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--text-color);
-        opacity: 0.7;
-    }
-
-    .end-conversation-button {
-      position: absolute;
-      bottom: 2rem;
-      font-family: inherit;
-      background: none;
-      border: 1px solid var(--error-color);
-      color: var(--error-color);
-      padding: 0.8rem 1.5rem;
-      font-size: 1rem;
-      letter-spacing: 0.1em;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
-
-    .end-conversation-button:hover {
-        background: rgba(255, 106, 106, 0.2);
-        color: #ffbebe;
-    }
-
-    .help-icon {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      border: 1px solid var(--text-color-dark);
-      color: var(--text-color-dark);
-      font-size: 10px;
-      font-weight: 700;
-      margin-left: 8px;
-      cursor: help;
-      position: relative;
-    }
-    .help-icon:hover .help-popover {
-      opacity: 1;
-      visibility: visible;
-      transform: translateY(0);
-    }
-    .help-popover {
-      position: absolute;
-      bottom: 120%;
-      left: 50%;
-      transform: translateX(-50%) translateY(10px);
-      width: 280px;
-      background: var(--bg-color);
-      border: 1px solid var(--border-color);
-      padding: 1rem;
-      border-radius: 4px;
-      font-size: 0.9rem;
-      font-weight: 300;
-      line-height: 1.5;
-      color: var(--text-color);
-      text-align: left;
-      opacity: 0;
-      visibility: hidden;
-      transition: opacity 0.3s ease, transform 0.3s ease;
-      z-index: 100;
-      pointer-events: none;
-      text-transform: none;
-      letter-spacing: 0.02em;
-    }
-    .help-popover.right {
-      left: auto;
-      right: 120%;
-      transform: translateX(0) translateY(10px);
-    }
-
-    .tutorial-prompt {
-      position: fixed;
-      bottom: 7rem;
-      left: 50%;
-      transform: translateX(-50%);
-      background: var(--panel-bg);
-      border: 1px solid var(--border-color);
-      padding: 1rem 1.5rem;
-      z-index: 99;
-      backdrop-filter: blur(10px);
-      display: flex;
-      align-items: center;
-      gap: 1.5rem;
-      animation: fadeIn 0.5s ease;
-    }
-    .tutorial-prompt p {
-      margin: 0;
-      font-size: 0.9rem;
-    }
-    .tutorial-prompt button {
-      font-family: inherit;
-      background: none;
-      border: 1px solid var(--border-color);
-      color: var(--text-color);
-      padding: 0.5rem 1rem;
-      font-size: 0.8rem;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      margin-left: 0.5rem;
-    }
-    .tutorial-prompt button:hover {
-      background: var(--glow-color);
-      border-color: var(--accent-color);
-      color: var(--bg-color);
-    }
-
-    .overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 2;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      pointer-events: none;
-    }
-
-    .main-header button.back-to-galaxy {
-        color: var(--warning-color);
-        border-color: rgba(255, 250, 97, 0.4);
-    }
-    .main-header button.back-to-galaxy:hover:not(:disabled) {
-        background: rgba(255, 250, 97, 0.2);
-        border-color: var(--warning-color);
-        color: #fffac1;
-    }
-
-    .galaxy-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    .galaxy-list li {
-      padding: 0.8rem 0;
-      border-bottom: 1px solid var(--border-color);
-      cursor: pointer;
-      transition: background 0.3s ease;
-    }
-    .galaxy-list li:hover {
-      background: var(--glow-color);
-    }
-    .galaxy-list li:hover * {
-      color: var(--bg-color);
-    }
-    .galaxy-list .galaxy-name {
-      display: block;
-      font-size: 1.1rem;
-      font-weight: 400;
-      color: var(--accent-color);
-    }
-    .galaxy-list .galaxy-type {
-      font-size: 0.8rem;
-      opacity: 0.7;
-    }
-
-
-    /* ONBOARDING */
-    .onboarding-overlay {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(1, 2, 6, 0.9); backdrop-filter: blur(10px); z-index: 100;
-      display: flex; align-items: center; justify-content: center; text-align: center;
-      pointer-events: all; animation: fadeInOnboarding 1s ease;
-    }
-    @keyframes fadeInOnboarding { from { opacity: 0; } to { opacity: 1; } }
-    .onboarding-content { max-width: 800px; display: flex; flex-direction: column; align-items: center; }
-    .stanza { margin-bottom: 1.5rem; }
-    .past-stanza .onboarding-text { animation: none; border-right: none; opacity: 0.7; width: 100%; overflow: visible; white-space: normal; }
-    .current-stanza .onboarding-text { opacity: 0; }
-    .onboarding-text {
-      font-size: 1.2rem; line-height: 1.6; letter-spacing: 0.05em; color: var(--text-color); margin: 0;
-      white-space: nowrap; overflow: hidden; display: inline-block; vertical-align: bottom;
-      animation: typing var(--animation-duration) steps(var(--line-length), end) forwards, blink-caret 0.75s step-end infinite;
-      animation-play-state: running, running; border-right: 0.15em solid var(--accent-color); font-family: 'Exo 2', sans-serif;
-    }
-    @keyframes typing { from { width: 0; opacity: 1; } to { width: 100%; opacity: 1; } }
-    @keyframes blink-caret { from, to { border-color: transparent; } 50% { border-color: var(--accent-color); } }
-    .begin-button, .continue-button {
-      font-family: inherit; background: none; border: 2px solid var(--border-color); color: var(--text-color);
-      padding: 1rem 2rem; font-size: 1.2rem; letter-spacing: 0.2em; cursor: pointer; transition: all 0.3s ease;
-      text-shadow: 0 0 10px var(--glow-color); box-shadow: 0 0 10px var(--border-color); animation: fadeInButton 1s forwards;
-      opacity: 0; margin-top: 3rem;
-    }
-    .continue-button { padding: 0.8rem 1.5rem; font-size: 1rem; letter-spacing: 0.3em; border-width: 1px; margin-top: 2rem; }
-    .begin-button:hover, .continue-button:hover { background: var(--glow-color); border-color: var(--accent-color); color: var(--bg-color); box-shadow: 0 0 20px var(--glow-color); }
-    @keyframes fadeInButton { to { opacity: 1; } }
-
-    /* HEADER */
-    .main-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 1.5rem; pointer-events: all; text-shadow: 0 0 10px var(--glow-color); flex-shrink: 0; }
-    .logo h1 { margin: 0; font-weight: 400; font-size: 1.5rem; letter-spacing: 0.3em; color: var(--accent-color); }
-    .logo h2 { margin: 0; font-weight: 300; font-size: 0.8rem; letter-spacing: 0.1em; color: var(--text-color); opacity: 0.7; }
-    .main-header .controls { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; max-width: 70%; }
-    .main-header button { font-family: inherit; background: none; border: 1px solid var(--border-color); color: var(--text-color); padding: 0.5rem 1rem; font-size: 0.8rem; letter-spacing: 0.1em; cursor: pointer; white-space: nowrap; }
-    .main-header button:hover:not(:disabled) { background: var(--glow-color); border-color: var(--accent-color); color: var(--bg-color); }
-    .main-header button:disabled { opacity: 0.5; cursor: not-allowed; border-color: var(--text-color-dark); color: var(--text-color-dark); background: none; }
-    .main-header button.clear-button { color: var(--error-color); border-color: rgba(255, 106, 106, 0.4); }
-    .main-header button.clear-button:hover:not(:disabled) { background: rgba(255, 106, 106, 0.2); border-color: var(--error-color); color: #ffbebe; }
-    .main-header button.reveal-button {
-      color: #ff61c3;
-      border-color: rgba(255, 97, 195, 0.4);
-      text-shadow: 0 0 8px #ff61c3;
-    }
-    .main-header button.reveal-button:hover:not(:disabled) {
-      background: rgba(255, 97, 195, 0.2);
-      border-color: #ff61c3;
-      color: #ffc8e6;
-    }
-    
-    .livestream-button.connected {
-      color: var(--success-color);
-      border-color: var(--success-color);
-      text-shadow: 0 0 8px var(--success-color);
-    }
-    .livestream-button.connected:hover {
-        background-color: rgba(97, 255, 202, 0.2);
-    }
-    .live-dot {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      background: var(--success-color);
-      border-radius: 50%;
-      margin-right: 8px;
-      animation: pulse-live 1.5s ease-in-out infinite;
-    }
-    @keyframes pulse-live {
-      0% { box-shadow: 0 0 0 0 rgba(97, 255, 202, 0.7); }
-      70% { box-shadow: 0 0 0 5px rgba(97, 255, 202, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(97, 255, 202, 0); }
-    }
-
-
-    /* SIDE PANELS */
-    .side-panel { position: absolute; top: 0; height: 100%; width: clamp(320px, 25vw, 420px); padding: 1.5rem; padding-top: 8rem; background: var(--panel-bg); backdrop-filter: blur(8px); display: flex; flex-direction: column; transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1); pointer-events: all; }
-    .side-panel.left { left: 0; transform: translateX(-100%); border-right: 1px solid var(--border-color); }
-    .side-panel.right { right: 0; transform: translateX(100%); align-items: flex-end; text-align: right; border-left: 1px solid var(--border-color); }
-    .side-panel.open { transform: translateX(0); }
-    .panel-toggle { position: absolute; top: 50%; transform: translateY(-50%); width: 2rem; height: 5rem; background: var(--panel-bg); border: 1px solid var(--border-color); border-left: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--accent-color); z-index: 10; }
-    .side-panel.left .panel-toggle { right: -2rem; }
-    .side-panel.right .panel-toggle { left: -2rem; border: 1px solid var(--border-color); border-right: none; }
-    .arrow { border: solid var(--accent-color); border-width: 0 2px 2px 0; display: inline-block; padding: 4px; transition: transform 0.3s; }
-    .arrow.right { transform: rotate(-45deg); }
-    .arrow.left { transform: rotate(135deg); }
-    .panel-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-color); margin-bottom: 1rem; }
-    .panel-header h3 { margin: 0; font-size: 1rem; font-weight: 400; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent-color); }
-    .panel-view-toggle { display: flex; border: 1px solid var(--border-color); }
-    .panel-view-toggle button { background: none; border: none; color: var(--text-color-dark); padding: 0.2rem 0.6rem; cursor: pointer; font-family: inherit; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; transition: all 0.2s ease; display: flex; align-items: center; }
-    .panel-view-toggle button.active { background: var(--glow-color); color: var(--bg-color); }
-    .panel-content { overflow-y: auto; height: 100%; width: 100%; }
-
-    /* LEFT PANEL: PLANET LIST & DETAIL */
-    .planet-list { list-style: none; padding: 0; margin: 0; }
-    .planet-list li { padding: 0.8rem 0; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.3s ease; }
-    .planet-list li:hover, .planet-list li.selected { background: var(--glow-color); }
-    .planet-list li.selected .planet-name, .planet-list li.selected .planet-id { color: var(--bg-color); }
-    .planet-list .planet-id { display: block; font-size: 0.7rem; opacity: 0.7; letter-spacing: 0.1em; }
-    .planet-list .planet-name { font-size: 1.1rem; font-weight: 400; }
-    .planet-detail .back-button { background: none; border: none; color: var(--accent-color); cursor: pointer; font-family: inherit; font-size: 0.9rem; padding: 0 0 1rem 0; opacity: 0.8; transition: opacity 0.3s; }
-    .planet-detail .back-button:hover { opacity: 1; }
-    .planet-detail h2 { margin: 0; font-size: 1.8rem; font-weight: 700; color: var(--accent-color); }
-    .planet-detail h3 { margin: 0 0 1rem 0; font-size: 1rem; font-weight: 300; opacity: 0.8; }
-    .planet-detail p { line-height: 1.6; opacity: 0.9; margin: 0 0 1rem 0; }
-    .ai-whisper { opacity: 0.9; margin-bottom: 1.5rem; border-left: 2px solid var(--accent-color); padding-left: 1rem; }
-    .ai-whisper p { font-style: italic; margin: 0; }
-    .ai-whisper span { display: block; text-align: right; font-size: 0.8rem; opacity: 0.7; margin-top: 0.5rem; }
-    .planet-detail h4 { font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin: 1.5rem 0 1rem 0; }
-    .planet-detail h5 { font-weight: 300; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.8; margin: 1rem 0 0.5rem 0; font-size: 0.9rem;}
-    .stats-grid, .analysis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1rem; font-size: 0.9rem; }
-    .stats-grid strong, .analysis-grid strong { display: block; font-weight: 300; opacity: 0.7; font-size: 0.8rem; }
-    .analysis-grid { margin-bottom: 1rem; }
-    .classification-box { border: 1px solid var(--border-color); padding: 1rem; text-align: center; margin-bottom: 1rem; }
-    .classification-box strong { display: block; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7; margin-bottom: 0.5rem; }
-    .classification-box span { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.1em; }
-    .classification-box.classification-confirmed span { color: var(--accent-color); text-shadow: 0 0 8px var(--glow-color); }
-    .classification-box.classification-candidate span { color: var(--warning-color); text-shadow: 0 0 8px var(--warning-color); }
-    .classification-box.classification-hypothetical span { color: var(--text-color-dark); }
-    .classification-box.classification-false-positive span { color: var(--error-color); text-shadow: 0 0 8px var(--error-color); }
-    .key-features { padding-left: 1.2rem; }
-    .key-features li { margin-bottom: 0.5rem; }
-    .biosignatures-list { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
-    .biosignatures-list li { background: rgba(97, 250, 255, 0.1); border: 1px solid var(--border-color); padding: 0.3rem 0.6rem; font-size: 0.8rem; border-radius: 1rem; font-weight: 300; }
-    .planet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
-    .planet-actions .route-button { grid-column: 1 / -1; }
-    .analysis-button, .route-button { flex: 1; padding: 0.8rem; background: none; border: 1px solid var(--accent-color); color: var(--accent-color); font-family: inherit; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.1em; cursor: pointer; }
-    .analysis-button:hover:not(:disabled), .route-button:hover:not(:disabled) { background: var(--accent-color); color: var(--bg-color); }
-    .analysis-button:disabled, .route-button:disabled { opacity: 0.5; cursor: not-allowed; border-color: var(--text-color-dark); color: var(--text-color-dark); }
-    .analysis-button.deep-scan { border-color: var(--success-color); color: var(--success-color); }
-    .analysis-button.deep-scan:hover:not(:disabled) { background: var(--success-color); color: var(--bg-color); }
-    .analysis-button.exo-suit { border-color: var(--warning-color); color: var(--warning-color); }
-    .analysis-button.exo-suit:hover:not(:disabled) { background: var(--warning-color); color: var(--bg-color); }
-
-    .visualization-panel {
-      margin-bottom: 1rem;
-    }
-    .visualization-panel h4 {
-      font-weight: 400;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      border-bottom: 1px solid var(--border-color);
-      padding-bottom: 0.5rem;
-      margin: 1.5rem 0 1rem 0;
-    }
-    .visualization-container {
-      margin-bottom: 1rem;
-      width: 100%;
-      min-height: 200px;
-      aspect-ratio: 1 / 1;
-      background: rgba(0,0,0,0.2);
-      border: 1px solid var(--border-color);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0.5rem;
-      position: relative;
-      overflow: hidden;
-      cursor: grab;
-    }
-    .visualization-container:active {
-      cursor: grabbing;
-    }
-
-    .navigation-panel { margin-top: 1rem; border-top: 1px solid var(--border-color); }
-    .waypoint-list { list-style: none; padding: 0; margin: 0; }
-    .waypoint { display: flex; align-items: flex-start; gap: 1rem; padding: 0.8rem 0; border-bottom: 1px solid var(--border-color); }
-    .waypoint-index { font-size: 1.2rem; font-weight: 700; color: var(--accent-color); flex-shrink: 0; }
-    .waypoint-info strong { display: block; font-weight: 400; }
-    .waypoint-info p { margin: 0.2rem 0 0 0; font-size: 0.8rem; opacity: 0.7; }
-    .predictor-form { display: flex; flex-direction: column; gap: 1.2rem; }
-    .predictor-form p { font-size: 0.9rem; opacity: 0.8; line-height: 1.5; margin: 0; }
-    .predictor-input label { display: block; font-size: 0.8rem; opacity: 0.7; margin-bottom: 0.4rem; }
-    .predictor-input input { width: 100%; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); color: var(--text-color); padding: 0.6rem; font-family: inherit; font-size: 1rem; }
-    .predictor-input input:focus { outline: none; border-color: var(--accent-color); }
-    .classify-button { width: 100%; padding: 0.8rem 1rem; background: none; border: 1px solid var(--accent-color); color: var(--accent-color); font-family: inherit; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.1em; cursor: pointer; }
-    .classify-button:hover:not(:disabled) { background: var(--accent-color); color: var(--bg-color); }
-    .classify-button:disabled { opacity: 0.5; cursor: not-allowed; border-color: var(--text-color-dark); color: var(--text-color-dark); }
-    .shielding-viz-container, .light-curve-viz-container { width: 100%; height: 250px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); margin-bottom: 1rem; position: relative; }
-    .analysis-summary { font-size: 0.9rem; opacity: 0.8; line-height: 1.5; margin-bottom: 1rem; }
-    .loader { padding: 2rem; text-align: center; opacity: 0.7; }
-
-    /* DEEP SCAN RESULTS */
-    .deep-scan-results .analysis-summary { font-size: 0.8rem; opacity: 0.7; }
-    .material-legend { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-top: 1rem; }
-    .material-legend td { padding: 0.5rem; border-bottom: 1px solid var(--border-color); }
-    .material-legend tr:last-child td { border: none; }
-    .color-swatch { display: inline-block; width: 12px; height: 12px; background-color: var(--swatch-color); margin-right: 0.8rem; vertical-align: middle; }
-
-
-    /* RIGHT PANEL: AI CHRONICLES */
-    .chronicles-list { list-style: none; padding: 0; margin: 0; }
-    .chronicle-entry { border-right: 2px solid var(--border-color); padding: 0.8rem; margin-bottom: 1rem; }
-    .chronicle-entry.type-thought { border-color: var(--accent-color); }
-    .chronicle-entry.type-discovery { border-color: var(--warning-color); }
-    .chronicle-entry.type-suggestion { border-color: #ff61c3; }
-    .chronicle-entry .timestamp { font-size: 0.7rem; opacity: 0.6; }
-    .chronicle-entry p { margin: 0.3rem 0 0 0; font-size: 0.9rem; }
-    .chronicle-entry.clickable {
-      cursor: pointer;
-      transition: background-color 0.2s ease-in-out;
-    }
-    .chronicle-entry.clickable:hover {
-      background: var(--glow-color);
-    }
-    .chronicle-entry.clickable:hover * {
-      color: var(--bg-color);
-    }
-    .notification-dot { position: absolute; top: 5px; right: 5px; width: 10px; height: 10px; background: var(--accent-color); border-radius: 50%; box-shadow: 0 0 8px var(--accent-color); }
-
-    /* FOOTER */
-    .main-footer { padding: 1rem 2rem; display: flex; flex-direction: column; gap: 0.5rem; align-items: center; width: 100%; pointer-events: all; }
-    .status-bar { font-size: 0.8rem; color: var(--text-color-dark); display: flex; align-items: center; gap: 0.5rem; width: 100%; max-width: 800px; justify-content: center;}
-    .status-divider { height: 1em; width: 1px; background-color: var(--border-color); margin: 0 0.5rem; }
-    .livestream-status-indicator, .ai-status-indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--text-color-dark); transition: background-color 0.5s ease; flex-shrink: 0; }
-    .ai-status-indicator.status-idle { background: var(--accent-color); animation: pulse-idle 3s ease-in-out infinite; }
-    .ai-status-indicator.status-initializing, .ai-status-indicator.status-thinking, .ai-status-indicator.status-thinking-cluster, .ai-status-indicator.status-navigating, .ai-status-indicator.status-thinking-galaxy, .ai-status-indicator.status-thinking-galaxy-cluster { background: var(--warning-color); animation: pulse-active 1.5s ease-in-out infinite; }
-    .ai-status-indicator.status-error { background: var(--error-color); animation: none; }
-    .livestream-status-indicator.status-connected { background: var(--success-color); animation: pulse-live 1.5s ease-in-out infinite; }
-    .livestream-status-indicator.status-connecting { background: var(--warning-color); animation: pulse-active 1.5s ease-in-out infinite; }
-    .livestream-status-indicator.status-error { background: var(--error-color); animation: none; }
-    .livestream-status-text { white-space: nowrap; }
-
-    @keyframes pulse-idle { 0% { box-shadow: 0 0 0 0 rgba(97, 250, 255, 0.4); } 70% { box-shadow: 0 0 0 6px rgba(97, 250, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(97, 250, 255, 0); } }
-    @keyframes pulse-active { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 250, 97, 0.7); } 50% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(255, 250, 97, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 250, 97, 0); } }
-    .error-msg { color: var(--error-color); font-weight: 400; }
-    .command-bar { width: 100%; max-width: 800px; background: var(--panel-bg); border: 1px solid var(--border-color); backdrop-filter: blur(10px); display: flex; box-shadow: 0 0 20px rgba(0, 0, 0, 0.5); }
-    .input-wrapper { flex-grow: 1; position: relative; }
-    .command-bar input { width: 100%; background: none; border: none; color: var(--text-color); font-size: 1.2rem; padding: 1rem 1.5rem; font-family: inherit; font-weight: 300; }
-    .command-bar input:focus { outline: none; }
-    .suggestion-chip { position: absolute; bottom: 105%; left: 1rem; background: var(--panel-bg); border: 1px solid var(--border-color); padding: 0.5rem 1rem; font-size: 0.9rem; border-radius: 20px; cursor: pointer; transition: all 0.3s ease; animation: fadeIn 0.5s; white-space: nowrap; }
-    .suggestion-chip:hover { background: var(--glow-color); color: var(--bg-color); }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    .command-bar button { font-family: inherit; background: none; border: none; border-left: 1px solid var(--border-color); color: var(--accent-color); padding: 1rem 1.5rem; font-size: 1rem; font-weight: 700; letter-spacing: 0.1em; cursor: pointer; white-space: nowrap; }
-    .command-bar button.cluster-button { color: #ffc261; border-left: 1px solid rgba(255, 194, 97, 0.3); }
-    .command-bar button:hover:not(:disabled) { background: var(--accent-color); color: var(--bg-color); }
-    .command-bar button.cluster-button:hover:not(:disabled) { background: #ffc261; color: var(--bg-color); }
-    .command-bar button:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    .thinking-button {
-      color: transparent !important;
-      pointer-events: none;
-    }
-    .thinking-button::before {
-      content: '';
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 20px;
-      height: 20px;
-      margin-left: -10px;
-      margin-top: -10px;
-      border: 2px solid var(--border-color);
-      border-top-color: var(--accent-color);
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-    .cluster-button.thinking-button::before {
-      border-top-color: #ffc261;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-
-    /* VOICE BUTTON */
-    .command-bar button.voice-button { padding: 1rem; width: 60px; color: var(--text-color-dark); }
-    .command-bar button.voice-button:hover:not(:disabled) { color: var(--accent-color); background: none; }
-    .command-bar button.voice-button svg { width: 24px; height: 24px; transition: all 0.3s ease; }
-    .command-bar button.voice-button.listening svg { color: var(--accent-color); animation: pulse-voice 1.5s infinite; }
-    @keyframes pulse-voice { 0% { transform: scale(1); filter: drop-shadow(0 0 2px var(--glow-color)); } 50% { transform: scale(1.1); filter: drop-shadow(0 0 8px var(--glow-color)); } 100% { transform: scale(1); filter: drop-shadow(0 0 2px var(--glow-color)); } }
-
-    /* ACCURACY DASHBOARD */
-    .dashboard-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(1, 2, 6, 0.8); backdrop-filter: blur(10px); z-index: 100; display: flex; align-items: center; justify-content: center; pointer-events: all; animation: fadeInDashboard 0.5s ease; }
-    @keyframes fadeInDashboard { from { opacity: 0; } to { opacity: 1; } }
-    .dashboard-content { width: 90%; max-width: 900px; background: var(--panel-bg); border: 1px solid var(--border-color); box-shadow: 0 0 30px var(--glow-color); color: var(--text-color); padding: 2rem; position: relative; }
-    .dashboard-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 1.5rem; }
-    .dashboard-header h2 { margin: 0; font-size: 1.5rem; font-weight: 400; letter-spacing: 0.2em; color: var(--accent-color); display: flex; align-items: center; }
-    .dashboard-header button { background: none; border: none; color: var(--text-color); font-size: 2rem; cursor: pointer; line-height: 1; opacity: 0.7; transition: opacity 0.3s ease; }
-    .dashboard-header button:disabled { opacity: 0.3; cursor: not-allowed; }
-    .dashboard-summary { margin-bottom: 1.5rem; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-color); padding: 1rem; text-align: center; }
-    .summary-metric h4 { margin: 0 0 0.5rem 0; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; font-size: 1rem; opacity: 0.8; }
-    .summary-metric p { margin: 0; font-size: 2.5rem; font-weight: 700; color: var(--success-color); text-shadow: 0 0 10px var(--success-color); }
-    .dashboard-body { display: flex; flex-direction: column; gap: 2rem; }
-    .dashboard-metrics-container { display: flex; gap: 2rem; }
-    .dashboard-section { flex: 1; }
-    .dashboard-section.full-width { flex-basis: 100%; margin-top: 1rem; }
-    .dashboard-section h4 { font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin: 0 0 1rem 0; }
-    .confusion-matrix { display: grid; grid-template-columns: 1fr repeat(3, 2fr); grid-template-rows: 1fr repeat(3, 2fr); gap: 5px; font-size: 0.8rem; }
-    .matrix-cell { background: rgba(0, 0, 0, 0.2); padding: 0.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-    .matrix-cell.label { background: transparent; font-weight: 700; letter-spacing: 0.05em; color: var(--text-color-dark); writing-mode: vertical-rl; text-orientation: mixed; justify-content: flex-start; padding-top: 1rem; }
-    .matrix-cell.label.predicted { writing-mode: horizontal-tb; padding: 0.5rem; }
-    .matrix-cell.label.actual { text-align: right; }
-    .matrix-cell .value { font-size: 1.5rem; font-weight: 700; }
-    .matrix-cell .percentage { font-size: 0.7rem; opacity: 0.6; }
-    .matrix-cell.correct { background: rgba(97, 255, 202, 0.1); border: 1px solid var(--success-color); }
-    .matrix-cell.correct .value { color: var(--success-color); }
-    .matrix-cell.incorrect { background: rgba(255, 106, 106, 0.05); border: 1px solid rgba(255, 106, 106, 0.3); }
-    .metrics-table { width: 100%; border-collapse: collapse; text-align: left; }
-    .metrics-table th, .metrics-table td { padding: 0.8rem; border-bottom: 1px solid var(--border-color); }
-    .metrics-table th { font-weight: 400; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.8rem; opacity: 0.8; }
-    .metrics-table td { font-size: 1.1rem; font-family: 'Exo 2', monospace; }
-    .metrics-table tr:last-child td { border-bottom: none; }
-    .tuning-controls { display: flex; gap: 2rem; margin-bottom: 1.5rem; }
-    .slider-control { flex: 1; }
-    .slider-control label { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 0.5rem; }
-    .slider-control label span { font-weight: 700; color: var(--accent-color); }
-    input[type='range'] { -webkit-appearance: none; width: 100%; height: 2px; background: var(--border-color); outline: none; opacity: 0.7; transition: opacity 0.2s; }
-    input[type='range']:hover { opacity: 1; }
-    input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; background: var(--accent-color); cursor: pointer; border-radius: 50%; box-shadow: 0 0 10px var(--glow-color); }
-    input[type='range']::-moz-range-thumb { width: 18px; height: 18px; background: var(--accent-color); cursor: pointer; border-radius: 50%; box-shadow: 0 0 10px var(--glow-color); border: none; }
-    .recalibrate-button { font-family: inherit; background: none; border: 1px solid var(--accent-color); color: var(--accent-color); padding: 0.8rem 1.5rem; font-size: 1rem; letter-spacing: 0.1em; cursor: pointer; width: 100%; font-weight: 700; }
-    .recalibrate-button:hover:not(:disabled) { background: var(--glow-color); color: var(--bg-color); }
-    .recalibrate-button:disabled { opacity: 0.5; cursor: not-allowed; border-color: var(--text-color-dark); color: var(--text-color-dark); }
-    .recalibration-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(1, 2, 6, 0.8); backdrop-filter: blur(2px); z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; animation: fadeInDashboard 0.3s ease; }
-    .recalibration-overlay h4 { font-weight: 400; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent-color); margin: 0 0 1.5rem 0; font-size: 1rem; }
-    .spinner { border: 4px solid var(--border-color); border-top: 4px solid var(--accent-color); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-    
-    /* SHADER LAB */
-    .shader-lab-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; background: var(--bg-color); display: flex; flex-direction: column; animation: fadeInDashboard 0.5s ease;}
-    .shader-lab-header { padding: 1rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
-    .shader-lab-header h3 { margin: 0; font-weight: 400; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent-color); }
-    .shader-lab-header button { font-family: inherit; background: none; border: 1px solid var(--border-color); color: var(--text-color); padding: 0.5rem 1rem; font-size: 0.8rem; letter-spacing: 0.1em; cursor: pointer; }
-    .shader-lab-header button:hover { background: var(--glow-color); color: var(--bg-color); }
-    .shader-lab-content { flex-grow: 1; display: flex; min-height: 0; }
-    .shader-editors { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); }
-    .shader-editor { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-    .shader-editor:first-child { border-bottom: 1px solid var(--border-color); }
-    .shader-editor label { padding: 0.5rem 1rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7; }
-    .shader-editor textarea { flex-grow: 1; background: transparent; border: none; color: var(--text-color); font-family: 'Courier New', Courier, monospace; font-size: 0.9rem; padding: 1rem; resize: none; }
-    .shader-editor textarea:focus { outline: none; background: rgba(97, 250, 255, 0.05); }
-    .shader-preview { flex: 1; position: relative; }
-
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border-color); }
-    ::-webkit-scrollbar-thumb:hover { background: var(--accent-color); }
-
-    /* --- RESPONSIVE DESIGN --- */
-
-    /* Tablet - smaller side panels, stacked action buttons */
-    @media (max-width: 1024px) {
-      .side-panel {
-        width: clamp(300px, 35vw, 400px);
-        padding-top: 7rem;
-      }
-
-      .planet-actions {
-        grid-template-columns: 1fr;
-      }
-
-      .dashboard-metrics-container,
-      .tuning-controls {
-        flex-direction: column;
-      }
-
-      .main-header, .main-footer {
-        padding: 1rem;
-      }
-    }
-
-    /* Mobile - single panel focus, stacked layouts, simplified controls */
-    @media (max-width: 768px) {
-      .main-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.5rem;
-      }
-      .main-header .controls {
-        max-width: 100%;
-        justify-content: flex-start;
-      }
-
-      /* Hide less critical header buttons on mobile */
-      .main-header .controls button:not(.back-to-galaxy):not([title="Start the guided tutorial"]):not([title*="Mute"]) {
-        display: none;
-      }
-      .main-header .controls button.clear-button {
-        display: none;
-      }
-
-      .side-panel {
-        width: clamp(280px, 85vw, 400px);
-        padding: 1rem;
-        padding-top: 6rem;
-        background: var(--panel-bg); /* Make it solid for overlap */
-        box-shadow: 5px 0 20px rgba(0,0,0,0.2);
-      }
-      .side-panel.right {
-         box-shadow: -5px 0 20px rgba(0,0,0,0.2);
-      }
-
-      .side-panel.left:not(.open) {
-        transform: translateX(-105%);
-      }
-      .side-panel.right:not(.open) {
-        transform: translateX(105%);
-      }
-
-      .panel-toggle {
-        width: 2.5rem;
-        height: 6rem;
-      }
-      .side-panel.left .panel-toggle {
-        right: -2.5rem;
-      }
-      .side-panel.right .panel-toggle {
-        left: -2.5rem;
-      }
-
-      .stats-grid, .analysis-grid {
-        grid-template-columns: 1fr;
-      }
-      
-      .planet-detail h2 {
-        font-size: 1.5rem;
-      }
-
-      .command-bar {
-        max-width: 100%;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-      }
-      .input-wrapper {
-        flex-basis: 100%;
-        order: 1;
-        width: 100%;
-      }
-      .command-bar button {
-        padding: 0.8rem 1rem;
-        font-size: 0.9rem;
-        flex-grow: 1;
-        order: 2;
-      }
-
-      .onboarding-content, .tutorial-prompt {
-        width: 90%;
-        box-sizing: border-box;
-      }
-
-      .onboarding-text {
-        white-space: normal; /* Allow text to wrap */
-        border-right: none !important;
-        width: 100% !important;
-        animation: none !important;
-        opacity: 1 !important;
-      }
-      .past-stanza .onboarding-text {
-        opacity: 0.7 !important;
-      }
-      .onboarding-overlay .begin-button, .onboarding-overlay .continue-button {
-        animation: none !important;
-        opacity: 1 !important;
-      }
-
-      .dashboard-content {
-        width: 95%;
-        padding: 1rem;
-        max-height: 95vh;
-        overflow-y: auto;
-      }
-      .confusion-matrix {
-          font-size: 0.7rem;
-      }
-      .matrix-cell .value {
-          font-size: 1.1rem;
-      }
-
-      .shader-lab-content {
-        flex-direction: column;
-      }
-      .shader-editors {
-        flex: 1.5; /* More space for text */
-        border-right: none;
-        border-bottom: 1px solid var(--border-color);
-      }
-      .shader-preview {
-        flex: 1;
-      }
-    }
-  `;
+  // This component does not have styles in a static property.
+  createRenderRoot() {
+    return this;
+  }
 }

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="theme-color" content="#010206" />
     <meta
       name="description"
       content="AURELION CORE. A living AI for celestial discovery."
@@ -15,6 +15,122 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Exo 2', 'sans-serif'],
+            },
+            colors: {
+              'accent': 'var(--accent-color)',
+              'glow': 'var(--glow-color)',
+              'bg': 'var(--bg-color)',
+              'panel-bg': 'var(--panel-bg)',
+              'border': 'var(--border-color)',
+              'text': 'var(--text-color)',
+              'text-dark': 'var(--text-color-dark)',
+              'error': 'var(--error-color)',
+              'warning': 'var(--warning-color)',
+              'success': 'var(--success-color)',
+              'mat-1': 'var(--mat-color-1)',
+              'mat-2': 'var(--mat-color-2)',
+              'mat-3': 'var(--mat-color-3)',
+              'mat-4': 'var(--mat-color-4)',
+              'exo-mat-1': 'var(--exo-mat-color-1)',
+              'exo-mat-2': 'var(--exo-mat-color-2)',
+              'exo-mat-3': 'var(--exo-mat-color-3)',
+            },
+            keyframes: {
+              'ripple-animation': {
+                'to': { transform: 'scale(4)', opacity: '0' },
+              },
+              'fadeIn': { 
+                'from': { opacity: '0', transform: 'translateY(10px)' }, 
+                'to': { opacity: '1', transform: 'translateY(0)' } 
+              },
+              'fadeInOnboarding': { 'from': { opacity: '0' }, 'to': { opacity: '1' } },
+              'pulse-live': {
+                '0%': { boxShadow: '0 0 0 0 rgba(97, 255, 202, 0.7)' },
+                '70%': { boxShadow: '0 0 0 5px rgba(97, 255, 202, 0)' },
+                '100%': { boxShadow: '0 0 0 0 rgba(97, 255, 202, 0)' },
+              },
+              'pulse-idle': {
+                '0%': { boxShadow: '0 0 0 0 rgba(97, 250, 255, 0.4)' },
+                '70%': { boxShadow: '0 0 0 6px rgba(97, 250, 255, 0)' },
+                '100%': { boxShadow: '0 0 0 0 rgba(97, 250, 255, 0)' },
+              },
+              'pulse-active': {
+                '0%': { transform: 'scale(0.95)', boxShadow: '0 0 0 0 rgba(255, 250, 97, 0.7)' },
+                '50%': { transform: 'scale(1.1)', boxShadow: '0 0 0 8px rgba(255, 250, 97, 0)' },
+                '100%': { transform: 'scale(0.95)', boxShadow: '0 0 0 0 rgba(255, 250, 97, 0)' },
+              },
+              'spin': { 'to': { transform: 'rotate(360deg)' } },
+              'pulse-voice': {
+                '0%': { transform: 'scale(1)', filter: 'drop-shadow(0 0 2px var(--glow-color))' },
+                '50%': { transform: 'scale(1.1)', filter: 'drop-shadow(0 0 8px var(--glow-color))' },
+                '100%': { transform: 'scale(1)', filter: 'drop-shadow(0 0 2px var(--glow-color))' },
+              },
+            },
+            animation: {
+              'ripple': 'ripple-animation 0.6s linear',
+              'fade-in': 'fadeIn 0.5s ease forwards',
+              'fade-in-onboarding': 'fadeInOnboarding 1s ease',
+              'pulse-live': 'pulse-live 1.5s ease-in-out infinite',
+              'pulse-idle': 'pulse-idle 3s ease-in-out infinite',
+              'pulse-active': 'pulse-active 1.5s ease-in-out infinite',
+              'spin': 'spin 1s linear infinite',
+              'pulse-voice': 'pulse-voice 1.5s infinite',
+            },
+            dropShadow: {
+              'glow': '0 0 10px var(--glow-color)',
+            },
+          },
+        },
+        plugins: [],
+      }
+    </script>
+    <style type="text/tailwindcss">
+        @layer base {
+          :root {
+            --accent-color: #2b6cb0;
+            --glow-color: rgba(49, 130, 206, 0.4);
+            --mat-color-1: #9b7653; 
+            --mat-color-2: #e08d51;
+            --mat-color-3: #ffdd33;
+            --mat-color-4: #ffffff;
+            --exo-mat-color-1: #c0c0c0;
+            --exo-mat-color-2: #f0e68c;
+            --exo-mat-color-3: #ffb6c1;
+          }
+        }
+        @layer components {
+            .thinking-button::before {
+                content: '';
+                @apply absolute left-1/2 top-1/2 w-5 h-5 -ml-[10px] -mt-[10px] border-2 border-border rounded-full animate-spin;
+                border-top-color: var(--accent-color);
+            }
+            .cluster-button.thinking-button::before {
+                border-top-color: #ffc261;
+            }
+            .ripple {
+              @apply absolute rounded-full scale-0 animate-ripple bg-glow;
+            }
+            /* Typing animation requires dynamic properties not easily done in Tailwind config */
+            .typing-text {
+              white-space: nowrap; 
+              overflow: hidden; 
+              display: inline-block; 
+              vertical-align: bottom;
+              animation: typing var(--animation-duration) steps(var(--line-length), end) forwards, blink-caret 0.75s step-end infinite;
+              border-right: 0.15em solid var(--accent-color);
+            }
+            @keyframes typing { from { width: 0; opacity: 1; } to { width: 100%; opacity: 1; } }
+            @keyframes blink-caret { from, to { border-color: transparent; } 50% { border-color: var(--accent-color); } }
+        }
+    </style>
 
     <script type="importmap">
 {
@@ -43,7 +159,7 @@
 }
 </script>
   </head>
-  <body>
+  <body class="h-full w-full m-0 bg-bg text-text font-sans overflow-hidden">
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <axee-interface></axee-interface>
     <script type="module" src="index.tsx"></script>

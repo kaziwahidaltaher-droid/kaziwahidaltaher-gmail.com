@@ -304,4 +304,9 @@ export class AxeeAudioEngine extends LitElement {
   public playToggleSound() {
     this.playSfx('triangle', 1200, 0.1, 0.05, 'linear');
   }
+
+  // FIX: Add missing playHoverSound method to resolve error in index.tsx.
+  public playHoverSound() {
+    this.playSfx('sine', 1500, 0.1, 0.03, 'exponential');
+  }
 }

@@ -79,56 +79,66 @@ export class LightCurveVisualizer extends LitElement {
 
     const { points } = this.analysisData;
     const { clientWidth: width, clientHeight: height } = this.canvas;
-    const padding = { top: 20, right: 20, bottom: 30, left: 40 };
+    const padding = { top: 20, right: 20, bottom: 40, left: 50 };
 
     this.ctx.clearRect(0, 0, width, height);
-    this.ctx.fillStyle = '#a0d0ff';
-    this.ctx.strokeStyle = '#a0d0ff';
+    this.ctx.fillStyle = 'rgba(192, 240, 255, 0.7)';
+    this.ctx.strokeStyle = 'rgba(192, 240, 255, 0.7)';
     this.ctx.font = '10px Exo 2';
 
     // Find data range
     const xMin = points[0].time;
     const xMax = points[points.length - 1].time;
-    const yMin = Math.min(...points.map(p => p.flux));
-    const yMax = Math.max(...points.map(p => p.flux));
+    let yMin = Math.min(...points.map(p => p.flux));
+    let yMax = Math.max(...points.map(p => p.flux));
     const yRange = yMax - yMin;
     const yBuffer = yRange * 0.2;
+    yMin -= yBuffer;
+    yMax += yBuffer;
 
     const scaleX = (val: number) => padding.left + ((val - xMin) / (xMax - xMin)) * (width - padding.left - padding.right);
-    const scaleY = (val: number) => (height - padding.bottom) - ((val - (yMin - yBuffer)) / (yRange + yBuffer * 2)) * (height - padding.top - padding.bottom);
+    const scaleY = (val: number) => (height - padding.bottom) - ((val - yMin) / (yMax - yMin)) * (height - padding.top - padding.bottom);
 
     // Draw grid
-    this.ctx.globalAlpha = 0.2;
-    this.ctx.lineWidth = 0.5;
+    this.ctx.strokeStyle = 'rgba(97, 250, 255, 0.1)';
+    this.ctx.lineWidth = 1;
+    this.ctx.beginPath();
     for (let i = 0; i <= 5; i++) { // Y-axis grid
         const y = padding.top + i * ((height - padding.top - padding.bottom) / 5);
-        this.ctx.beginPath();
         this.ctx.moveTo(padding.left, y);
         this.ctx.lineTo(width - padding.right, y);
-        this.ctx.stroke();
     }
     for (let i = 0; i <= 10; i++) { // X-axis grid
         const x = padding.left + i * ((width - padding.left - padding.right) / 10);
-        this.ctx.beginPath();
         this.ctx.moveTo(x, padding.top);
         this.ctx.lineTo(x, height - padding.bottom);
-        this.ctx.stroke();
     }
+    this.ctx.stroke();
 
-    // Draw axes labels
-    this.ctx.globalAlpha = 0.7;
+    // Draw axes labels and ticks
     this.ctx.textAlign = 'center';
-    this.ctx.fillText('Time (HJD)', width / 2, height - 5);
+    this.ctx.fillText('Time (HJD)', width / 2, height - 10);
     this.ctx.save();
     this.ctx.rotate(-Math.PI / 2);
     this.ctx.fillText('Relative Flux', -height / 2, 15);
     this.ctx.restore();
 
-    // Draw data points and line
-    this.ctx.globalAlpha = 1;
+    // Y-axis ticks
+    this.ctx.textAlign = 'right';
+    this.ctx.textBaseline = 'middle';
+    for (let i = 0; i <= 5; i++) {
+        const yVal = yMin + (yMax - yMin) * (i / 5);
+        const y = scaleY(yVal);
+        this.ctx.fillText(yVal.toFixed(4), padding.left - 8, y);
+    }
+
+    // Draw data line
     this.ctx.lineWidth = 1.5;
-    this.ctx.shadowColor = '#a0d0ff';
-    this.ctx.shadowBlur = 5;
+    this.ctx.strokeStyle = '#61ffca'; 
+    this.ctx.shadowColor = 'rgba(97, 255, 202, 0.7)';
+    this.ctx.shadowBlur = 8;
+    this.ctx.lineJoin = 'round';
+    this.ctx.lineCap = 'round';
 
     this.ctx.beginPath();
     this.ctx.moveTo(scaleX(points[0].time), scaleY(points[0].flux));
@@ -136,9 +146,29 @@ export class LightCurveVisualizer extends LitElement {
         this.ctx.lineTo(scaleX(p.time), scaleY(p.flux));
     });
     this.ctx.stroke();
-
-    // Reset shadow
+    
+    // Draw data points with error bars
     this.ctx.shadowBlur = 0;
+    this.ctx.strokeStyle = 'rgba(97, 255, 202, 0.5)';
+    this.ctx.fillStyle = '#010206';
+    this.ctx.lineWidth = 1;
+    points.forEach(p => {
+        const x = scaleX(p.time);
+        const y = scaleY(p.flux);
+        const yErr = scaleY(p.flux - p.error) - y;
+
+        // error bar
+        this.ctx.beginPath();
+        this.ctx.moveTo(x, y - yErr);
+        this.ctx.lineTo(x, y + yErr);
+        this.ctx.stroke();
+
+        // point
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.stroke();
+    });
   };
 
   render() {

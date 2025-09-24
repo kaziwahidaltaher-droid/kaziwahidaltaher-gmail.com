@@ -8,6 +8,7 @@ export const vs = `
   varying vec3 vViewDirection;
   varying vec2 vUv;
   varying vec3 vPosition;
+  varying vec3 vWorldNormal;
 
   void main() {
     vUv = uv;
@@ -16,6 +17,7 @@ export const vs = `
     
     vNormal = normalize(normalMatrix * normal);
     vViewDirection = normalize(cameraPosition - worldPosition.xyz);
+    vWorldNormal = normalize(vec3(modelMatrix * vec4(normal, 0.0)));
     
     gl_Position = projectionMatrix * viewMatrix * worldPosition;
   }
@@ -26,12 +28,14 @@ export const fs = `
   varying vec3 vViewDirection;
   varying vec2 vUv;
   varying vec3 vPosition;
+  varying vec3 vWorldNormal;
   
   uniform vec3 uAtmosphereColor;
   uniform float uFresnelPower;
   uniform float uTime;
   uniform bool uHasAuroras;
   uniform bool uIsSelected;
+  uniform vec3 uLightDirection;
 
   // 3D Simplex Noise and FBM functions (needed for auroras)
   vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -102,16 +106,23 @@ export const fs = `
   }
 
   void main() {
-    // Calculate the fresnel effect
+    // Calculate the fresnel effect (rim glow)
     float fresnel = 1.0 - dot(vNormal, vViewDirection);
     fresnel = pow(fresnel, uFresnelPower);
     
+    // Calculate how much this point is lit by the star
+    float lightIntensity = dot(vWorldNormal, uLightDirection);
+    lightIntensity = smoothstep(-0.2, 0.5, lightIntensity); // Soft transition at terminator
+
+    // Combine fresnel with light intensity for a scattering effect
+    float scattering = fresnel * lightIntensity;
+
     // Add dynamic, shimmering noise
     float noise = random(vUv * 5.0 + uTime * 0.1);
-    fresnel *= (0.8 + noise * 0.4);
+    scattering *= (0.8 + noise * 0.4);
 
     // Use smoothstep for a softer edge
-    float alpha = smoothstep(0.0, 1.0, fresnel);
+    float alpha = smoothstep(0.0, 1.0, scattering);
 
     vec4 finalColor = vec4(uAtmosphereColor, alpha);
 

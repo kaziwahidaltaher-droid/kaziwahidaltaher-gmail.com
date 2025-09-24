@@ -31,12 +31,14 @@ const urlsToCache = [
   'exo-suit-visualizer.tsx',
   'planet-visualizer.tsx',
   'weather-visualizer.tsx',
+  'energy-signature-visualizer.tsx',
   'shader-lab-visualizer.tsx',
   'live-motion-shader.tsx',
   'planet-shader.tsx',
   'atmosphere-shader.tsx',
   'starfield-shaders.tsx',
   'nebula-shader.tsx',
+  'star-shader.tsx',
   'solar-system-data.ts',
   'volume-meter.ts'
 ];

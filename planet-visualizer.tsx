@@ -208,6 +208,7 @@ export class PlanetVisualizer extends LitElement {
             uTime: { value: 0.0 },
             uIsSelected: { value: true },
             uHasAuroras: { value: visualization.surfaceTexture === 'ICY' || (visualization.surfaceTexture === 'TERRESTRIAL' && visualization.iceCoverage > 0.5) },
+            uLightDirection: { value: new THREE.Vector3(1, 0.5, 1).normalize() },
         },
         blending: THREE.AdditiveBlending,
         side: THREE.BackSide,

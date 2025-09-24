@@ -1,14 +1,4 @@
-html,
-body {
-  height: 100%;
-  width: 100%;
-  margin: 0;
-  background: #010206;
-  font-family: 'Exo 2', sans-serif;
-  color: #a0d0ff;
-  overflow: hidden; /* Prevent scrollbars */
-}
-
+/* Base styles are now handled by Tailwind CSS in index.html */
 * {
   box-sizing: border-box;
 }
