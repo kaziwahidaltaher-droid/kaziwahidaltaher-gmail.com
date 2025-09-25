@@ -40,7 +40,8 @@ const urlsToCache = [
   'nebula-shader.tsx',
   'star-shader.tsx',
   'solar-system-data.ts',
-  'volume-meter.ts'
+  'volume-meter.ts',
+  'route-shader.tsx'
 ];
 
 /**

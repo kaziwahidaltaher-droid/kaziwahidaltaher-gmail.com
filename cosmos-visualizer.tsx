@@ -20,6 +20,7 @@ import {vs as planetVs, fs as planetFs} from './planet-shader.tsx';
 import {vs as atmosphereVs, fs as atmosphereFs} from './atmosphere-shader.tsx';
 import { vs as starVs, fs as starFs } from './star-shader.tsx';
 import { vs as creatureVs, fs as creatureFs } from './space-creature-shader.tsx';
+import { vs as routeVs, fs as routeFs } from './route-shader.tsx';
 
 export interface Waypoint {
   name: string;
@@ -39,6 +40,8 @@ export class CosmosVisualizer extends LitElement {
   @property({type: String}) selectedPlanetId: string | null = null;
   @property({type: Array}) navigationRoute: Waypoint[] | null = null;
   @property({type: Boolean}) isUnseenRevealed = false;
+  @property({type: Boolean}) isJumping = false;
+
 
   // --- STATE ---
   @state() private viewMode: ViewMode = 'intergalactic';
@@ -71,7 +74,8 @@ export class CosmosVisualizer extends LitElement {
   // Galaxy View
   private galaxyVisuals: THREE.Points | null = null;
   private galaxyPlanetMeshes = new Map<string, THREE.Group>();
-  private routeLine: THREE.Mesh | null = null;
+  private galaxyOrbits = new Map<string, THREE.Mesh>();
+  private routeLine: THREE.Object3D | null = null;
   
   // System View
   private systemGroup: THREE.Group | null = null;
@@ -93,6 +97,12 @@ export class CosmosVisualizer extends LitElement {
 
   // FIX: Added missing property.
   private colors = ['#ff61c3', '#61ffca', '#ffc261', '#61faff', '#d861ff'];
+  
+  // Warp effect state
+  private warpEffectActive = false;
+  private warpStarfield!: THREE.Points;
+  private warpStartTime = 0;
+
 
   // --- LIFECYCLE METHODS ---
 
@@ -148,6 +158,10 @@ export class CosmosVisualizer extends LitElement {
     if (changedProperties.has('isUnseenRevealed')) {
         this.updateDarkMatterFilaments();
     }
+    
+    if (changedProperties.has('isJumping') && this.isJumping) {
+        this.startWarpEffect();
+    }
   }
 
   // --- INITIALIZATION ---
@@ -170,6 +184,7 @@ export class CosmosVisualizer extends LitElement {
     this.composer.addPass(bloomPass);
 
     this.createStarfield();
+    this.createWarpStarfield();
     this.createBackgroundNebulae();
     this.createSpaceCreatures();
     this.transitionView('intergalactic'); // Start in intergalactic view
@@ -198,6 +213,7 @@ export class CosmosVisualizer extends LitElement {
       this.galaxyMarkers.clear();
       this.galaxyVisuals = null;
       this.galaxyPlanetMeshes.clear();
+      this.galaxyOrbits.clear();
       this.systemGroup = null;
       this.systemPlanetMeshes.clear();
       this.starMesh = null;
@@ -271,6 +287,20 @@ export class CosmosVisualizer extends LitElement {
 
     if (this.galaxyVisuals) this.galaxyVisuals.rotation.y += 0.0003;
     
+    // Animate orbits in galaxy view
+    if (this.viewMode === 'galaxy') {
+        this.galaxyOrbits.forEach(orbit => {
+            const material = orbit.material as THREE.MeshBasicMaterial;
+            if (material.userData.isSelected) {
+                // Intense pulse for selected orbit
+                material.opacity = 0.4 + Math.sin(elapsedTime * 4) * 0.3;
+            } else {
+                // Subtle pulse for non-selected orbits
+                material.opacity = 0.08 + Math.sin(elapsedTime * 0.5) * 0.07;
+            }
+        });
+    }
+
     // Update planets orbiting in system view
     if (this.viewMode === 'system') {
         this.systemPlanetMeshes.forEach(group => {
@@ -282,6 +312,29 @@ export class CosmosVisualizer extends LitElement {
                 Math.sin(elapsedTime * speed) * radius
             );
         });
+    }
+    
+    if (this.routeLine && (this.routeLine as THREE.Points).material instanceof THREE.ShaderMaterial) {
+        const routeMaterial = (this.routeLine as THREE.Points).material as THREE.ShaderMaterial;
+        routeMaterial.uniforms.uTime.value = elapsedTime;
+
+        // Dynamic speed calculation
+        if (this.navigationRoute && this.navigationRoute.length > 0) {
+            const destination = this.navigationRoute[this.navigationRoute.length - 1];
+            const destinationPos = new THREE.Vector3(...destination.coords);
+            const distance = this.camera.position.distanceTo(destinationPos);
+            
+            const minDistance = 50;
+            const maxDistance = 400;
+            const minSpeed = 1.5;
+            const maxSpeed = 8.0;
+
+            const speedFactor = (distance - minDistance) / (maxDistance - minDistance);
+            const clampedFactor = Math.max(0.0, Math.min(1.0, speedFactor));
+            const speed = minSpeed + clampedFactor * (maxSpeed - minSpeed);
+
+            routeMaterial.uniforms.uSpeed.value = speed;
+        }
     }
 
     // Update shader times for planets
@@ -306,6 +359,11 @@ export class CosmosVisualizer extends LitElement {
     
     // Update shockwaves
     this.updateShockwaves(elapsedTime);
+
+    // Update warp effect
+    if (this.warpEffectActive) {
+        this.updateWarpEffect(elapsedTime);
+    }
 
     this.composer.render();
     this.lastCameraPosition.copy(this.camera.position);
@@ -476,23 +534,42 @@ export class CosmosVisualizer extends LitElement {
 
   private updatePlanetVisuals() {
     const currentIds = new Set(this.activePlanets.map(p => p.celestial_body_id));
+    
+    // Remove old planet meshes and their orbits
     this.galaxyPlanetMeshes.forEach((mesh, id) => {
         if (!currentIds.has(id)) {
             this.scene.remove(mesh);
+            mesh.traverse(child => {
+                if (child instanceof THREE.Mesh) {
+                    child.geometry.dispose();
+                    (child.material as THREE.Material).dispose();
+                } else if (child instanceof THREE.Sprite) {
+                    child.material.dispose();
+                }
+            });
             this.galaxyPlanetMeshes.delete(id);
+
+            const orbit = this.galaxyOrbits.get(id);
+            if (orbit) {
+                this.scene.remove(orbit);
+                orbit.geometry.dispose();
+                (orbit.material as THREE.Material).dispose();
+                this.galaxyOrbits.delete(id);
+            }
         }
     });
 
+    // Add/update planets and orbits
     this.activePlanets.forEach(planet => {
         const coords = this.activePlanetCoords.get(planet.celestial_body_id);
         if (!coords) return;
 
         if (!this.galaxyPlanetMeshes.has(planet.celestial_body_id)) {
+            // Create planet group
             const group = new THREE.Group();
             const geometry = new THREE.SphereGeometry(1, 32, 32);
-            const material = new THREE.MeshBasicMaterial({ color: planet.visualization.atmosphereColor });
             const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
-                color: planet.visualization.atmosphereColor,
+                color: new THREE.Color(planet.visualization.atmosphereColor),
                 transparent: true
             }));
             mesh.userData.id = planet.celestial_body_id;
@@ -507,33 +584,73 @@ export class CosmosVisualizer extends LitElement {
             this.galaxyPlanetMeshes.set(planet.celestial_body_id, group);
             this.scene.add(group);
             this.fadeObject(group, 1, 500);
+            
+            // Create corresponding orbit
+            const radius = new THREE.Vector3(...coords).length();
+            const orbitGeometry = new THREE.RingGeometry(radius - 0.1, radius + 0.1, 128);
+            const orbitMaterial = new THREE.MeshBasicMaterial({
+                color: 0x61faff,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.1,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                userData: { isSelected: false } // Flag for animation
+            });
+            const orbitMesh = new THREE.Mesh(orbitGeometry, orbitMaterial);
+            orbitMesh.rotation.x = Math.PI / 2;
+            orbitMesh.userData.isViewObject = true;
+            this.galaxyOrbits.set(planet.celestial_body_id, orbitMesh);
+            this.scene.add(orbitMesh);
         }
     });
     this.updatePlanetHighlights();
   }
 
   private updateNavigationRoute() {
+    // Clean up old route
     if (this.routeLine) {
         this.scene.remove(this.routeLine);
-        this.routeLine.geometry.dispose();
-        (this.routeLine.material as THREE.Material).dispose();
+        if (this.routeLine instanceof THREE.Points || this.routeLine instanceof THREE.Mesh) {
+            (this.routeLine.geometry as THREE.BufferGeometry).dispose();
+            ((this.routeLine.material as THREE.Material) || (this.routeLine.material as THREE.Material[])).dispose();
+        }
         this.routeLine = null;
     }
+
     if (!this.navigationRoute || this.navigationRoute.length < 2) return;
 
-    const points = this.navigationRoute.map(wp => new THREE.Vector3(...wp.coords));
+    const points = this.navigationRoute.map(
+        (wp) => new THREE.Vector3(...wp.coords),
+    );
     const curve = new THREE.CatmullRomCurve3(points);
-    const geometry = new THREE.TubeGeometry(curve, 64, 0.5, 8, false);
-    const material = new THREE.MeshBasicMaterial({
-        color: 0x61faff,
+    
+    const numPoints = 1000;
+    const curvePoints = curve.getPoints(numPoints);
+    const geometry = new THREE.BufferGeometry().setFromPoints(curvePoints);
+    
+    // Add progress attribute for the shader
+    const progress = new Float32Array(numPoints + 1);
+    for(let i=0; i <= numPoints; i++) {
+        progress[i] = i / numPoints;
+    }
+    geometry.setAttribute('aProgress', new THREE.BufferAttribute(progress, 1));
+
+    const material = new THREE.ShaderMaterial({
+        vertexShader: routeVs,
+        fragmentShader: routeFs,
+        uniforms: {
+            uTime: { value: 0.0 },
+            uSpeed: { value: 3.0 }, // Add speed uniform with a default
+        },
         transparent: true,
-        opacity: 0,
         blending: THREE.AdditiveBlending,
+        depthWrite: false,
     });
-    this.routeLine = new THREE.Mesh(geometry, material);
+
+    this.routeLine = new THREE.Points(geometry, material);
     this.routeLine.userData.isViewObject = true;
     this.scene.add(this.routeLine);
-    this.fadeObject(this.routeLine, 0.7, 1000);
   }
 
   private updateSystemVisuals() {
@@ -598,6 +715,13 @@ export class CosmosVisualizer extends LitElement {
             }
         });
     });
+
+    if (this.viewMode === 'galaxy') {
+        this.galaxyOrbits.forEach((orbit, id) => {
+            const isSelected = id === this.selectedPlanetId;
+            (orbit.material as THREE.MeshBasicMaterial).userData.isSelected = isSelected;
+        });
+    }
   }
 
   private updateSystemCameraTarget() {
@@ -649,6 +773,55 @@ export class CosmosVisualizer extends LitElement {
     });
     this.starfield = new THREE.Points(geometry, material);
     this.scene.add(this.starfield);
+  }
+  
+  private createWarpStarfield() {
+    const numParticles = 5000;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(numParticles * 3);
+    for (let i = 0; i < numParticles; i++) {
+      positions[i * 3 + 0] = (Math.random() - 0.5) * 100;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 100;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 2000;
+    }
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.2,
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+    });
+    this.warpStarfield = new THREE.Points(geometry, material);
+    this.warpStarfield.visible = false;
+    this.scene.add(this.warpStarfield);
+  }
+
+  private startWarpEffect() {
+    this.warpEffectActive = true;
+    this.warpStartTime = this.clock.getElapsedTime();
+    this.warpStarfield.visible = true;
+    this.starfield.visible = false; // Hide normal stars
+    this.controls.enabled = false;
+  }
+
+  private updateWarpEffect(elapsedTime: number) {
+    const warpDuration = 2.5;
+    const progress = (elapsedTime - this.warpStartTime) / warpDuration;
+    if (progress >= 1.0) {
+      this.warpEffectActive = false;
+      this.warpStarfield.visible = false;
+      this.starfield.visible = true;
+      this.controls.enabled = true;
+      return;
+    }
+    
+    // Stretch effect
+    const stretch = 1.0 + progress * 20.0;
+    this.warpStarfield.scale.z = stretch;
+    
+    // Fade in/out
+    const opacity = Math.sin(progress * Math.PI);
+    (this.warpStarfield.material as THREE.PointsMaterial).opacity = opacity;
   }
 
   private createBackgroundNebulae() {

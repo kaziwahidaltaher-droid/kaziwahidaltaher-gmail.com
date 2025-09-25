@@ -134,7 +134,7 @@ export class TutorialOverlay extends LitElement {
     
     // Allow DOM to update before getting rect
     setTimeout(() => {
-      const root = document.querySelector('axee-interface')?.shadowRoot;
+      const root = document.querySelector('axee-interface');
       if (!root) return;
       
       const element = root.querySelector(`#${stepData.elementId}`);
@@ -148,17 +148,17 @@ export class TutorialOverlay extends LitElement {
 
   private _onNext() {
     const isLastStep = this.step >= this.steps.length - 1;
-    // FIX: Cast `this` to EventTarget to dispatch event.
+    // FIX: Cast `this` to `EventTarget` to resolve TypeScript error.
     (this as unknown as EventTarget).dispatchEvent(new CustomEvent(isLastStep ? 'skip' : 'next'));
   }
 
   private _onSkip() {
-    // FIX: Cast `this` to EventTarget to dispatch event.
+    // FIX: Cast `this` to `EventTarget` to resolve TypeScript error.
     (this as unknown as EventTarget).dispatchEvent(new CustomEvent('skip'));
   }
 
   private _onUseSample() {
-    // FIX: Cast `this` to EventTarget to dispatch event.
+    // FIX: Cast `this` to `EventTarget` to resolve TypeScript error.
     (this as unknown as EventTarget).dispatchEvent(new CustomEvent('use-sample-prompt'));
   }
 

@@ -938,6 +938,7 @@ export class AxeeInterface extends LitElement {
   @state() private error: string | null = null;
   @state() private galaxyMapCoords = new Map<string, [number, number, number]>();
   @state() private navigationRoute: Waypoint[] | null = null;
+  @state() private isJumping = false;
 
 
   // UI States
@@ -954,6 +955,7 @@ export class AxeeInterface extends LitElement {
   @state() private isConversationModeActive = false;
   @state() private isUnseenRevealed = false;
   @state() private isShaderLabOpen = false;
+  @state() private isNasaEyesOpen = false;
   @state() private theme: 'dark' | 'light' = 'dark';
   @state() private databaseSearchTerm = '';
   @state() private databaseSort: {key: keyof PlanetData | 'galaxyName', order: 'asc' | 'desc'} = { key: 'planetName', order: 'asc' };
@@ -1882,15 +1884,15 @@ void main() {
 
     this.aiStatus = 'navigating';
     this.error = null;
-    this.navigationRoute = null;
+    this.navigationRoute = null; // Clear old route immediately
     this.audioEngine?.playInteractionSound();
 
-    const statusUpdates = ['Querying stellar archives...', 'Calculating gravitational vectors...', 'Plotting course through nebula fields...', 'Engaging frame shift drive...'];
+    const statusUpdates = ['Querying stellar archives...', 'Calculating gravitational vectors...', 'Plotting course through nebula fields...'];
     let updateIndex = 0;
     const statusInterval = setInterval(() => {
       this.statusMessage = statusUpdates[updateIndex % statusUpdates.length];
       updateIndex++;
-    }, 2000);
+    }, 1500);
 
     const prompt = `You are AURELION CORE, a master galactic navigator. Generate a dramatic and scientifically plausible interstellar route from the Sol system (Earth) to planet "${planet.planetName}" in the "${planet.starSystem}" system, ${planet.distanceLightYears} light-years away. Key features: ${planet.keyFeatures.join(', ')}. The route must consist of 5-8 waypoints. Each waypoint should be a significant cosmic landmark or navigational challenge (e.g., "The Orion Nebula's Trapezium Cluster", "Gravitational Slingshot around Cygnus X-1", "Navigating the Helix Nebula's cometary knots"). Output a single JSON array of objects, each with 'name' and 'description' properties.`;
     const waypointSchema = {
@@ -1922,8 +1924,24 @@ void main() {
         {name: planet.starSystem, description: `Arrival at ${planet.planetName}`, coords: destinationCoords},
       ];
 
-      this.navigationRoute = fullRoute;
-      this.statusMessage = `Route to ${planet.planetName} calculated.`;
+      // Trigger jump animation
+      this.navigationRoute = null; // Hide current route
+      this.statusMessage = `Interstellar jump to ${planet.planetName} initiated...`;
+      this.audioEngine?.playJumpEngageSound();
+      this.isJumping = true;
+
+      // After a short delay, reset the trigger property.
+      setTimeout(() => {
+          this.isJumping = false;
+      }, 100);
+
+      // After the animation is complete (2.5s in visualizer), show the new route.
+      setTimeout(() => {
+          this.navigationRoute = fullRoute;
+          this.statusMessage = `Route to ${planet.planetName} calculated.`;
+          this.audioEngine?.playSuccessSound();
+      }, 2500);
+
     } catch (err) {
       console.error('Navigation error:', err);
       this.error = 'Route calculation failed.';
@@ -3270,6 +3288,7 @@ void main() {
       ${this.isDatabaseOpen ? this.renderDatabaseOverlay() : nothing}
       ${this.isImportModalOpen ? this.renderImportModal() : nothing}
       ${this.isShaderLabOpen ? this.renderShaderLabOverlay() : nothing}
+      ${this.isNasaEyesOpen ? this.renderNasaEyesOverlay() : nothing}
       ${this.isTutorialActive ? html`
         <tutorial-overlay
           .step=${this.tutorialStep}
@@ -3298,6 +3317,7 @@ void main() {
           .selectedPlanetId=${this.selectedPlanetId}
           .navigationRoute=${this.navigationRoute}
           .isUnseenRevealed=${this.isUnseenRevealed}
+          .isJumping=${this.isJumping}
           @planet-selected=${this._handlePlanetSelectedFromMap}
           @galaxy-selected=${this._handleGalaxySelectedFromMap}
           @object-hovered=${() => this.audioEngine?.playHoverSound()}
@@ -3378,7 +3398,7 @@ void main() {
     const total = confusionMatrix.flat().reduce((a, b) => a + b, 0);
     const correct = confusionMatrix[0][0] + confusionMatrix[1][1] + confusionMatrix[2][2];
     const accuracy = total > 0 ? correct / total : 0;
-    return html`<div class="fixed inset-0 bg-bg/80 backdrop-blur-lg z-[100] flex items-center justify-center pointer-events-auto animate-fade-in"><div class="w-11/12 max-w-4xl bg-panel-bg border border-border shadow-lg drop-shadow-glow text-text p-8 relative flex flex-col">${this.recalibrationStatus === 'running' ? html`<div class="absolute inset-0 bg-bg/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center text-center animate-fade-in"><h4 class="font-normal tracking-[0.2em] uppercase text-accent mb-6 text-base">RECALIBRATING MODEL CORE...</h4><div class="border-4 border-border border-t-accent rounded-full w-10 h-10 animate-spin"></div></div>` : nothing}<div class="flex justify-between items-center border-b border-border pb-4 mb-6 shrink-0"><h2 class="m-0 text-2xl font-normal tracking-[0.2em] text-accent flex items-center">AXEE Model Performance <span class="group relative inline-flex items-center justify-center w-4 h-4 rounded-full border border-text-dark text-text-dark text-xs font-bold ml-2 cursor-help">?<span class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-72 bg-bg border border-border p-4 rounded text-sm font-light leading-relaxed text-left opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-50 pointer-events-none normal-case tracking-normal">This dashboard shows the performance of the local machine learning model used for the AXEE Predictor and Batch Analysis features. You can tune its hyperparameters to see how they might affect performance.</span></span></h2><button @click=${() => (this.isDashboardOpen = false)} ?disabled=${this.recalibrationStatus === 'running'} class="bg-none border-none text-text text-4xl cursor-pointer leading-none opacity-70 transition-opacity hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed">&times;</button></div><div class="mb-6 bg-black/20 border border-border p-4 text-center"><h4 class="m-0 mb-2 font-normal tracking-widest uppercase text-base opacity-80">Overall Accuracy</h4><p class="m-0 text-5xl font-bold text-success drop-shadow-[0_0_10px_var(--success-color)]">${(accuracy * 100).toFixed(2)}%</p></div><div class="flex flex-col gap-8"><div class="flex lg:flex-row flex-col gap-8"><div class="flex-1"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Confusion Matrix</h4><div class="grid grid-cols-[1fr_2fr_2fr_2fr] grid-rows-[1fr_2fr_2fr_2fr] gap-1 text-xs"><div class="bg-transparent font-bold tracking-wider text-text-dark" style="writing-mode: vertical-rl; text-orientation: mixed;">Actual</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Conf.</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Cand.</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Hypo.</div>${confusionMatrix.map((row, rowIndex) => html`<div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-right">${labels[rowIndex]}</div>${row.map((value, colIndex) => html`<div class="bg-black/20 dark:bg-white/5 p-2 flex flex-col items-center justify-center text-center ${rowIndex === colIndex ? 'bg-success/10 border border-success' : 'bg-error/5 border border-error/30'}"><span class="text-2xl font-bold ${rowIndex === colIndex ? 'text-success' : ''}">${value.toLocaleString()}</span><span class="text-xs opacity-60">${((value / total) * 100).toFixed(2)}%</span></div>`)}`)}</div></div><div class="flex-1"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Classification Metrics</h4><table class="w-full text-left"><thead><tr><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">Class</th><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">Precision</th><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">Recall</th><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">F1-Score</th></tr></thead><tbody><tr><td class="p-2 border-b border-border text-lg">Confirmed</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.confirmed.precision.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.confirmed.recall.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.confirmed.f1Score.toFixed(3)}</td></tr><tr><td class="p-2 border-b border-border text-lg">Candidate</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.candidate.precision.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.candidate.recall.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.candidate.f1Score.toFixed(3)}</td></tr><tr><td class="p-2 text-lg">Hypothetical</td><td class="p-2 text-lg font-mono">${metrics.hypothetical.precision.toFixed(3)}</td><td class="p-2 text-lg font-mono">${metrics.hypothetical.recall.toFixed(3)}</td><td class="p-2 text-lg font-mono">${metrics.hypothetical.f1Score.toFixed(3)}</td></tr></tbody></table></div></div><div class="mt-4"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Hyperparameter Tuning</h4><div class="flex md:flex-row flex-col gap-8 mb-6"><div class="flex-1"><label for="n_estimators" class="flex justify-between text-sm mb-2"><span>N Estimators</span><span class="font-bold text-accent">${this.hyperparameters.n_estimators}</span></label><input class="w-full" id="n_estimators" type="range" min="50" max="500" step="10" .value=${String(this.hyperparameters.n_estimators)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'n_estimators')}/></div><div class="flex-1"><label for="max_depth" class="flex justify-between text-sm mb-2"><span>Max Depth</span><span class="font-bold text-accent">${this.hyperparameters.max_depth}</span></label><input class="w-full" id="max_depth" type="range" min="2" max="15" step="1" .value=${String(this.hyperparameters.max_depth)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'max_depth')}/></div><div class="flex-1"><label for="learning_rate" class="flex justify-between text-sm mb-2"><span>Learning Rate</span><span class="font-bold text-accent">${this.hyperparameters.learning_rate.toFixed(2,)}</span></label><input class="w-full" id="learning_rate" type="range" min="0.01" max="0.5" step="0.01" .value=${String(this.hyperparameters.learning_rate)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'learning_rate')}/></div></div><button class="font-sans bg-none border border-accent text-accent px-6 py-3 text-base tracking-widest cursor-pointer w-full font-bold hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${this._handleRecalibrate} ?disabled=${this.recalibrationStatus === 'running'}>${this.recalibrationStatus === 'running' ? 'RECALIBRATING...' : 'RE-CALIBRATE MODEL'}</button></div></div></div></div>`;
+    return html`<div class="fixed inset-0 bg-bg/80 backdrop-blur-lg z-[100] flex items-center justify-center pointer-events-auto animate-fade-in"><div class="w-11/12 max-w-4xl bg-panel-bg border border-border shadow-lg drop-shadow-glow text-text p-8 relative flex flex-col">${this.recalibrationStatus === 'running' ? html`<div class="absolute inset-0 bg-bg/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center text-center animate-fade-in"><h4 class="font-normal tracking-[0.2em] uppercase text-accent mb-6 text-base">RECALIBRATING MODEL CORE...</h4><div class="border-4 border-border border-t-accent rounded-full w-10 h-10 animate-spin"></div></div>` : nothing}<div class="flex justify-between items-center border-b border-border pb-4 mb-6 shrink-0"><h2 class="m-0 text-2xl font-normal tracking-[0.2em] text-accent flex items-center">AXEE Model Performance <span class="group relative inline-flex items-center justify-center w-4 h-4 rounded-full border border-text-dark text-text-dark text-xs font-bold ml-2 cursor-help">?<span class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-72 bg-bg border border-border p-4 rounded text-sm font-light leading-relaxed text-left opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-50 pointer-events-none normal-case tracking-normal">This dashboard shows the performance of the local machine learning model used for the AXEE Predictor and Batch Analysis features. You can tune its hyperparameters to see how they might affect performance.</span></span></h2><button @click=${() => (this.isDashboardOpen = false)} ?disabled=${this.recalibrationStatus === 'running'} class="bg-none border-none text-text text-4xl cursor-pointer leading-none opacity-70 transition-opacity hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed">&times;</button></div><div class="mb-6 bg-black/20 border border-border p-4 text-center"><h4 class="m-0 mb-2 font-normal tracking-widest uppercase text-base opacity-80">Overall Accuracy</h4><p class="m-0 text-5xl font-bold text-success drop-shadow-[0_0_10px_var(--success-color)]">${(accuracy * 100).toFixed(2)}%</p></div><div class="flex flex-col gap-8"><div class="flex lg:flex-row flex-col gap-8"><div class="flex-1"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Confusion Matrix</h4><div class="grid grid-cols-[1fr_2fr_2fr_2fr] grid-rows-[1fr_2fr_2fr_2fr] gap-1 text-xs"><div class="bg-transparent font-bold tracking-wider text-text-dark" style="writing-mode: vertical-rl; text-orientation: mixed;">Actual</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Conf.</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Cand.</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Hypo.</div>${confusionMatrix.map((row, rowIndex) => html`<div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-right">${labels[rowIndex]}</div>${row.map((value, colIndex) => html`<div class="bg-black/20 dark:bg-white/5 p-2 flex flex-col items-center justify-center text-center ${rowIndex === colIndex ? 'bg-success/10 border border-success' : 'bg-error/5 border border-error/30'}"><span class="text-2xl font-bold ${rowIndex === colIndex ? 'text-success' : ''}">${value.toLocaleString()}</span><span class="text-xs opacity-60">${((value / total) * 100).toFixed(2)}%</span></div>`)}`)}</div></div><div class="flex-1"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Classification Metrics</h4><table class="w-full text-left"><thead><tr><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">Class</th><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">Precision</th><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">Recall</th><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">F1-Score</th></tr></thead><tbody><tr><td class="p-2 border-b border-border text-lg">Confirmed</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.confirmed.precision.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.confirmed.recall.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.confirmed.f1Score.toFixed(3)}</td></tr><tr><td class="p-2 border-b border-border text-lg">Candidate</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.candidate.precision.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.candidate.recall.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.candidate.f1Score.toFixed(3)}</td></tr><tr><td class="p-2 text-lg">Hypothetical</td><td class="p-2 text-lg font-mono">${metrics.hypothetical.precision.toFixed(3)}</td><td class="p-2 text-lg font-mono">${metrics.hypothetical.recall.toFixed(3)}</td><td class="p-2 text-lg font-mono">${metrics.hypothetical.f1Score.toFixed(3)}</td></tr></tbody></table></div></div><div class="mt-4"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Hyperparameter Tuning</h4><div class="flex md:flex-row flex-col gap-8 mb-6"><div class="flex-1"><label for="n_estimators" class="flex justify-between text-sm mb-2"><span>N Estimators</span><span class="font-bold text-accent">${this.hyperparameters.n_estimators}</span></label><input class="w-full" id="n_estimators" type="range" min="50" max="500" step="10" .value=${String(this.hyperparameters.n_estimators)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'n_estimators')}/></div><div class="flex-1"><label for="max_depth" class="flex justify-between text-sm mb-2"><span>Max Depth</span><span class="font-bold text-accent">${this.hyperparameters.max_depth}</span></label><input class="w-full" id="max_depth" type="range" min="2" max="15" step="1" .value=${String(this.hyperparameters.max_depth)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'max_depth')}/></div><div class="flex-1"><label for="learning_rate" class="flex justify-between text-sm mb-2"><span>Learning Rate</span><span class="font-bold text-accent">${this.hyperparameters.learning_rate.toFixed(2,)}</span></label><input class="w-full" id="learning_rate" type="range" min="0.01" max="0.5" step="0.01" .value=${String(this.hyperparameters.learning_rate)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'learning_rate')}/></div></div><button class="font-sans bg-none border border-accent text-accent px-6 py-3 text-base tracking-widest cursor-pointer w-full font-bold hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${this._handleRecalibrate} ?disabled=${this.recalibrationStatus === 'running'}>${this.recalibrationStatus === 'running' ? 'RECALIBRATING...' : 'RE-CALIBRATE MODEL'}</button></div></div></div></div>`;
   }
 
   private renderDatabaseOverlay() {
@@ -3535,6 +3555,20 @@ void main() {
     `;
   }
 
+  private renderNasaEyesOverlay() {
+    return html`
+      <div class="fixed inset-0 z-[100] bg-bg flex flex-col animate-fade-in">
+        <div class="p-4 flex justify-between items-center border-b border-border shrink-0">
+          <h3 class="m-0 font-normal tracking-[0.2em] uppercase text-accent">NASA's Eyes on the Solar System</h3>
+          <button @click=${() => this.isNasaEyesOpen = false} class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest cursor-pointer hover:bg-glow hover:text-bg">CLOSE</button>
+        </div>
+        <div class="flex-grow min-h-0">
+            <iframe src="https://eyes.nasa.gov/apps/solar-system/#/home?interactPrompt=true&surfaceMapTiling=true&hd=true" allowfullscreen class="w-full h-full border-0"></iframe>
+        </div>
+      </div>
+    `;
+  }
+
   private renderHeader() {
     return html`
       <header class="flex flex-col md:flex-row justify-between items-start p-4 md:p-6 pointer-events-auto drop-shadow-glow shrink-0">
@@ -3548,6 +3582,7 @@ void main() {
           <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${() => this.isDatabaseOpen = true}>DATABASE</button>
           <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this._startConversation} title="Converse with AXEE">CONVERSE</button>
           <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${() => this.isShaderLabOpen = true} title="Open Shader Lab">SHADER LAB</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg" @click=${() => this.isNasaEyesOpen = true} title="Explore with NASA's Eyes">NASA EYES</button>
           <button class="font-sans bg-none border px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${this.liveStreamStatus === 'connected' ? 'border-success text-success drop-shadow-[0_0_8px_var(--success-color)] hover:bg-success/20' : 'border-border text-text hover:bg-glow hover:text-bg'}" @click=${this._toggleLiveStream} ?disabled=${!this.activeGalaxy || this.liveStreamStatus === 'connecting'} title="Toggle live data stream">
             ${this.liveStreamStatus === 'connecting' ? 'CONNECTING...' : this.liveStreamStatus === 'connected' ? html`<span class="inline-block w-2 h-2 bg-success rounded-full mr-2 animate-pulse-live"></span>DISCONNECT` : 'LIVE FEED'}
           </button>
