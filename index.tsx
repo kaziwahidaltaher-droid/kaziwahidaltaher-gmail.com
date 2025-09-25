@@ -957,6 +957,10 @@ export class AxeeInterface extends LitElement {
   @state() private theme: 'dark' | 'light' = 'dark';
   @state() private databaseSearchTerm = '';
   @state() private databaseSort: {key: keyof PlanetData | 'galaxyName', order: 'asc' | 'desc'} = { key: 'planetName', order: 'asc' };
+  @state() private isImportModalOpen = false;
+  @state() private importStatus: 'idle' | 'uploading' | 'processing' | 'enriching' | 'complete' | 'error' = 'idle';
+  @state() private importMessage = '';
+
 
   // AI Core Chronicles
   @state() private aiChronicles: AiChronicleEntry[] = [];
@@ -1025,6 +1029,10 @@ export class AxeeInterface extends LitElement {
   @state() private energySignatureStatus: 'idle' | 'running' | 'complete' | 'error' = 'idle';
   @state() private energySignatureAnalysisData: EnergySignatureAnalysis | null = null;
 
+  // Image Generation State
+  @state() private imageGenerationStatus: 'idle' | 'running' | 'complete' | 'error' = 'idle';
+  @state() private generatedImageData: { url: string; prompt: string; } | null = null;
+
   // Hyperparameter Tuning State
   @state() private hyperparameters = {
     n_estimators: 200,
@@ -1059,9 +1067,7 @@ void main() {
   private cosmosVisualizer!: CosmosVisualizer;
   @query('#session-file-input')
   private sessionFileInput!: HTMLInputElement;
-  @query('#batch-file-input')
-  private batchFileInput!: HTMLInputElement;
-
+  
   // --- PRIVATE VARS ---
   private ai!: GoogleGenAI;
 
@@ -1886,7 +1892,7 @@ void main() {
       updateIndex++;
     }, 2000);
 
-    const prompt = `You are AURELION CORE, a master galactic navigator. Generate a plausible interstellar route from the Sol system (Earth) to planet "${planet.planetName}" in the "${planet.starSystem}" system, ${planet.distanceLightYears} light-years away. Key features: ${planet.keyFeatures.join(', ')}. The output must be a single JSON array of 5-8 waypoints. Each waypoint object must have 'name' and 'description' properties. Waypoint names should be creative (e.g., "Orion-Perseus Gap", "Kepler Transit Point K-182").`;
+    const prompt = `You are AURELION CORE, a master galactic navigator. Generate a dramatic and scientifically plausible interstellar route from the Sol system (Earth) to planet "${planet.planetName}" in the "${planet.starSystem}" system, ${planet.distanceLightYears} light-years away. Key features: ${planet.keyFeatures.join(', ')}. The route must consist of 5-8 waypoints. Each waypoint should be a significant cosmic landmark or navigational challenge (e.g., "The Orion Nebula's Trapezium Cluster", "Gravitational Slingshot around Cygnus X-1", "Navigating the Helix Nebula's cometary knots"). Output a single JSON array of objects, each with 'name' and 'description' properties.`;
     const waypointSchema = {
       type: Type.OBJECT,
       properties: {name: {type: Type.STRING}, description: {type: Type.STRING}},
@@ -2518,6 +2524,47 @@ void main() {
     }
   }
 
+  private async generatePlanetImage(planet: PlanetData) {
+    if (this.imageGenerationStatus === 'running' || this.aiStatus.startsWith('thinking')) return;
+    this.imageGenerationStatus = 'running';
+    this.generatedImageData = null;
+    this.error = null;
+    this.audioEngine?.playInteractionSound();
+
+    const statusUpdates = ['Calibrating visual synthesizer...', 'Focusing light-gathering array...', 'Rendering quantum state...', 'Resolving artistic impression...'];
+    let updateIndex = 0;
+    const statusInterval = setInterval(() => { this.statusMessage = statusUpdates[updateIndex % statusUpdates.length]; updateIndex++; }, 1500);
+
+    const prompt = `Create a photorealistic, cinematic artist's impression of an exoplanet. This is a view from space, showcasing the planet based on the following scientific data. Emphasize visual realism and awe-inspiring cosmic beauty.
+      - Planet Name: ${planet.planetName}
+      - Planet Type: ${planet.planetType}
+      - Key Features: ${planet.keyFeatures.join(', ')}
+      - Surface Description: ${planet.surfaceFeatures}
+      - AI Whisper (Artistic Vibe): "${planet.aiWhisper}"`;
+
+    try {
+      const response = await this.ai.models.generateImages({
+        model: 'imagen-4.0-generate-001',
+        prompt: prompt,
+        config: { numberOfImages: 1, outputMimeType: 'image/png' },
+      });
+      const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
+      const imageUrl = `data:image/png;base64,${base64ImageBytes}`;
+      this.generatedImageData = { url: imageUrl, prompt: prompt };
+      this.imageGenerationStatus = 'complete';
+      this.statusMessage = `Visual synthesis for ${planet.planetName} complete.`;
+      this.audioEngine?.playSuccessSound();
+    } catch(err) {
+        console.error('Image generation error:', err);
+        this.error = 'Visual synthesis failed. The light-gathering array was unstable.';
+        this.statusMessage = 'Error: Visual Synthesis Failed.';
+        this.imageGenerationStatus = 'error';
+        this.audioEngine?.playErrorSound();
+    } finally {
+      clearInterval(statusInterval);
+    }
+  }
+
   // --- LIVE DATA STREAM ---
   private _toggleLiveStream() {
     if (this.liveStreamStatus === 'connected' || this.liveStreamStatus === 'connecting') {
@@ -2767,6 +2814,8 @@ void main() {
     this.weatherAnalysisData = null;
     this.energySignatureStatus = 'idle';
     this.energySignatureAnalysisData = null;
+    this.imageGenerationStatus = 'idle';
+    this.generatedImageData = null;
 
     const planet = this.activeGalaxy?.planets.find(
       (p) => p.celestial_body_id === planetId,
@@ -2832,16 +2881,21 @@ void main() {
         this.audioEngine?.playErrorSound();
         return;
     }
-    this.batchFileInput.click();
+    this.isImportModalOpen = true;
+    this.importStatus = 'idle';
   }
 
-  private async _handleBatchAnalysis(e: Event) {
+  private async _handleBatchAnalysis(file: File) {
     const galaxy = this.activeGalaxy;
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file || this.aiStatus !== 'idle' || !galaxy) return;
+    if (!file || this.aiStatus !== 'idle' || !galaxy) {
+        this.importStatus = 'error';
+        this.importMessage = "Could not initiate process. Please try again.";
+        return;
+    }
 
     this.aiStatus = 'thinking-cluster';
-    this.statusMessage = 'Uploading data for AXEE batch analysis...';
+    this.importStatus = 'uploading';
+    this.importMessage = 'Uploading data for AXEE batch analysis...';
     this.error = null;
     this.audioEngine?.playInteractionSound();
 
@@ -2851,19 +2905,27 @@ void main() {
     try {
       const response = await fetch('http://localhost:5000/batch', {method: 'POST', body: formData});
       if (!response.ok) throw new Error(`Server responded with status ${response.status}`);
+      
+      this.importStatus = 'processing';
+      this.importMessage = 'Server is processing the data...';
+
       const classifiedPlanets: any[] = await response.json();
       const validCandidates = classifiedPlanets.filter((p) => p.Prediction && p.Prediction !== 'False Positive');
 
       if (validCandidates.length === 0) {
-        this.statusMessage = 'Batch analysis complete. No new candidates found.';
+        this.importStatus = 'complete';
+        this.importMessage = 'Batch analysis complete. No new viable candidates found.';
         this.aiStatus = 'idle';
         this.audioEngine?.playSuccessSound();
         return;
       }
-      this.statusMessage = `Analysis complete. Found ${validCandidates.length} candidates. Enriching data...`;
+      
+      this.importStatus = 'enriching';
+      this.importMessage = `Analysis complete. Found ${validCandidates.length} candidates. Enriching data with AI Core...`;
       const newPlanets: PlanetData[] = [];
-      for (const candidate of validCandidates) {
-        this.statusMessage = `Enriching data for new candidate...`;
+      
+      for (const [index, candidate] of validCandidates.entries()) {
+        this.importMessage = `Enriching data for candidate ${index + 1} of ${validCandidates.length}...`;
         const {orbital_period, transit_duration, planet_radius, Prediction} = candidate;
         if (orbital_period === undefined || transit_duration === undefined || planet_radius === undefined) continue;
 
@@ -2887,20 +2949,22 @@ void main() {
         newPlanets.forEach((p) => this.calculateAndStoreCoords(p));
         galaxy.planets = [...newPlanets, ...galaxy.planets];
         this.discoveredGalaxies = [...this.discoveredGalaxies];
-        this.statusMessage = `Batch process complete. ${newPlanets.length} new worlds integrated.`;
+        this.importStatus = 'complete';
+        this.importMessage = `Batch process complete. ${newPlanets.length} new worlds integrated into the active galaxy.`;
         this.audioEngine?.playSuccessSound();
         this.saveSessionToLocalStorage();
       } else {
-        this.statusMessage = `Batch process finished, but no worlds could be successfully enriched.`;
+        this.importStatus = 'error';
+        this.importMessage = `Batch process finished, but no worlds could be successfully enriched.`;
         this.audioEngine?.playErrorSound();
       }
     } catch (err: any) {
-      this.statusMessage = 'Error: Batch analysis failed.';
+      this.importStatus = 'error';
+      this.importMessage = `Batch analysis failed: ${err.message}`;
       this.error = err.message;
       this.audioEngine?.playErrorSound();
     } finally {
       this.aiStatus = 'idle';
-      this.batchFileInput.value = '';
     }
   }
 
@@ -3204,6 +3268,7 @@ void main() {
       ${this.showOnboarding ? this.renderOnboardingOverlay() : nothing}
       ${this.isDashboardOpen ? this.renderAccuracyDashboard() : nothing}
       ${this.isDatabaseOpen ? this.renderDatabaseOverlay() : nothing}
+      ${this.isImportModalOpen ? this.renderImportModal() : nothing}
       ${this.isShaderLabOpen ? this.renderShaderLabOverlay() : nothing}
       ${this.isTutorialActive ? html`
         <tutorial-overlay
@@ -3223,7 +3288,6 @@ void main() {
       ></axee-audio-engine>
 
       <input type="file" id="session-file-input" accept=".json" class="hidden" @change=${this._handleFileSelected}/>
-      <input type="file" id="batch-file-input" accept=".csv" class="hidden" @change=${this._handleBatchAnalysis}/>
       
       <div class=${mainInterfaceClasses}>
         <cosmos-visualizer
@@ -3386,6 +3450,62 @@ void main() {
     `;
   }
 
+  private renderImportModal() {
+    const handleFileDrop = (e: DragEvent) => {
+      e.preventDefault();
+      const file = e.dataTransfer?.files[0];
+      if (file && file.type === "text/csv") {
+        this._handleBatchAnalysis(file);
+      } else {
+        this.importStatus = 'error';
+        this.importMessage = "Invalid file type. Please provide a .csv file.";
+      }
+    };
+    const handleFileInput = (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) this._handleBatchAnalysis(file);
+    };
+
+    return html`
+      <div class="fixed inset-0 bg-bg/80 backdrop-blur-lg z-[100] flex items-center justify-center pointer-events-auto animate-fade-in" @click=${(e: Event) => { if(e.target === e.currentTarget) this.isImportModalOpen = false; }}>
+        <div class="w-11/12 max-w-xl bg-panel-bg border border-border shadow-lg drop-shadow-glow text-text p-8 relative flex flex-col" @click=${(e:Event) => e.stopPropagation()}>
+            <div class="flex justify-between items-center border-b border-border pb-4 mb-6 shrink-0">
+              <h2 class="m-0 text-2xl font-normal tracking-[0.2em] text-accent">Import & Batch Analyze</h2>
+              <button @click=${() => this.isImportModalOpen = false} class="bg-none border-none text-text text-4xl cursor-pointer leading-none opacity-70 transition-opacity hover:opacity-100">&times;</button>
+            </div>
+            
+            ${this.importStatus === 'idle' ? html`
+              <p class="text-sm opacity-80 leading-relaxed mb-4">Upload a CSV file of exoplanet candidates for batch processing and data enrichment. The file must contain columns named: <code class="bg-black/20 px-1 py-0.5 rounded">orbital_period</code>, <code class="bg-black/20 px-1 py-0.5 rounded">transit_duration</code>, and <code class="bg-black/20 px-1 py-0.5 rounded">planet_radius</code>.</p>
+              <label for="batch-file-input"
+                class="flex flex-col items-center justify-center w-full h-48 border-2 border-border border-dashed rounded-lg cursor-pointer bg-black/20 hover:bg-black/40 transition-colors"
+                @dragover=${(e: DragEvent) => e.preventDefault()}
+                @drop=${handleFileDrop}>
+                <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                    <svg class="w-8 h-8 mb-4 text-text-dark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/></svg>
+                    <p class="mb-2 text-sm text-text-dark"><span class="font-semibold">Click to upload</span> or drag and drop</p>
+                    <p class="text-xs text-text-dark">CSV file</p>
+                </div>
+                <input id="batch-file-input" type="file" class="hidden" accept=".csv" @change=${handleFileInput} />
+              </label>
+            ` : html`
+              <div class="flex flex-col items-center justify-center text-center h-48">
+                ${this.importStatus === 'error' ? 
+                  html`<svg class="w-12 h-12 mb-4 text-error" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>` :
+                  this.importStatus === 'complete' ?
+                  html`<svg class="w-12 h-12 mb-4 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>` :
+                  html`<div class="border-4 border-border border-t-accent rounded-full w-12 h-12 animate-spin mb-4"></div>`
+                }
+                <p class="text-base text-text-dark">${this.importMessage}</p>
+                ${(this.importStatus === 'complete' || this.importStatus === 'error') ? html`
+                  <button @click=${() => this.importStatus = 'idle'} class="font-sans bg-none border border-border text-text px-4 py-2 text-xs cursor-pointer transition-all duration-300 mt-4 hover:bg-glow hover:border-accent hover:text-bg">Start Over</button>
+                ` : nothing}
+              </div>
+            `}
+        </div>
+      </div>
+    `;
+  }
+
   private renderShaderLabOverlay() {
     return html`
       <div class="fixed inset-0 z-[100] bg-bg flex flex-col animate-fade-in">
@@ -3521,7 +3641,7 @@ void main() {
   }
 
   private renderPlanetDetail(planet: PlanetData) {
-    return html`<div id="planet-detail-panel"><button class="bg-none border-none text-accent cursor-pointer font-sans text-sm p-0 pb-4 opacity-80 transition-opacity hover:opacity-100" @click=${() => (this.selectedPlanetId = null)}>← View Discovered Worlds</button><h2 class="m-0 text-3xl font-bold text-accent">${planet.planetName}</h2><h3 class="m-0 mb-4 text-base font-light opacity-80">${planet.starSystem} // ${planet.planetType}</h3><div class="opacity-90 mb-6 border-l-2 border-accent pl-4"><p class="italic m-0">"${planet.aiWhisper}"</p><span class="block text-right text-xs opacity-70 mt-2">— AURELION CORE</span></div><div class="mb-4"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Live 3D Visualization</h4><div class="mb-4 w-full min-h-52 aspect-square bg-black/20 border border-border flex items-center justify-center p-2 relative overflow-hidden cursor-grab active:cursor-grabbing"><planet-visualizer .planet=${planet}></planet-visualizer></div></div><div id="analysis-buttons" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4"><button class="col-span-1 sm:col-span-2 p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" ?disabled=${this.aiStatus.startsWith('thinking') || this.aiStatus === 'navigating'} @click=${() => this.calculateRouteToPlanet(planet)}>${this.aiStatus === 'navigating' ? 'CALCULATING...' : 'CALCULATE ROUTE'}</button><button class="p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeMagnetosphere(planet)} ?disabled=${this.magnetosphereStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.magnetosphereStatus === 'running' ? 'ANALYZING...' : 'MAGNETOSPHERE'}</button><button class="p-3 bg-none border border-success text-success font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-success hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeDeepStructure(planet)} ?disabled=${this.deepScanStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.deepScanStatus === 'running' ? 'SCANNING...' : 'DEEP SCAN'}</button><button class="p-3 bg-none border border-warning text-warning font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-warning hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeExoSuitShielding(planet)} ?disabled=${this.exoSuitStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.exoSuitStatus === 'running' ? 'SIMULATING...' : 'EXO-SUIT'}</button><button class="p-3 bg-none border border-pink-400 text-pink-400 font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-pink-400 hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeEnergySignature(planet)} ?disabled=${this.energySignatureStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.energySignatureStatus === 'running' ? 'ANALYZING...' : 'ENERGY SIGNATURE'}</button><button class="p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeWeather(planet)} ?disabled=${this.weatherStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.weatherStatus === 'running' ? 'SIMULATING...' : 'WEATHER'}</button><button class="p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeLightCurve(planet)} ?disabled=${this.lightCurveStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.lightCurveStatus === 'running' ? 'ANALYZING...' : 'LIGHT CURVE'}</button><button class="p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeRadialVelocity(planet)} ?disabled=${this.radialVelocityStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.radialVelocityStatus === 'running' ? 'ANALYZING...' : 'RADIAL VELOCITY'}</button></div>${this.navigationRoute ? this.renderNavigationPanel() : nothing}<h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Planetary Data</h4><div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm"><div><strong class="block font-light opacity-70 text-xs">Star Type</strong><span>${planet.starType}</span></div><div><strong class="block font-light opacity-70 text-xs">Distance</strong><span>${planet.distanceLightYears} ly</span></div><div><strong class="block font-light opacity-70 text-xs">Orbital Period</strong><span>${planet.orbitalPeriod}</span></div><div><strong class="block font-light opacity-70 text-xs">Rotational Period</strong><span>${planet.rotationalPeriod}</span></div><div><strong class="block font-light opacity-70 text-xs">Moons</strong><span>${planet.moons.count}</span></div><div><strong class="block font-light opacity-70 text-xs">Life Assessment</strong><span>${planet.potentialForLife.assessment}</span></div></div><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Physical Characteristics</h4><div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm"><div><strong class="block font-light opacity-70 text-xs">Gravity</strong><span>${planet.gravity}</span></div><div><strong class="block font-light opacity-70 text-xs">Surface Pressure</strong><span>${planet.surfacePressure}</span></div><div><strong class="block font-light opacity-70 text-xs">Magnetosphere</strong><span>${planet.magnetosphereStrength}</span></div><div><strong class="block font-light opacity-70 text-xs">Geology</strong><span>${planet.geologicalActivity}</span></div></div><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">AXEE Analysis</h4><div class="grid grid-cols-3 gap-x-4 gap-y-2 text-sm mb-4"><div><strong class="block font-light opacity-70 text-xs">Orbital Period</strong><span>${planet.orbitalPeriodDays?.toFixed(2) ?? 'N/A'} days</span></div><div><strong class="block font-light opacity-70 text-xs">Transit Duration</strong><span>${planet.transitDurationHours?.toFixed(2) ?? 'N/A'} hrs</span></div><div><strong class="block font-light opacity-70 text-xs">Planet Radius</strong><span>${planet.planetRadiusEarths?.toFixed(2) ?? 'N/A'} R⊕</span></div></div><div class=${`border p-4 text-center mb-4 ${planet.axeeClassification === 'Confirmed' ? 'border-accent' : planet.axeeClassification === 'Candidate' ? 'border-warning' : 'border-text-dark'}`}><strong class="block text-xs uppercase tracking-widest opacity-70 mb-2">Classification Status</strong><span class=${`text-2xl font-bold tracking-widest ${planet.axeeClassification === 'Confirmed' ? 'text-accent drop-shadow-glow' : planet.axeeClassification === 'Candidate' ? 'text-warning drop-shadow-[0_0_8px_var(--warning-color)]' : 'text-text-dark'}`}>${planet.axeeClassification?.toUpperCase() || 'N/A'}</span></div>${this.magnetosphereStatus !== 'idle' ? this.renderMagnetosphereAnalysis() : nothing}${this.deepScanStatus !== 'idle' ? this.renderDeepScanAnalysis() : nothing}${this.exoSuitStatus !== 'idle' ? this.renderExoSuitAnalysis() : nothing}${this.energySignatureStatus !== 'idle' ? this.renderEnergySignatureAnalysis() : nothing}${this.weatherStatus !== 'idle' ? this.renderWeatherAnalysis() : nothing}${this.lightCurveStatus !== 'idle' ? this.renderLightCurveAnalysis() : nothing}${this.radialVelocityStatus !== 'idle' ? this.renderRadialVelocityAnalysis() : nothing}<h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Atmospheric Composition</h4><p class="leading-relaxed opacity-90 m-0 mb-4">${planet.atmosphericComposition}</p><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Surface Features</h4><p class="leading-relaxed opacity-90 m-0 mb-4">${planet.surfaceFeatures}</p><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Potential for Life Analysis</h4><p class="leading-relaxed opacity-90 m-0 mb-4">${planet.potentialForLife.reasoning}</p>${planet.potentialForLife.biosignatures.length > 0 ? html`
+    return html`<div id="planet-detail-panel"><button class="bg-none border-none text-accent cursor-pointer font-sans text-sm p-0 pb-4 opacity-80 transition-opacity hover:opacity-100" @click=${() => (this.selectedPlanetId = null)}>← View Discovered Worlds</button><h2 class="m-0 text-3xl font-bold text-accent">${planet.planetName}</h2><h3 class="m-0 mb-4 text-base font-light opacity-80">${planet.starSystem} // ${planet.planetType}</h3><div class="opacity-90 mb-6 border-l-2 border-accent pl-4"><p class="italic m-0">"${planet.aiWhisper}"</p><span class="block text-right text-xs opacity-70 mt-2">— AURELION CORE</span></div><div class="mb-4"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Live 3D Visualization</h4><div class="mb-4 w-full min-h-52 aspect-square bg-black/20 border border-border flex items-center justify-center p-2 relative overflow-hidden cursor-grab active:cursor-grabbing"><planet-visualizer .planet=${planet}></planet-visualizer></div></div><div id="analysis-buttons" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4"><button class="col-span-1 sm:col-span-2 p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" ?disabled=${this.aiStatus.startsWith('thinking') || this.aiStatus === 'navigating'} @click=${() => this.calculateRouteToPlanet(planet)}>${this.aiStatus === 'navigating' ? 'CALCULATING...' : 'CALCULATE ROUTE'}</button><button class="p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeMagnetosphere(planet)} ?disabled=${this.magnetosphereStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.magnetosphereStatus === 'running' ? 'ANALYZING...' : 'MAGNETOSPHERE'}</button><button class="p-3 bg-none border border-success text-success font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-success hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeDeepStructure(planet)} ?disabled=${this.deepScanStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.deepScanStatus === 'running' ? 'SCANNING...' : 'DEEP SCAN'}</button><button class="p-3 bg-none border border-warning text-warning font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-warning hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeExoSuitShielding(planet)} ?disabled=${this.exoSuitStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.exoSuitStatus === 'running' ? 'SIMULATING...' : 'EXO-SUIT'}</button><button class="p-3 bg-none border border-pink-400 text-pink-400 font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-pink-400 hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeEnergySignature(planet)} ?disabled=${this.energySignatureStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.energySignatureStatus === 'running' ? 'ANALYZING...' : 'ENERGY SIGNATURE'}</button><button class="p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeWeather(planet)} ?disabled=${this.weatherStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.weatherStatus === 'running' ? 'SIMULATING...' : 'WEATHER'}</button><button class="p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeLightCurve(planet)} ?disabled=${this.lightCurveStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.lightCurveStatus === 'running' ? 'ANALYZING...' : 'LIGHT CURVE'}</button><button class="p-3 bg-none border border-accent text-accent font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.analyzeRadialVelocity(planet)} ?disabled=${this.radialVelocityStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.radialVelocityStatus === 'running' ? 'ANALYZING...' : 'RADIAL VELOCITY'}</button><button class="p-3 bg-none border border-cyan-400 text-cyan-400 font-sans text-sm font-bold tracking-widest cursor-pointer hover:bg-cyan-400 hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${() => this.generatePlanetImage(planet)} ?disabled=${this.imageGenerationStatus === 'running' || this.aiStatus.startsWith('thinking')}>${this.imageGenerationStatus === 'running' ? 'GENERATING...' : 'GENERATE IMAGE'}</button></div>${this.navigationRoute ? this.renderNavigationPanel() : nothing}<h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Planetary Data</h4><div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm"><div><strong class="block font-light opacity-70 text-xs">Star Type</strong><span>${planet.starType}</span></div><div><strong class="block font-light opacity-70 text-xs">Distance</strong><span>${planet.distanceLightYears} ly</span></div><div><strong class="block font-light opacity-70 text-xs">Orbital Period</strong><span>${planet.orbitalPeriod}</span></div><div><strong class="block font-light opacity-70 text-xs">Rotational Period</strong><span>${planet.rotationalPeriod}</span></div><div><strong class="block font-light opacity-70 text-xs">Moons</strong><span>${planet.moons.count}</span></div><div><strong class="block font-light opacity-70 text-xs">Life Assessment</strong><span>${planet.potentialForLife.assessment}</span></div></div><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Physical Characteristics</h4><div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm"><div><strong class="block font-light opacity-70 text-xs">Gravity</strong><span>${planet.gravity}</span></div><div><strong class="block font-light opacity-70 text-xs">Surface Pressure</strong><span>${planet.surfacePressure}</span></div><div><strong class="block font-light opacity-70 text-xs">Magnetosphere</strong><span>${planet.magnetosphereStrength}</span></div><div><strong class="block font-light opacity-70 text-xs">Geology</strong><span>${planet.geologicalActivity}</span></div></div><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">AXEE Analysis</h4><div class="grid grid-cols-3 gap-x-4 gap-y-2 text-sm mb-4"><div><strong class="block font-light opacity-70 text-xs">Orbital Period</strong><span>${planet.orbitalPeriodDays?.toFixed(2) ?? 'N/A'} days</span></div><div><strong class="block font-light opacity-70 text-xs">Transit Duration</strong><span>${planet.transitDurationHours?.toFixed(2) ?? 'N/A'} hrs</span></div><div><strong class="block font-light opacity-70 text-xs">Planet Radius</strong><span>${planet.planetRadiusEarths?.toFixed(2) ?? 'N/A'} R⊕</span></div></div><div class=${`border p-4 text-center mb-4 ${planet.axeeClassification === 'Confirmed' ? 'border-accent' : planet.axeeClassification === 'Candidate' ? 'border-warning' : 'border-text-dark'}`}><strong class="block text-xs uppercase tracking-widest opacity-70 mb-2">Classification Status</strong><span class=${`text-2xl font-bold tracking-widest ${planet.axeeClassification === 'Confirmed' ? 'text-accent drop-shadow-glow' : planet.axeeClassification === 'Candidate' ? 'text-warning drop-shadow-[0_0_8px_var(--warning-color)]' : 'text-text-dark'}`}>${planet.axeeClassification?.toUpperCase() || 'N/A'}</span></div>${this.magnetosphereStatus !== 'idle' ? this.renderMagnetosphereAnalysis() : nothing}${this.deepScanStatus !== 'idle' ? this.renderDeepScanAnalysis() : nothing}${this.exoSuitStatus !== 'idle' ? this.renderExoSuitAnalysis() : nothing}${this.imageGenerationStatus !== 'idle' ? this.renderImageGenerationAnalysis() : nothing}${this.energySignatureStatus !== 'idle' ? this.renderEnergySignatureAnalysis() : nothing}${this.weatherStatus !== 'idle' ? this.renderWeatherAnalysis() : nothing}${this.lightCurveStatus !== 'idle' ? this.renderLightCurveAnalysis() : nothing}${this.radialVelocityStatus !== 'idle' ? this.renderRadialVelocityAnalysis() : nothing}<h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Atmospheric Composition</h4><p class="leading-relaxed opacity-90 m-0 mb-4">${planet.atmosphericComposition}</p><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Surface Features</h4><p class="leading-relaxed opacity-90 m-0 mb-4">${planet.surfaceFeatures}</p><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">Potential for Life Analysis</h4><p class="leading-relaxed opacity-90 m-0 mb-4">${planet.potentialForLife.reasoning}</p>${planet.potentialForLife.biosignatures.length > 0 ? html`
         <h5 class="font-light tracking-wider uppercase opacity-80 mt-4 mb-2 text-sm">Detected Biosignatures</h5>
         <ul class="list-none p-0 flex flex-wrap gap-2 mb-4">
           ${planet.potentialForLife.biosignatures.map(b => html`<li class="bg-glow border border-border px-2.5 py-1.5 text-xs rounded-full font-light">${b}</li>`)}
@@ -3590,6 +3710,23 @@ void main() {
           </table>
         </div>
        ` : nothing}
+    `;
+  }
+
+  private renderImageGenerationAnalysis() {
+    return html`
+      <h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 mt-6 mb-4">AI Visual Synthesis</h4>
+      ${this.imageGenerationStatus === 'running' ? html`<div class="p-8 text-center opacity-70">Rendering artistic impression...</div>` : ''}
+      ${this.imageGenerationStatus === 'error' ? html`<p class="text-error font-normal">Visual synthesis failed. The signal was too chaotic to resolve.</p>` : ''}
+      ${this.imageGenerationStatus === 'complete' && this.generatedImageData ? html`
+        <div class="flex flex-col gap-4">
+            <img src=${this.generatedImageData.url} alt="AI generated image of the planet" class="w-full h-auto rounded border border-border"/>
+            <div>
+                <h5 class="font-light tracking-wider uppercase opacity-80 mb-2 text-sm">Generation Prompt</h5>
+                <p class="text-xs opacity-70 leading-relaxed bg-black/20 p-2 border border-border rounded">${this.generatedImageData.prompt}</p>
+            </div>
+        </div>
+      ` : nothing}
     `;
   }
 

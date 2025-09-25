@@ -5,7 +5,6 @@
 
 // Vertex Shader for the starfield
 export const vs = `
-  attribute vec3 color;
   attribute float aScale;
   uniform float uTime;
   uniform float uPixelRatio;
