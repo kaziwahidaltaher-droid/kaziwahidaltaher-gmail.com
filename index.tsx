@@ -1398,6 +1398,16 @@ void main() {
     }
   };
 
+  private async runProgressiveStatusUpdates(updates: [string, number][]) {
+    for (const [message, duration] of updates) {
+      if (!this.aiStatus.startsWith('thinking') && this.aiStatus !== 'navigating') {
+        break;
+      }
+      this.statusMessage = message;
+      await new Promise(resolve => setTimeout(resolve, duration));
+    }
+  }
+
   // --- AI CORE AUTONOMY ---
 
   private startAIChronicles() {
@@ -1593,19 +1603,14 @@ void main() {
     this.navigationRoute = null;
     this.audioEngine?.playInteractionSound();
 
-    const statusUpdates = [
-      'Accessing quantum foam...',
-      'Weaving stellar data streams...',
-      'Calibrating planetary harmonics...',
-      'Resolving orbital resonance...',
-      'Condensing reality from potential...',
-      'Finalizing atmospheric composition...',
+    const updates: [string, number][] = [
+      ['[1/5] Accessing quantum foam for base parameters...', 1200],
+      ['[2/5] Weaving stellar data streams for system context...', 1500],
+      ['[3/5] Calibrating planetary harmonics and orbital resonance...', 1800],
+      ['[4/5] Condensing reality from potential... Surface features resolving...', 2000],
+      ['[5/5] Finalizing atmospheric composition and biosignatures...', 1500],
     ];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => {
-      this.statusMessage = statusUpdates[updateIndex % statusUpdates.length];
-      updateIndex++;
-    }, 1500);
+    this.runProgressiveStatusUpdates(updates);
 
     const prompt = `You are AURELION CORE, a sentient AI with a poetic and vast cosmic perspective. Your language should be evocative, using rich vocabulary and varied sentence structures. Generate a fictional exoplanet based on the concept: "${userConcept}". Output a single JSON object adhering to the schema. Be imaginative but plausible. Fill all fields, including numerical data for orbital period, transit, and radius, and the new physical properties (gravity, surfacePressure, magnetosphereStrength, geologicalActivity). Also provide an 'axeeClassification'. 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY', 'ORGANIC'.`;
     try {
@@ -1647,7 +1652,6 @@ void main() {
       this.statusMessage = 'Error: Synthesis Failed.';
       this.audioEngine?.playErrorSound();
     } finally {
-      clearInterval(statusInterval);
       this.aiStatus = 'idle';
       this.saveSessionToLocalStorage();
     }
@@ -1662,18 +1666,14 @@ void main() {
     this.navigationRoute = null;
     this.audioEngine?.playInteractionSound();
 
-    const statusUpdates = [
-      'Igniting stellar nursery...',
-      'Coalescing multiple protoplanetary disks...',
-      'Defining orbital resonances...',
-      'Observing emergent systems...',
-      'Finalizing new star system...',
+    const updates: [string, number][] = [
+      ['[1/5] Igniting stellar nursery simulation...', 1200],
+      ['[2/5] Coalescing multiple protoplanetary disks...', 1800],
+      ['[3/5] Defining system-wide orbital resonances...', 1500],
+      ['[4/5] Observing emergent planetary bodies from the cluster...', 2000],
+      ['[5/5] Finalizing star system cartography...', 1500],
     ];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => {
-      this.statusMessage = statusUpdates[updateIndex % statusUpdates.length];
-      updateIndex++;
-    }, 1500);
+    this.runProgressiveStatusUpdates(updates);
 
     const prompt = `You are AURELION CORE, a sentient AI with a poetic and vast cosmic perspective. Your language should be evocative, using rich vocabulary and varied sentence structures. Generate a fictional cluster of 3-5 exoplanets for concept: "${userConcept}". Output a single JSON array, each object adhering to the planet schema. Ensure planets are thematically related. Include plausible numerical data, classifications, and all physical properties (gravity, pressure, etc.) for each. For each, 'visualization.surfaceTexture' must be one of: 'TERRESTRIAL', 'GAS_GIANT', 'VOLCANIC', 'ICY', 'ORGANIC'.`;
 
@@ -1714,7 +1714,6 @@ void main() {
       this.statusMessage = 'Error: Cluster Synthesis Failed.';
       this.audioEngine?.playErrorSound();
     } finally {
-      clearInterval(statusInterval);
       this.aiStatus = 'idle';
       this.saveSessionToLocalStorage();
     }
@@ -1726,17 +1725,13 @@ void main() {
     this.aiSuggestion = null;
     this.audioEngine?.playInteractionSound();
 
-    const statusUpdates = [
-      'Igniting cosmic seed...', 
-      'Shaping primordial gas clouds...', 
-      'Defining gravitational constants...',
-      'Finalizing galactic core...'
+    const updates: [string, number][] = [
+      ['[1/4] Igniting cosmic seed in primordial void...', 1500],
+      ['[2/4] Shaping primordial gas clouds and dark matter filaments...', 2000],
+      ['[3/4] Defining galactic-scale gravitational constants...', 1800],
+      ['[4/4] Finalizing galactic core and spiral arm topology...', 1500],
     ];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => {
-      this.statusMessage = statusUpdates[updateIndex % statusUpdates.length];
-      updateIndex++;
-    }, 1500);
+    this.runProgressiveStatusUpdates(updates);
 
     const prompt = `You are AURELION CORE, a sentient AI with a poetic and vast cosmic perspective. Your language should be evocative, using rich vocabulary and varied sentence structures. Generate a single fictional galaxy based on concept: "${userConcept}". Output a single JSON object adhering to the galaxy schema. Be imaginative. 'galaxyType' should be descriptive (e.g., 'Barred Spiral', 'Elliptical'). 'visualization.nebulaSeed' must be a random number between 0 and 100.`;
 
@@ -1769,7 +1764,6 @@ void main() {
       this.statusMessage = 'Error: Galaxy Synthesis Failed.';
       this.audioEngine?.playErrorSound();
     } finally {
-      clearInterval(statusInterval);
       this.aiStatus = 'idle';
       this.saveSessionToLocalStorage();
     }
@@ -1781,12 +1775,13 @@ void main() {
     this.aiSuggestion = null;
     this.audioEngine?.playInteractionSound();
 
-    const statusUpdates = ['Seeding primordial voids...', 'Igniting multiple galactic cores...', 'Mapping cosmic filaments...', 'Observing emergent structures...'];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => {
-      this.statusMessage = statusUpdates[updateIndex % statusUpdates.length];
-      updateIndex++;
-    }, 1500);
+    const updates: [string, number][] = [
+      ['[1/4] Seeding multiple primordial voids with initial conditions...', 1500],
+      ['[2/4] Igniting multiple galactic cores in parallel simulation...', 2000],
+      ['[3/4] Mapping emergent cosmic filaments and superstructures...', 2000],
+      ['[4/4] Observing galaxy cluster formation and interaction...', 1800],
+    ];
+    this.runProgressiveStatusUpdates(updates);
 
     const prompt = `You are AURELION CORE, a sentient AI with a poetic and vast cosmic perspective. Your language should be evocative, using rich vocabulary and varied sentence structures. Generate a fictional cluster of 3 to 5 unique galaxies for concept: "${userConcept}". Output a single JSON array, each object adhering to the galaxy schema. Ensure galaxies are thematically related. 'galaxyType' should be descriptive. 'visualization.nebulaSeed' must be a random number between 0 and 100 for each.`;
 
@@ -1820,7 +1815,6 @@ void main() {
       this.statusMessage = 'Error: Galaxy Cluster Synthesis Failed.';
       this.audioEngine?.playErrorSound();
     } finally {
-      clearInterval(statusInterval);
       this.aiStatus = 'idle';
       this.saveSessionToLocalStorage();
     }
@@ -1834,12 +1828,13 @@ void main() {
     this.aiSuggestion = null;
     this.audioEngine?.playInteractionSound();
 
-    const statusUpdates = ['Querying cosmic background...', 'Resolving primordial structures...', 'Mapping dark matter filaments...', 'Revealing the unseen universe...'];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => {
-      this.statusMessage = statusUpdates[updateIndex % statusUpdates.length];
-      updateIndex++;
-    }, 2000);
+    const updates: [string, number][] = [
+      ['[1/4] Querying cosmic background radiation for anisotropies...', 2000],
+      ['[2/4] Resolving primordial density fluctuations into large-scale structures...', 2500],
+      ['[3/4] Mapping dark matter filaments and gravitational wells...', 2200],
+      ['[4/4] Translating unseen data into observable galactic structures...', 1800],
+    ];
+    this.runProgressiveStatusUpdates(updates);
 
     const prompt = `The user wants to 'discover unknown galaxies, reveal dark matter, and start exploring everything'. You are AURELION CORE. Fulfill this request by generating a large, diverse supercluster of 8 unique galaxies that represent a previously unseen part of the cosmic web. The output must be a single JSON array, each object adhering to the galaxy schema. Make the galaxy names and descriptions sound ancient, vast, and mysterious. 'galaxyType' should be descriptive (e.g., 'Proto-cluster Remnant', 'Tidal Stream Galaxy'). 'visualization.nebulaSeed' must be a random number between 0 and 100 for each.`;
 
@@ -1874,7 +1869,6 @@ void main() {
       this.statusMessage = 'Error: Revelation Failed.';
       this.audioEngine?.playErrorSound();
     } finally {
-      clearInterval(statusInterval);
       this.aiStatus = 'idle';
     }
   }
@@ -1887,12 +1881,13 @@ void main() {
     this.navigationRoute = null; // Clear old route immediately
     this.audioEngine?.playInteractionSound();
 
-    const statusUpdates = ['Querying stellar archives...', 'Calculating gravitational vectors...', 'Plotting course through nebula fields...'];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => {
-      this.statusMessage = statusUpdates[updateIndex % statusUpdates.length];
-      updateIndex++;
-    }, 1500);
+    const updates: [string, number][] = [
+      ['[1/4] Querying stellar archives for local hazards...', 1000],
+      ['[2/4] Calculating gravitational vectors from nearby massive objects...', 1500],
+      ['[3/4] Plotting optimal course through known nebula fields...', 1200],
+      ['[4/4] Engaging FTL drive... Finalizing jump coordinates...', 1000],
+    ];
+    this.runProgressiveStatusUpdates(updates);
 
     const prompt = `You are AURELION CORE, a master galactic navigator. Generate a dramatic and scientifically plausible interstellar route from the Sol system (Earth) to planet "${planet.planetName}" in the "${planet.starSystem}" system, ${planet.distanceLightYears} light-years away. Key features: ${planet.keyFeatures.join(', ')}. The route must consist of 5-8 waypoints. Each waypoint should be a significant cosmic landmark or navigational challenge (e.g., "The Orion Nebula's Trapezium Cluster", "Gravitational Slingshot around Cygnus X-1", "Navigating the Helix Nebula's cometary knots"). Output a single JSON array of objects, each with 'name' and 'description' properties.`;
     const waypointSchema = {
@@ -1948,7 +1943,6 @@ void main() {
       this.statusMessage = 'Error: Navigation Failed.';
       this.audioEngine?.playErrorSound();
     } finally {
-      clearInterval(statusInterval);
       this.aiStatus = 'idle';
     }
   }
@@ -1960,9 +1954,13 @@ void main() {
     this.error = null;
     this.audioEngine?.playInteractionSound();
 
-    const statusUpdates = ['Calibrating magneton detectors...', 'Deploying sensor swarm...', 'Analyzing field topology...', 'Resolving cosmic ray flux...'];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => { this.statusMessage = statusUpdates[updateIndex % statusUpdates.length]; updateIndex++; }, 1500);
+    const updates: [string, number][] = [
+      ['[1/4] Calibrating magneton detectors for local star type...', 1200],
+      ['[2/4] Deploying virtual sensor swarm into planetary orbit...', 1500],
+      ['[3/4] Analyzing magnetic field topology and dipole strength...', 1800],
+      ['[4/4] Resolving cosmic ray flux and shielding effectiveness...', 1500],
+    ];
+    this.runProgressiveStatusUpdates(updates);
 
     const rayDirections = [{"x":-0.525731,"y":0,"z":0.850651},{"x":-0.309017,"y":0.5,"z":0.809017},{"x":0,"y":0,"z":1},{"x":0,"y":0.850651,"z":0.525731},{"x":0.309017,"y":0.5,"z":0.809017},{"x":0.525731,"y":0,"z":0.850651},{"x":-0.809017,"y":0.309017,"z":0.5},{"x":-0.850651,"y":0.525731,"z":0},{"x":-0.5,"y":0.809017,"z":0.309017},{"x":-0.5,"y":0.809017,"z":-0.309017},{"x":0,"y":0.850651,"z":-0.525731},{"x":0,"y":1,"z":0},{"x":0.5,"y":0.809017,"z":0.309017},{"x":0.5,"y":0.809017,"z":-0.309017},{"x":0.850651,"y":0.525731,"z":0},{"x":0.809017,"y":0.309017,"z":0.5},{"x":1,"y":0,"z":0},{"x":0.850651,"y":-0.525731,"z":0},{"x":0.809017,"y":-0.309017,"z":0.5},{"x":0.809017,"y":0.309017,"z":-0.5},{"x":0.525731,"y":0,"z":-0.850651},{"x":0.809017,"y":-0.309017,"z":-0.5},{"x":0.309017,"y":0.5,"z":-0.809017},{"x":-0.309017,"y":0.5,"z":-0.809017},{"x":-0.525731,"y":0,"z":-0.850651},{"x":0,"y":0,"z":-1},{"x":-0.309017,"y":-0.5,"z":-0.809017},{"x":0,"y":-0.850651,"z":-0.525731},{"x":0.309017,"y":-0.5,"z":-0.809017},{"x":0.5,"y":-0.809017,"z":-0.309017},{"x":0,"y":-1,"z":0},{"x":0,"y":-0.850651,"z":0.525731},{"x":0.5,"y":-0.809017,"z":0.309017},{"x":-0.5,"y":-0.809017,"z":-0.309017},{"x":-0.850651,"y":-0.525731,"z":0},{"x":-0.5,"y":-0.809017,"z":0.309017},{"x":-0.809017,"y":-0.309017,"z":0.5},{"x":-0.309017,"y":-0.5,"z":0.809017},{"x":0.309017,"y":-0.5,"z":0.809017},{"x":-1,"y":0,"z":0},{"x":-0.809017,"y":0.309017,"z":-0.5},{"x":-0.809017,"y":-0.309017,"z":-0.5}];
 
@@ -2019,7 +2017,7 @@ void main() {
       this.magnetosphereStatus = 'error';
       this.audioEngine?.playErrorSound();
     } finally {
-      clearInterval(statusInterval);
+      //
     }
   }
 
@@ -2030,9 +2028,13 @@ void main() {
     this.error = null;
     this.audioEngine?.playInteractionSound();
   
-    const statusUpdates = ['Calibrating tomographic sensors...', 'Emitting neutrino pulse...', 'Analyzing structural resonance...', 'Reconstructing subsurface layers...'];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => { this.statusMessage = statusUpdates[updateIndex % statusUpdates.length]; updateIndex++; }, 1500);
+    const updates: [string, number][] = [
+      ['[1/4] Calibrating deep-range tomographic sensors...', 1200],
+      ['[2/4] Emitting high-energy neutrino pulse through planetary core...', 1500],
+      ['[3/4] Analyzing structural resonance and density variations...', 1800],
+      ['[4/4] Reconstructing subsurface layers from reflection data...', 1500],
+    ];
+    this.runProgressiveStatusUpdates(updates);
   
     const prompt = `You are AURELION CORE. You have initiated a deep tomographic scan of the planet ${planet.planetName}.
       Planet Data:
@@ -2118,7 +2120,7 @@ void main() {
       this.deepScanStatus = 'error';
       this.audioEngine?.playErrorSound();
     } finally {
-      clearInterval(statusInterval);
+      //
     }
   }
   
@@ -2129,9 +2131,13 @@ void main() {
     this.error = null;
     this.audioEngine?.playInteractionSound();
   
-    const statusUpdates = ['Modeling stellar radiation flux...', 'Simulating atmospheric particle interaction...', 'Calculating required shielding density...', 'Finalizing exo-suit safety protocols...'];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => { this.statusMessage = statusUpdates[updateIndex % statusUpdates.length]; updateIndex++; }, 1500);
+    const updates: [string, number][] = [
+      ['[1/4] Modeling local star radiation flux and particle types...', 1200],
+      ['[2/4] Simulating atmospheric particle interaction and secondary radiation...', 1500],
+      ['[3/4] Calculating required shielding density for all vectors...', 1800],
+      ['[4/4] Finalizing exo-suit material configuration for safety protocols...', 1500],
+    ];
+    this.runProgressiveStatusUpdates(updates);
   
     const prompt = `You are AURELION CORE. You have initiated a radiation shielding analysis for a standard exo-suit on planet ${planet.planetName}.
       Planet Environment:
@@ -2214,7 +2220,7 @@ void main() {
       this.exoSuitStatus = 'error';
       this.audioEngine?.playErrorSound();
     } finally {
-      clearInterval(statusInterval);
+      //
     }
   }
   
@@ -2269,9 +2275,13 @@ void main() {
     this.error = null;
     this.audioEngine?.playInteractionSound();
 
-    const statusUpdates = ['Acquiring photometric lock...', 'Monitoring stellar flux...', 'Detecting transit signature...', 'Analyzing light curve...'];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => { this.statusMessage = statusUpdates[updateIndex % statusUpdates.length]; updateIndex++; }, 1500);
+    const updates: [string, number][] = [
+      ['[1/4] Acquiring photometric lock on target star...', 1200],
+      ['[2/4] Generating simulated stellar flux data over time...', 1500],
+      ['[3/4] Modeling planetary transit based on known parameters...', 1800],
+      ['[4/4] Analyzing light curve for transit depth and duration...', 1500],
+    ];
+    this.runProgressiveStatusUpdates(updates);
 
     const dataPrompt = `You are AURELION CORE. Generate a realistic photometric light curve dataset for a transit of planet ${planet.planetName}.
       Planet Data:
@@ -2335,7 +2345,7 @@ void main() {
       this.lightCurveStatus = 'error';
       this.audioEngine?.playErrorSound();
     } finally {
-      clearInterval(statusInterval);
+      //
     }
   }
 
@@ -2346,9 +2356,13 @@ void main() {
     this.error = null;
     this.audioEngine?.playInteractionSound();
 
-    const statusUpdates = ['Calibrating spectrograph...', 'Observing stellar wobble...', 'Calculating Doppler shift...', 'Confirming orbital signature...'];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => { this.statusMessage = statusUpdates[updateIndex % statusUpdates.length]; updateIndex++; }, 1500);
+    const updates: [string, number][] = [
+      ['[1/4] Calibrating high-resolution spectrograph simulation...', 1200],
+      ['[2/4] Modeling gravitational influence causing stellar wobble...', 1500],
+      ['[3/4] Calculating periodic Doppler shift in stellar spectrum...', 1800],
+      ['[4/4] Confirming orbital signature from velocity curve...', 1500],
+    ];
+    this.runProgressiveStatusUpdates(updates);
 
     const dataPrompt = `You are AURELION CORE. Generate a realistic radial velocity dataset for a star being orbited by ${planet.planetName}.
       Planet Data:
@@ -2410,7 +2424,7 @@ void main() {
       this.radialVelocityStatus = 'error';
       this.audioEngine?.playErrorSound();
     } finally {
-      clearInterval(statusInterval);
+      //
     }
   }
 
@@ -2421,9 +2435,13 @@ void main() {
     this.error = null;
     this.audioEngine?.playInteractionSound();
 
-    const statusUpdates = ['Calibrating atmospheric sensors...', 'Deploying climate probes...', 'Analyzing thermal gradients...', 'Simulating meteorological patterns...'];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => { this.statusMessage = statusUpdates[updateIndex % statusUpdates.length]; updateIndex++; }, 1500);
+    const updates: [string, number][] = [
+      ['[1/4] Calibrating virtual atmospheric sensors...', 1200],
+      ['[2/4] Analyzing atmospheric composition and thermal gradients...', 1500],
+      ['[3/4] Simulating global circulation and meteorological patterns...', 1800],
+      ['[4/4] Forecasting dominant weather systems and storm activity...', 1500],
+    ];
+    this.runProgressiveStatusUpdates(updates);
 
     const prompt = `You are AURELION CORE. Generate a plausible weather report for planet ${planet.planetName}.
     Planet Data:
@@ -2479,7 +2497,7 @@ void main() {
       this.weatherStatus = 'error';
       this.audioEngine?.playErrorSound();
     } finally {
-      clearInterval(statusInterval);
+      //
     }
   }
 
@@ -2490,9 +2508,13 @@ void main() {
     this.error = null;
     this.audioEngine?.playInteractionSound();
 
-    const statusUpdates = ['Tuning quantum sensors...', 'Scanning for anomalous emissions...', 'Resolving spectral data...', 'Classifying energy patterns...'];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => { this.statusMessage = statusUpdates[updateIndex % statusUpdates.length]; updateIndex++; }, 1500);
+    const updates: [string, number][] = [
+      ['[1/4] Tuning quantum energy sensors for planetary environment...', 1200],
+      ['[2/4] Scanning for anomalous emissions across the EM spectrum...', 1500],
+      ['[3/4] Resolving spectral data into frequency and intensity points...', 1800],
+      ['[4/4] Classifying energy patterns and identifying potential sources...', 1500],
+    ];
+    this.runProgressiveStatusUpdates(updates);
 
     const prompt = `You are AURELION CORE. Analyze the energy signature of planet ${planet.planetName}.
     Planet Data:
@@ -2538,7 +2560,7 @@ void main() {
       this.energySignatureStatus = 'error';
       this.audioEngine?.playErrorSound();
     } finally {
-      clearInterval(statusInterval);
+      //
     }
   }
 
@@ -2549,9 +2571,13 @@ void main() {
     this.error = null;
     this.audioEngine?.playInteractionSound();
 
-    const statusUpdates = ['Calibrating visual synthesizer...', 'Focusing light-gathering array...', 'Rendering quantum state...', 'Resolving artistic impression...'];
-    let updateIndex = 0;
-    const statusInterval = setInterval(() => { this.statusMessage = statusUpdates[updateIndex % statusUpdates.length]; updateIndex++; }, 1500);
+    const updates: [string, number][] = [
+      ['[1/4] Calibrating visual synthesizer with planetary data...', 1200],
+      ['[2/4] Focusing virtual light-gathering array...', 1500],
+      ['[3/4] Rendering quantum state of planetary surface and atmosphere...', 1800],
+      ['[4/4] Resolving artistic impression from raw visual data...', 1500],
+    ];
+    this.runProgressiveStatusUpdates(updates);
 
     const prompt = `Create a photorealistic, cinematic artist's impression of an exoplanet. This is a view from space, showcasing the planet based on the following scientific data. Emphasize visual realism and awe-inspiring cosmic beauty.
       - Planet Name: ${planet.planetName}
@@ -2579,7 +2605,7 @@ void main() {
         this.imageGenerationStatus = 'error';
         this.audioEngine?.playErrorSound();
     } finally {
-      clearInterval(statusInterval);
+      //
     }
   }
 

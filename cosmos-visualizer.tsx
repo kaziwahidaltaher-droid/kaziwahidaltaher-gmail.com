@@ -613,7 +613,13 @@ export class CosmosVisualizer extends LitElement {
         this.scene.remove(this.routeLine);
         if (this.routeLine instanceof THREE.Points || this.routeLine instanceof THREE.Mesh) {
             (this.routeLine.geometry as THREE.BufferGeometry).dispose();
-            ((this.routeLine.material as THREE.Material) || (this.routeLine.material as THREE.Material[])).dispose();
+            // FIX: Properly dispose of material(s), handling both single material and array of materials.
+            const material = this.routeLine.material;
+            if (Array.isArray(material)) {
+                material.forEach(m => m.dispose());
+            } else {
+                material.dispose();
+            }
         }
         this.routeLine = null;
     }
