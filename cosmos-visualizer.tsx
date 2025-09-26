@@ -510,15 +510,19 @@ export class CosmosVisualizer extends LitElement {
     const points = [];
     for (let i = 0; i < this.galaxies.length; i++) {
         for (let j = i + 1; j < this.galaxies.length; j++) {
-            const dist = this.galaxyMarkers.get(this.galaxies[i].id)!.position.distanceTo(
-                this.galaxyMarkers.get(this.galaxies[j].id)!.position
-            );
-            if (dist < 450) {
-                points.push(this.galaxyMarkers.get(this.galaxies[i].id)!.position);
-                points.push(this.galaxyMarkers.get(this.galaxies[j].id)!.position);
+            const marker1 = this.galaxyMarkers.get(this.galaxies[i].id);
+            const marker2 = this.galaxyMarkers.get(this.galaxies[j].id);
+            if(marker1 && marker2) {
+                const dist = marker1.position.distanceTo(marker2.position);
+                if (dist < 450) {
+                    points.push(marker1.position);
+                    points.push(marker2.position);
+                }
             }
         }
     }
+    if(points.length === 0) return;
+
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     const material = new THREE.LineBasicMaterial({
         color: 0x4a3b8e,
