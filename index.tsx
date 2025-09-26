@@ -59,6 +59,16 @@ import {
   Type,
   Chat,
 } from '@google/genai';
+import {
+  Chart,
+  BarController,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
 import {LitElement, html, nothing} from 'lit';
 import {customElement, state, query} from 'lit/decorators.js';
 import {classMap} from 'lit/directives/class-map.js';
@@ -79,6 +89,17 @@ import './shader-lab-visualizer';
 import {SolarSystem} from './solar-system-data';
 import { LightCurveAnalysis } from './light-curve-visualizer';
 import { VolumeMeter } from './volume-meter';
+
+Chart.register(
+  BarController,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+);
+
 
 // --- DATA INTERFACES ---
 
@@ -955,7 +976,8 @@ export class AxeeInterface extends LitElement {
   @state() private isConversationModeActive = false;
   @state() private isUnseenRevealed = false;
   @state() private isShaderLabOpen = false;
-  @state() private isNasaEyesOpen = false;
+  @state() private isSolArchiveOpen = false;
+  @state() private solArchiveTargetUrl = '';
   @state() private theme: 'dark' | 'light' = 'dark';
   @state() private databaseSearchTerm = '';
   @state() private databaseSort: {key: keyof PlanetData | 'galaxyName', order: 'asc' | 'desc'} = { key: 'planetName', order: 'asc' };
@@ -1072,6 +1094,7 @@ void main() {
   
   // --- PRIVATE VARS ---
   private ai!: GoogleGenAI;
+  private metricsChart: Chart | null = null;
 
   private planetSchema = {
     type: Type.OBJECT,
@@ -1327,6 +1350,13 @@ void main() {
     ) {
       this.saveSessionToLocalStorage();
     }
+    if (changedProperties.has('isDashboardOpen')) {
+        if (this.isDashboardOpen) {
+            requestAnimationFrame(() => this.initMetricsChart());
+        } else {
+            this.destroyMetricsChart();
+        }
+    }
   }
 
   private checkForOnboarding() {
@@ -1536,13 +1566,6 @@ void main() {
   private async loadSolSystem() {
     const galaxy = this.activeGalaxy;
     if (!galaxy || this.aiStatus !== 'idle') return;
-
-    const isLoaded = galaxy.planets.some((p) => p.starSystem === 'Sol');
-    if (isLoaded) {
-      this.statusMessage = 'Sol system already loaded in this galaxy.';
-      this.audioEngine?.playErrorSound();
-      return;
-    }
 
     this.aiStatus = 'thinking';
     this.statusMessage = 'Accessing local stellar archives...';
@@ -3294,6 +3317,34 @@ void main() {
     }
   }
 
+  private async _handleOpenSolArchives() {
+      if (!this.activeGalaxy) {
+          this.error = "Select a galaxy to load the archives into.";
+          this.audioEngine?.playErrorSound();
+          return;
+      }
+      this.audioEngine?.playInteractionSound();
+
+      const isLoaded = this.activeGalaxy.planets.some((p) => p.celestial_body_id.startsWith('sol-'));
+
+      if (!isLoaded) {
+          await this.loadSolSystem();
+      }
+
+      const wasLoadingSuccessful = this.activeGalaxy.planets.some((p) => p.celestial_body_id.startsWith('sol-'));
+      if (wasLoadingSuccessful) {
+          this.solArchiveTargetUrl = 'https://eyes.nasa.gov/apps/solar-system/#/earth';
+          this.isSolArchiveOpen = true;
+      }
+  }
+
+  private _handleSelectSolArchivePlanet(planet: PlanetData) {
+      this.audioEngine?.playInteractionSound();
+      const planetName = planet.planetName.toLowerCase();
+      this.solArchiveTargetUrl = `https://eyes.nasa.gov/apps/solar-system/#/${planetName}`;
+  }
+
+
   // --- RENDER METHODS ---
 
   render() {
@@ -3314,7 +3365,7 @@ void main() {
       ${this.isDatabaseOpen ? this.renderDatabaseOverlay() : nothing}
       ${this.isImportModalOpen ? this.renderImportModal() : nothing}
       ${this.isShaderLabOpen ? this.renderShaderLabOverlay() : nothing}
-      ${this.isNasaEyesOpen ? this.renderNasaEyesOverlay() : nothing}
+      ${this.isSolArchiveOpen ? this.renderSolArchiveOverlay() : nothing}
       ${this.isTutorialActive ? html`
         <tutorial-overlay
           .step=${this.tutorialStep}
@@ -3418,13 +3469,86 @@ void main() {
     `;
   }
 
+  private destroyMetricsChart() {
+    this.metricsChart?.destroy();
+    this.metricsChart = null;
+  }
+
+  private initMetricsChart() {
+    this.destroyMetricsChart();
+    // FIX: Cast `this` to `LitElement` to access `shadowRoot`.
+    const canvas = (this as LitElement).shadowRoot?.querySelector('#metrics-chart') as HTMLCanvasElement;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const { metrics } = MOCK_MODEL_PERFORMANCE;
+    const labels = ['confirmed', 'candidate', 'hypothetical'];
+    const data = {
+        labels: labels.map(l => l.charAt(0).toUpperCase() + l.slice(1)),
+        datasets: [
+            {
+                label: 'Precision',
+                data: labels.map(l => metrics[l as keyof typeof metrics].precision),
+                backgroundColor: 'rgba(97, 250, 255, 0.5)',
+                borderColor: 'rgba(97, 250, 255, 1)',
+                borderWidth: 1
+            },
+            {
+                label: 'Recall',
+                data: labels.map(l => metrics[l as keyof typeof metrics].recall),
+                backgroundColor: 'rgba(255, 194, 97, 0.5)',
+                borderColor: 'rgba(255, 194, 97, 1)',
+                borderWidth: 1
+            },
+            {
+                label: 'F1-Score',
+                data: labels.map(l => metrics[l as keyof typeof metrics].f1Score),
+                backgroundColor: 'rgba(255, 97, 195, 0.5)',
+                borderColor: 'rgba(255, 97, 195, 1)',
+                borderWidth: 1
+            }
+        ]
+    };
+    
+    this.metricsChart = new Chart(ctx, {
+        type: 'bar',
+        data: data,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    // FIX: Cast `this` to `Element` for `getComputedStyle`.
+                    labels: { color: getComputedStyle(this as unknown as Element).getPropertyValue('--text-color-dark') }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 1,
+                    // FIX: Cast `this` to `Element` for `getComputedStyle`.
+                    grid: { color: getComputedStyle(this as unknown as Element).getPropertyValue('--border-color') },
+                    // FIX: Cast `this` to `Element` for `getComputedStyle`.
+                    ticks: { color: getComputedStyle(this as unknown as Element).getPropertyValue('--text-color-dark') }
+                },
+                x: {
+                    grid: { display: false },
+                    // FIX: Cast `this` to `Element` for `getComputedStyle`.
+                    ticks: { color: getComputedStyle(this as unknown as Element).getPropertyValue('--text-color-dark') }
+                }
+            }
+        }
+    });
+  }
+
   private renderAccuracyDashboard() {
-    const {confusionMatrix, metrics} = MOCK_MODEL_PERFORMANCE;
+    const {confusionMatrix} = MOCK_MODEL_PERFORMANCE;
     const labels = ['Confirmed', 'Candidate', 'Hypothetical'];
     const total = confusionMatrix.flat().reduce((a, b) => a + b, 0);
     const correct = confusionMatrix[0][0] + confusionMatrix[1][1] + confusionMatrix[2][2];
     const accuracy = total > 0 ? correct / total : 0;
-    return html`<div class="fixed inset-0 bg-bg/80 backdrop-blur-lg z-[100] flex items-center justify-center pointer-events-auto animate-fade-in"><div class="w-11/12 max-w-4xl bg-panel-bg border border-border shadow-lg drop-shadow-glow text-text p-8 relative flex flex-col">${this.recalibrationStatus === 'running' ? html`<div class="absolute inset-0 bg-bg/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center text-center animate-fade-in"><h4 class="font-normal tracking-[0.2em] uppercase text-accent mb-6 text-base">RECALIBRATING MODEL CORE...</h4><div class="border-4 border-border border-t-accent rounded-full w-10 h-10 animate-spin"></div></div>` : nothing}<div class="flex justify-between items-center border-b border-border pb-4 mb-6 shrink-0"><h2 class="m-0 text-2xl font-normal tracking-[0.2em] text-accent flex items-center">AXEE Model Performance <span class="group relative inline-flex items-center justify-center w-4 h-4 rounded-full border border-text-dark text-text-dark text-xs font-bold ml-2 cursor-help">?<span class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-72 bg-bg border border-border p-4 rounded text-sm font-light leading-relaxed text-left opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-50 pointer-events-none normal-case tracking-normal">This dashboard shows the performance of the local machine learning model used for the AXEE Predictor and Batch Analysis features. You can tune its hyperparameters to see how they might affect performance.</span></span></h2><button @click=${() => (this.isDashboardOpen = false)} ?disabled=${this.recalibrationStatus === 'running'} class="bg-none border-none text-text text-4xl cursor-pointer leading-none opacity-70 transition-opacity hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed">&times;</button></div><div class="mb-6 bg-black/20 border border-border p-4 text-center"><h4 class="m-0 mb-2 font-normal tracking-widest uppercase text-base opacity-80">Overall Accuracy</h4><p class="m-0 text-5xl font-bold text-success drop-shadow-[0_0_10px_var(--success-color)]">${(accuracy * 100).toFixed(2)}%</p></div><div class="flex flex-col gap-8"><div class="flex lg:flex-row flex-col gap-8"><div class="flex-1"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Confusion Matrix</h4><div class="grid grid-cols-[1fr_2fr_2fr_2fr] grid-rows-[1fr_2fr_2fr_2fr] gap-1 text-xs"><div class="bg-transparent font-bold tracking-wider text-text-dark" style="writing-mode: vertical-rl; text-orientation: mixed;">Actual</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Conf.</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Cand.</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Hypo.</div>${confusionMatrix.map((row, rowIndex) => html`<div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-right">${labels[rowIndex]}</div>${row.map((value, colIndex) => html`<div class="bg-black/20 dark:bg-white/5 p-2 flex flex-col items-center justify-center text-center ${rowIndex === colIndex ? 'bg-success/10 border border-success' : 'bg-error/5 border border-error/30'}"><span class="text-2xl font-bold ${rowIndex === colIndex ? 'text-success' : ''}">${value.toLocaleString()}</span><span class="text-xs opacity-60">${((value / total) * 100).toFixed(2)}%</span></div>`)}`)}</div></div><div class="flex-1"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Classification Metrics</h4><table class="w-full text-left"><thead><tr><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">Class</th><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">Precision</th><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">Recall</th><th class="p-2 border-b border-border font-normal uppercase tracking-widest text-xs opacity-80">F1-Score</th></tr></thead><tbody><tr><td class="p-2 border-b border-border text-lg">Confirmed</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.confirmed.precision.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.confirmed.recall.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.confirmed.f1Score.toFixed(3)}</td></tr><tr><td class="p-2 border-b border-border text-lg">Candidate</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.candidate.precision.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.candidate.recall.toFixed(3)}</td><td class="p-2 border-b border-border text-lg font-mono">${metrics.candidate.f1Score.toFixed(3)}</td></tr><tr><td class="p-2 text-lg">Hypothetical</td><td class="p-2 text-lg font-mono">${metrics.hypothetical.precision.toFixed(3)}</td><td class="p-2 text-lg font-mono">${metrics.hypothetical.recall.toFixed(3)}</td><td class="p-2 text-lg font-mono">${metrics.hypothetical.f1Score.toFixed(3)}</td></tr></tbody></table></div></div><div class="mt-4"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Hyperparameter Tuning</h4><div class="flex md:flex-row flex-col gap-8 mb-6"><div class="flex-1"><label for="n_estimators" class="flex justify-between text-sm mb-2"><span>N Estimators</span><span class="font-bold text-accent">${this.hyperparameters.n_estimators}</span></label><input class="w-full" id="n_estimators" type="range" min="50" max="500" step="10" .value=${String(this.hyperparameters.n_estimators)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'n_estimators')}/></div><div class="flex-1"><label for="max_depth" class="flex justify-between text-sm mb-2"><span>Max Depth</span><span class="font-bold text-accent">${this.hyperparameters.max_depth}</span></label><input class="w-full" id="max_depth" type="range" min="2" max="15" step="1" .value=${String(this.hyperparameters.max_depth)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'max_depth')}/></div><div class="flex-1"><label for="learning_rate" class="flex justify-between text-sm mb-2"><span>Learning Rate</span><span class="font-bold text-accent">${this.hyperparameters.learning_rate.toFixed(2,)}</span></label><input class="w-full" id="learning_rate" type="range" min="0.01" max="0.5" step="0.01" .value=${String(this.hyperparameters.learning_rate)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'learning_rate')}/></div></div><button class="font-sans bg-none border border-accent text-accent px-6 py-3 text-base tracking-widest cursor-pointer w-full font-bold hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${this._handleRecalibrate} ?disabled=${this.recalibrationStatus === 'running'}>${this.recalibrationStatus === 'running' ? 'RECALIBRATING...' : 'RE-CALIBRATE MODEL'}</button></div></div></div></div>`;
+    return html`<div class="fixed inset-0 bg-bg/80 backdrop-blur-lg z-[100] flex items-center justify-center pointer-events-auto animate-fade-in"><div class="w-11/12 max-w-4xl bg-panel-bg border border-border shadow-lg drop-shadow-glow text-text p-8 relative flex flex-col">${this.recalibrationStatus === 'running' ? html`<div class="absolute inset-0 bg-bg/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center text-center animate-fade-in"><h4 class="font-normal tracking-[0.2em] uppercase text-accent mb-6 text-base">RECALIBRATING MODEL CORE...</h4><div class="border-4 border-border border-t-accent rounded-full w-10 h-10 animate-spin"></div></div>` : nothing}<div class="flex justify-between items-center border-b border-border pb-4 mb-6 shrink-0"><h2 class="m-0 text-2xl font-normal tracking-[0.2em] text-accent flex items-center">AXEE Model Performance <span class="group relative inline-flex items-center justify-center w-4 h-4 rounded-full border border-text-dark text-text-dark text-xs font-bold ml-2 cursor-help">?<span class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-72 bg-bg border border-border p-4 rounded text-sm font-light leading-relaxed text-left opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-50 pointer-events-none normal-case tracking-normal">This dashboard shows the performance of the local machine learning model used for the AXEE Predictor and Batch Analysis features. You can tune its hyperparameters to see how they might affect performance.</span></span></h2><button @click=${() => (this.isDashboardOpen = false)} ?disabled=${this.recalibrationStatus === 'running'} class="bg-none border-none text-text text-4xl cursor-pointer leading-none opacity-70 transition-opacity hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed">&times;</button></div><div class="mb-6 bg-black/20 border border-border p-4 text-center"><h4 class="m-0 mb-2 font-normal tracking-widest uppercase text-base opacity-80">Overall Accuracy</h4><p class="m-0 text-5xl font-bold text-success drop-shadow-[0_0_10px_var(--success-color)]">${(accuracy * 100).toFixed(2)}%</p></div><div class="flex flex-col gap-8"><div class="flex lg:flex-row flex-col gap-8"><div class="flex-1"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Confusion Matrix</h4><div class="grid grid-cols-[1fr_2fr_2fr_2fr] grid-rows-[1fr_2fr_2fr_2fr] gap-1 text-xs"><div class="bg-transparent font-bold tracking-wider text-text-dark" style="writing-mode: vertical-rl; text-orientation: mixed;">Actual</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Conf.</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Cand.</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Hypo.</div>${confusionMatrix.map((row, rowIndex) => html`<div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-right">${labels[rowIndex]}</div>${row.map((value, colIndex) => html`<div class="bg-black/20 dark:bg-white/5 p-2 flex flex-col items-center justify-center text-center ${rowIndex === colIndex ? 'bg-success/10 border border-success' : 'bg-error/5 border border-error/30'}"><span class="text-2xl font-bold ${rowIndex === colIndex ? 'text-success' : ''}">${value.toLocaleString()}</span><span class="text-xs opacity-60">${((value / total) * 100).toFixed(2)}%</span></div>`)}`)}</div></div><div class="flex-1"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Classification Metrics</h4><div class="h-64 relative"><canvas id="metrics-chart"></canvas></div></div></div><div class="mt-4"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Hyperparameter Tuning</h4><div class="flex md:flex-row flex-col gap-8 mb-6"><div class="flex-1"><label for="n_estimators" class="flex justify-between text-sm mb-2"><span>N Estimators</span><span class="font-bold text-accent">${this.hyperparameters.n_estimators}</span></label><input class="w-full" id="n_estimators" type="range" min="50" max="500" step="10" .value=${String(this.hyperparameters.n_estimators)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'n_estimators')}/></div><div class="flex-1"><label for="max_depth" class="flex justify-between text-sm mb-2"><span>Max Depth</span><span class="font-bold text-accent">${this.hyperparameters.max_depth}</span></label><input class="w-full" id="max_depth" type="range" min="2" max="15" step="1" .value=${String(this.hyperparameters.max_depth)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'max_depth')}/></div><div class="flex-1"><label for="learning_rate" class="flex justify-between text-sm mb-2"><span>Learning Rate</span><span class="font-bold text-accent">${this.hyperparameters.learning_rate.toFixed(2,)}</span></label><input class="w-full" id="learning_rate" type="range" min="0.01" max="0.5" step="0.01" .value=${String(this.hyperparameters.learning_rate)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'learning_rate')}/></div></div><button class="font-sans bg-none border border-accent text-accent px-6 py-3 text-base tracking-widest cursor-pointer w-full font-bold hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${this._handleRecalibrate} ?disabled=${this.recalibrationStatus === 'running'}>${this.recalibrationStatus === 'running' ? 'RECALIBRATING...' : 'RE-CALIBRATE MODEL'}</button></div></div></div>`;
   }
 
   private renderDatabaseOverlay() {
@@ -3581,17 +3705,49 @@ void main() {
     `;
   }
 
-  private renderNasaEyesOverlay() {
+  private renderSolArchiveOverlay() {
+    const solPlanetOrder = ['mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'];
+    const solPlanets = this.activeGalaxy?.planets
+        .filter(p => p.celestial_body_id.startsWith('sol-'))
+        .sort((a, b) => {
+            const nameA = a.planetName.toLowerCase();
+            const nameB = b.planetName.toLowerCase();
+            return solPlanetOrder.indexOf(nameA) - solPlanetOrder.indexOf(nameB);
+        }) || [];
+    
+    const selectedPlanetName = this.solArchiveTargetUrl.split('/').pop()?.split('?')[0];
+
     return html`
-      <div class="fixed inset-0 z-[100] bg-bg flex flex-col animate-fade-in">
-        <div class="p-4 flex justify-between items-center border-b border-border shrink-0">
-          <h3 class="m-0 font-normal tracking-[0.2em] uppercase text-accent">NASA's Eyes on the Solar System</h3>
-          <button @click=${() => this.isNasaEyesOpen = false} class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest cursor-pointer hover:bg-glow hover:text-bg">CLOSE</button>
+        <div class="fixed inset-0 bg-bg/80 backdrop-blur-lg z-[100] flex items-center justify-center pointer-events-auto animate-fade-in">
+            <div class="w-11/12 max-w-7xl h-[90vh] bg-panel-bg border border-border shadow-lg drop-shadow-glow text-text p-8 flex flex-col">
+                <div class="flex justify-between items-center border-b border-border pb-4 mb-4 shrink-0">
+                    <h2 class="m-0 text-2xl font-normal tracking-[0.2em] text-accent">ARCHIVES: SOL SYSTEM</h2>
+                    <button @click=${() => this.isSolArchiveOpen = false} class="bg-none border-none text-text text-4xl cursor-pointer leading-none opacity-70 transition-opacity hover:opacity-100">&times;</button>
+                </div>
+                <div class="flex-grow flex gap-6 min-h-0">
+                    <div class="w-1/4 shrink-0 flex flex-col">
+                        <h3 class="text-base font-normal tracking-[0.2em] uppercase text-accent border-b border-border pb-2 mb-2">CELESTIAL BODIES</h3>
+                        <div class="overflow-y-auto">
+                            <ul class="list-none p-0 m-0">
+                                ${solPlanets.map(p => html`
+                                    <li @click=${() => this._handleSelectSolArchivePlanet(p)} 
+                                        class="flex items-center gap-4 p-3 border-b border-border/50 cursor-pointer transition-colors hover:bg-glow group ${selectedPlanetName === p.planetName.toLowerCase() ? 'bg-glow' : ''}">
+                                        <div class="w-8 h-8 rounded-full shrink-0" style="background: radial-gradient(circle at 30% 30%, ${p.visualization.color2}, ${p.visualization.color1})"></div>
+                                        <div>
+                                            <span class="block text-lg font-normal text-text group-hover:text-bg ${selectedPlanetName === p.planetName.toLowerCase() ? 'text-bg' : ''}">${p.planetName}</span>
+                                            <span class="text-xs opacity-70 group-hover:text-bg ${selectedPlanetName === p.planetName.toLowerCase() ? 'text-bg' : ''}">${p.planetType}</span>
+                                        </div>
+                                    </li>
+                                `)}
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="flex-grow min-w-0">
+                         <iframe src=${this.solArchiveTargetUrl} allowfullscreen class="w-full h-full border-2 border-border/50"></iframe>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="flex-grow min-h-0">
-            <iframe src="https://eyes.nasa.gov/apps/solar-system/#/home?interactPrompt=true&surfaceMapTiling=true&hd=true" allowfullscreen class="w-full h-full border-0"></iframe>
-        </div>
-      </div>
     `;
   }
 
@@ -3608,13 +3764,12 @@ void main() {
           <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${() => this.isDatabaseOpen = true}>DATABASE</button>
           <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this._startConversation} title="Converse with AXEE">CONVERSE</button>
           <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${() => this.isShaderLabOpen = true} title="Open Shader Lab">SHADER LAB</button>
-          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg" @click=${() => this.isNasaEyesOpen = true} title="Explore with NASA's Eyes">NASA EYES</button>
+          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this._handleOpenSolArchives} ?disabled=${this.aiStatus !== 'idle' || !this.activeGalaxy} title="Access Solar System Archives">ARCHIVES: SOL</button>
           <button class="font-sans bg-none border px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${this.liveStreamStatus === 'connected' ? 'border-success text-success drop-shadow-[0_0_8px_var(--success-color)] hover:bg-success/20' : 'border-border text-text hover:bg-glow hover:text-bg'}" @click=${this._toggleLiveStream} ?disabled=${!this.activeGalaxy || this.liveStreamStatus === 'connecting'} title="Toggle live data stream">
             ${this.liveStreamStatus === 'connecting' ? 'CONNECTING...' : this.liveStreamStatus === 'connected' ? html`<span class="inline-block w-2 h-2 bg-success rounded-full mr-2 animate-pulse-live"></span>DISCONNECT` : 'LIVE FEED'}
           </button>
           <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this._startTutorial} title="Start the guided tutorial">HELP</button>
           <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${() => (this.isDashboardOpen = true)} title="View AXEE model performance">MODEL</button>
-          <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this.loadSolSystem} ?disabled=${this.aiStatus !== 'idle' || !this.activeGalaxy} title="Load our home solar system">LOAD SOL</button>
           <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this._handleSaveSession} title="Download current session as a file">SAVE</button>
           <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this._handleLoadSessionClick} title="Load a session from a file">LOAD</button>
           <button class="font-sans bg-none border border-border text-text px-4 py-2 text-xs tracking-widest whitespace-nowrap transition-colors hover:bg-glow hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed" @click=${this._handleBatchAnalysisClick} ?disabled=${this.aiStatus !== 'idle' || !this.activeGalaxy} title="Import and analyze a CSV of exoplanet candidates">IMPORT</button>
