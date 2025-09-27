@@ -1095,6 +1095,7 @@ void main() {
   // --- PRIVATE VARS ---
   private ai!: GoogleGenAI;
   private metricsChart: Chart | null = null;
+  private discoveryStatsChart: Chart | null = null;
 
   private planetSchema = {
     type: Type.OBJECT,
@@ -1352,9 +1353,13 @@ void main() {
     }
     if (changedProperties.has('isDashboardOpen')) {
         if (this.isDashboardOpen) {
-            requestAnimationFrame(() => this.initMetricsChart());
+            requestAnimationFrame(() => {
+              this.initMetricsChart();
+              this.initDiscoveryStatsChart();
+            });
         } else {
             this.destroyMetricsChart();
+            this.destroyDiscoveryStatsChart();
         }
     }
   }
@@ -3474,6 +3479,11 @@ void main() {
     this.metricsChart = null;
   }
 
+  private destroyDiscoveryStatsChart() {
+    this.discoveryStatsChart?.destroy();
+    this.discoveryStatsChart = null;
+  }
+
   private initMetricsChart() {
     this.destroyMetricsChart();
     // FIX: Cast `this` to `LitElement` to access `shadowRoot`.
@@ -3542,13 +3552,86 @@ void main() {
     });
   }
 
+  private initDiscoveryStatsChart() {
+    this.destroyDiscoveryStatsChart();
+    const canvas = (this as LitElement).shadowRoot?.querySelector('#discovery-stats-chart') as HTMLCanvasElement;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const planetCounts: {[type: string]: number} = {};
+    this.discoveredGalaxies.forEach(galaxy => {
+        galaxy.planets.forEach(planet => {
+            const type = planet.planetType || 'Unknown';
+            planetCounts[type] = (planetCounts[type] || 0) + 1;
+        });
+    });
+
+    const sortedData = Object.entries(planetCounts).sort((a, b) => b[1] - a[1]);
+    const labels = sortedData.map(d => d[0]);
+    const data = sortedData.map(d => d[1]);
+
+    const chartColors = [
+        'rgba(97, 250, 255, 0.5)',
+        'rgba(255, 194, 97, 0.5)',
+        'rgba(255, 97, 195, 0.5)',
+        'rgba(97, 255, 202, 0.5)',
+        'rgba(216, 97, 255, 0.5)',
+        'rgba(255, 106, 106, 0.5)',
+    ];
+
+    const backgroundColors = labels.map((_, i) => chartColors[i % chartColors.length]);
+    const borderColors = backgroundColors.map(c => c.replace('0.5', '1'));
+
+    const textColor = getComputedStyle(this as unknown as Element).getPropertyValue('--text-color-dark');
+    const borderColor = getComputedStyle(this as unknown as Element).getPropertyValue('--border-color');
+
+    this.discoveryStatsChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Planet Count',
+                data: data,
+                backgroundColor: backgroundColors,
+                borderColor: borderColors,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: true,
+                    text: 'Discovered Planets by Type',
+                    color: textColor
+                }
+            },
+            scales: {
+                y: {
+                    grid: { color: borderColor },
+                    ticks: { color: textColor }
+                },
+                x: {
+                    beginAtZero: true,
+                    grid: { display: false },
+                    ticks: { color: textColor, stepSize: 1 }
+                }
+            }
+        }
+    });
+  }
+
   private renderAccuracyDashboard() {
     const {confusionMatrix} = MOCK_MODEL_PERFORMANCE;
     const labels = ['Confirmed', 'Candidate', 'Hypothetical'];
     const total = confusionMatrix.flat().reduce((a, b) => a + b, 0);
     const correct = confusionMatrix[0][0] + confusionMatrix[1][1] + confusionMatrix[2][2];
     const accuracy = total > 0 ? correct / total : 0;
-    return html`<div class="fixed inset-0 bg-bg/80 backdrop-blur-lg z-[100] flex items-center justify-center pointer-events-auto animate-fade-in"><div class="w-11/12 max-w-4xl bg-panel-bg border border-border shadow-lg drop-shadow-glow text-text p-8 relative flex flex-col">${this.recalibrationStatus === 'running' ? html`<div class="absolute inset-0 bg-bg/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center text-center animate-fade-in"><h4 class="font-normal tracking-[0.2em] uppercase text-accent mb-6 text-base">RECALIBRATING MODEL CORE...</h4><div class="border-4 border-border border-t-accent rounded-full w-10 h-10 animate-spin"></div></div>` : nothing}<div class="flex justify-between items-center border-b border-border pb-4 mb-6 shrink-0"><h2 class="m-0 text-2xl font-normal tracking-[0.2em] text-accent flex items-center">AXEE Model Performance <span class="group relative inline-flex items-center justify-center w-4 h-4 rounded-full border border-text-dark text-text-dark text-xs font-bold ml-2 cursor-help">?<span class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-72 bg-bg border border-border p-4 rounded text-sm font-light leading-relaxed text-left opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-50 pointer-events-none normal-case tracking-normal">This dashboard shows the performance of the local machine learning model used for the AXEE Predictor and Batch Analysis features. You can tune its hyperparameters to see how they might affect performance.</span></span></h2><button @click=${() => (this.isDashboardOpen = false)} ?disabled=${this.recalibrationStatus === 'running'} class="bg-none border-none text-text text-4xl cursor-pointer leading-none opacity-70 transition-opacity hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed">&times;</button></div><div class="mb-6 bg-black/20 border border-border p-4 text-center"><h4 class="m-0 mb-2 font-normal tracking-widest uppercase text-base opacity-80">Overall Accuracy</h4><p class="m-0 text-5xl font-bold text-success drop-shadow-[0_0_10px_var(--success-color)]">${(accuracy * 100).toFixed(2)}%</p></div><div class="flex flex-col gap-8"><div class="flex lg:flex-row flex-col gap-8"><div class="flex-1"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Confusion Matrix</h4><div class="grid grid-cols-[1fr_2fr_2fr_2fr] grid-rows-[1fr_2fr_2fr_2fr] gap-1 text-xs"><div class="bg-transparent font-bold tracking-wider text-text-dark" style="writing-mode: vertical-rl; text-orientation: mixed;">Actual</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Conf.</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Cand.</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Hypo.</div>${confusionMatrix.map((row, rowIndex) => html`<div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-right">${labels[rowIndex]}</div>${row.map((value, colIndex) => html`<div class="bg-black/20 dark:bg-white/5 p-2 flex flex-col items-center justify-center text-center ${rowIndex === colIndex ? 'bg-success/10 border border-success' : 'bg-error/5 border border-error/30'}"><span class="text-2xl font-bold ${rowIndex === colIndex ? 'text-success' : ''}">${value.toLocaleString()}</span><span class="text-xs opacity-60">${((value / total) * 100).toFixed(2)}%</span></div>`)}`)}</div></div><div class="flex-1"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Classification Metrics</h4><div class="h-64 relative"><canvas id="metrics-chart"></canvas></div></div></div><div class="mt-4"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Hyperparameter Tuning</h4><div class="flex md:flex-row flex-col gap-8 mb-6"><div class="flex-1"><label for="n_estimators" class="flex justify-between text-sm mb-2"><span>N Estimators</span><span class="font-bold text-accent">${this.hyperparameters.n_estimators}</span></label><input class="w-full" id="n_estimators" type="range" min="50" max="500" step="10" .value=${String(this.hyperparameters.n_estimators)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'n_estimators')}/></div><div class="flex-1"><label for="max_depth" class="flex justify-between text-sm mb-2"><span>Max Depth</span><span class="font-bold text-accent">${this.hyperparameters.max_depth}</span></label><input class="w-full" id="max_depth" type="range" min="2" max="15" step="1" .value=${String(this.hyperparameters.max_depth)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'max_depth')}/></div><div class="flex-1"><label for="learning_rate" class="flex justify-between text-sm mb-2"><span>Learning Rate</span><span class="font-bold text-accent">${this.hyperparameters.learning_rate.toFixed(2,)}</span></label><input class="w-full" id="learning_rate" type="range" min="0.01" max="0.5" step="0.01" .value=${String(this.hyperparameters.learning_rate)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'learning_rate')}/></div></div><button class="font-sans bg-none border border-accent text-accent px-6 py-3 text-base tracking-widest cursor-pointer w-full font-bold hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${this._handleRecalibrate} ?disabled=${this.recalibrationStatus === 'running'}>${this.recalibrationStatus === 'running' ? 'RECALIBRATING...' : 'RE-CALIBRATE MODEL'}</button></div></div></div>`;
+    return html`<div class="fixed inset-0 bg-bg/80 backdrop-blur-lg z-[100] flex items-center justify-center pointer-events-auto animate-fade-in"><div class="w-11/12 max-w-4xl bg-panel-bg border border-border shadow-lg drop-shadow-glow text-text p-8 relative flex flex-col">${this.recalibrationStatus === 'running' ? html`<div class="absolute inset-0 bg-bg/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center text-center animate-fade-in"><h4 class="font-normal tracking-[0.2em] uppercase text-accent mb-6 text-base">RECALIBRATING MODEL CORE...</h4><div class="border-4 border-border border-t-accent rounded-full w-10 h-10 animate-spin"></div></div>` : nothing}<div class="flex justify-between items-center border-b border-border pb-4 mb-6 shrink-0"><h2 class="m-0 text-2xl font-normal tracking-[0.2em] text-accent flex items-center">AXEE Model Performance <span class="group relative inline-flex items-center justify-center w-4 h-4 rounded-full border border-text-dark text-text-dark text-xs font-bold ml-2 cursor-help">?<span class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-72 bg-bg border border-border p-4 rounded text-sm font-light leading-relaxed text-left opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity z-50 pointer-events-none normal-case tracking-normal">This dashboard shows the performance of the local machine learning model used for the AXEE Predictor and Batch Analysis features. You can tune its hyperparameters to see how they might affect performance.</span></span></h2><button @click=${() => (this.isDashboardOpen = false)} ?disabled=${this.recalibrationStatus === 'running'} class="bg-none border-none text-text text-4xl cursor-pointer leading-none opacity-70 transition-opacity hover:opacity-100 disabled:opacity-30 disabled:cursor-not-allowed">&times;</button></div><div class="mb-6 bg-black/20 border border-border p-4 text-center"><h4 class="m-0 mb-2 font-normal tracking-widest uppercase text-base opacity-80">Overall Accuracy</h4><p class="m-0 text-5xl font-bold text-success drop-shadow-[0_0_10px_var(--success-color)]">${(accuracy * 100).toFixed(2)}%</p></div><div class="flex flex-col gap-8"><div class="flex lg:flex-row flex-col gap-8"><div class="flex-1"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Confusion Matrix</h4><div class="grid grid-cols-[1fr_2fr_2fr_2fr] grid-rows-[1fr_2fr_2fr_2fr] gap-1 text-xs"><div class="bg-transparent font-bold tracking-wider text-text-dark" style="writing-mode: vertical-rl; text-orientation: mixed;">Actual</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Conf.</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Cand.</div><div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-center">Predicted: Hypo.</div>${confusionMatrix.map((row, rowIndex) => html`<div class="bg-transparent font-bold tracking-wider text-text-dark p-2 text-right">${labels[rowIndex]}</div>${row.map((value, colIndex) => html`<div class="bg-black/20 dark:bg-white/5 p-2 flex flex-col items-center justify-center text-center ${rowIndex === colIndex ? 'bg-success/10 border border-success' : 'bg-error/5 border border-error/30'}"><span class="text-2xl font-bold ${rowIndex === colIndex ? 'text-success' : ''}">${value.toLocaleString()}</span><span class="text-xs opacity-60">${((value / total) * 100).toFixed(2)}%</span></div>`)}`)}</div></div><div class="flex-1"><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Classification Metrics</h4><div class="h-64 relative"><canvas id="metrics-chart"></canvas></div></div></div><div><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Discovery Statistics</h4><div class="h-72 relative"><canvas id="discovery-stats-chart"></canvas></div></div><div><h4 class="font-normal tracking-widest uppercase border-b border-border pb-2 m-0 mb-4">Hyperparameter Tuning</h4><div class="flex md:flex-row flex-col gap-8 mb-6"><div class="flex-1"><label for="n_estimators" class="flex justify-between text-sm mb-2"><span>N Estimators</span><span class="font-bold text-accent">${this.hyperparameters.n_estimators}</span></label><input class="w-full" id="n_estimators" type="range" min="50" max="500" step="10" .value=${String(this.hyperparameters.n_estimators)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'n_estimators')}/></div><div class="flex-1"><label for="max_depth" class="flex justify-between text-sm mb-2"><span>Max Depth</span><span class="font-bold text-accent">${this.hyperparameters.max_depth}</span></label><input class="w-full" id="max_depth" type="range" min="2" max="15" step="1" .value=${String(this.hyperparameters.max_depth)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'max_depth')}/></div><div class="flex-1"><label for="learning_rate" class="flex justify-between text-sm mb-2"><span>Learning Rate</span><span class="font-bold text-accent">${this.hyperparameters.learning_rate.toFixed(2,)}</span></label><input class="w-full" id="learning_rate" type="range" min="0.01" max="0.5" step="0.01" .value=${String(this.hyperparameters.learning_rate)} @input=${(e: Event) => this._handleHyperparameterChange(e, 'learning_rate')}/></div></div><button class="font-sans bg-none border border-accent text-accent px-6 py-3 text-base tracking-widest cursor-pointer w-full font-bold hover:bg-accent hover:text-bg disabled:opacity-50 disabled:cursor-not-allowed disabled:border-text-dark disabled:text-text-dark" @click=${this._handleRecalibrate} ?disabled=${this.recalibrationStatus === 'running'}>${this.recalibrationStatus === 'running' ? 'RECALIBRATING...' : 'RE-CALIBRATE MODEL'}</button></div></div></div>`;
   }
 
   private renderDatabaseOverlay() {
