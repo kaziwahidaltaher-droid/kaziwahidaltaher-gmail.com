@@ -1543,9 +1543,19 @@ void main() {
       };
       const name = id.split('-')[1];
       const order = planetOrder[name as keyof typeof planetOrder] || 0;
-      const x = -120 + order * 6;
-      const y = 0;
-      const z = 120 - order * 2;
+
+      // Define a central point for the Sol system in the galaxy map
+      const systemCenterX = -120;
+      const systemCenterZ = 120;
+
+      // Place planets in a small spiral around the center point
+      const radius = 2 + order * 1.5; // Small radius for the cluster
+      const angle = order * (Math.PI / 4); // Stagger them around the center
+
+      const x = systemCenterX + Math.cos(angle) * radius;
+      const y = (this.seededRandom(order) - 0.5) * 2; // Slight vertical variation
+      const z = systemCenterZ + Math.sin(angle) * radius;
+
       this.galaxyMapCoords.set(id, [x, y, z]);
       return;
     }

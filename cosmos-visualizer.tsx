@@ -81,6 +81,7 @@ export class CosmosVisualizer extends LitElement {
   private systemGroup: THREE.Group | null = null;
   private starMesh: THREE.Mesh | null = null;
   private systemPlanetMeshes = new Map<string, THREE.Group>();
+  private systemOrbits = new Map<string, THREE.Mesh>();
 
   // Ambient Life
   private spaceCreatures: THREE.Group[] = [];
@@ -216,6 +217,7 @@ export class CosmosVisualizer extends LitElement {
       this.galaxyOrbits.clear();
       this.systemGroup = null;
       this.systemPlanetMeshes.clear();
+      this.systemOrbits.clear();
       this.starMesh = null;
       this.routeLine = null;
   }
@@ -311,6 +313,20 @@ export class CosmosVisualizer extends LitElement {
                 0,
                 Math.sin(elapsedTime * speed) * radius
             );
+        });
+        this.systemOrbits.forEach((orbit, id) => {
+            const material = orbit.material as THREE.MeshBasicMaterial;
+            const isSelected = id === this.selectedPlanetId;
+            
+            if (isSelected) {
+                // More prominent pulse for the selected planet's orbit
+                material.opacity = 0.6 + Math.sin(elapsedTime * 4) * 0.3;
+                material.color.set(0xffffff);
+            } else {
+                // Subtle pulse for other orbits
+                material.opacity = 0.2 + Math.sin(elapsedTime * 0.8 + orbit.position.x) * 0.15;
+                material.color.set(0x61faff);
+            }
         });
     }
     
@@ -688,11 +704,25 @@ export class CosmosVisualizer extends LitElement {
     // Create planets
     this.activePlanets.filter(p => p.starSystem === selectedPlanet.starSystem).forEach((planet, i) => {
         const planetGroup = this.createPlanetMesh(planet);
-        const orbitRadius = 20 + i * 15;
+        const orbitRadius = 20 + (planet.planetRadiusEarths || 1) * 2 + i * 15;
         planetGroup.userData.orbitRadius = orbitRadius;
         planetGroup.userData.orbitSpeed = 0.1 / Math.sqrt(orbitRadius);
         this.systemPlanetMeshes.set(planet.celestial_body_id, planetGroup);
         this.systemGroup!.add(planetGroup);
+
+        const orbitGeometry = new THREE.RingGeometry(orbitRadius - 0.1, orbitRadius + 0.1, 256);
+        const orbitMaterial = new THREE.MeshBasicMaterial({
+            color: 0x61faff,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.1,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+        });
+        const orbitMesh = new THREE.Mesh(orbitGeometry, orbitMaterial);
+        orbitMesh.rotation.x = Math.PI / 2;
+        this.systemOrbits.set(planet.celestial_body_id, orbitMesh);
+        this.systemGroup!.add(orbitMesh);
     });
     
     this.scene.add(this.systemGroup);
