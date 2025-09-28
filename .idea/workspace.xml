@@ -25,10 +25,10 @@
     <option name="PUSH_AUTO_UPDATE" value="true" />
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {}
+  <component name="GitHubPullRequestSearchHistory">{
   &quot;lastFilter&quot;: {}
-}]]></component>
+  &quot;lastFilter&quot;: {}
+}</component>
   <component name="GithubPullRequestsUISettings">{
   &quot;selectedUrlAndAccountId&quot;: {
     &quot;url&quot;: &quot;https://github.com/kaziwahidaltaher-droid/kaziwahidaltaher-gmail.com.git&quot;,
@@ -63,7 +63,6 @@
     "settings.editor.selected.configurable": "com.google.urlassistant.datalayer.db.AppLinksAssistantSettingsConfigurable"
   <component name="PropertiesComponent">{
   &quot;keyToString&quot;: {
-    &quot;Application.Unnamed.executor&quot;: &quot;Run&quot;,
     &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager&quot;: &quot;true&quot;,
@@ -76,7 +75,7 @@
     &quot;git-widget-placeholder&quot;: &quot;codespace-reimagined-spork-5g96ppw4vxvq2pvgp&quot;,
     &quot;settings.editor.selected.configurable&quot;: &quot;com.google.urlassistant.datalayer.db.AppLinksAssistantSettingsConfigurable&quot;
   }
-}]]></component>
+}</component>
   <component name="RunManager" selected="Application.Unnamed">
     <configuration name="Unnamed" type="Application" factoryName="Application" singleton="false" nameIsGenerated="true">
       <option name="ALTERNATIVE_JRE_PATH" value="jbr-21" />
