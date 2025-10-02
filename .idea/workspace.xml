@@ -18,6 +18,11 @@
   </component>
   <component name="Git.Settings">
     <option name="PUSH_AUTO_UPDATE" value="true" />
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="main" />
+      </map>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="GitHubPullRequestSearchHistory">{
@@ -37,6 +42,24 @@
     }
   ]
 }</component>
+  <component name="GitHubPullRequestState"><![CDATA[{
+  "prStates": [
+    {
+      "id": {
+        "id": "PR_kwDOPiKDJM6q4pqz",
+        "number": 3
+      },
+      "lastSeen": 1759064194891
+    },
+    {
+      "id": {
+        "id": "PR_kwDOPiKDJM6q7uQA",
+        "number": 4
+      },
+      "lastSeen": 1759411707580
+    }
+  ]
+}]]></component>
   <component name="GithubPullRequestsUISettings">{
   &quot;selectedUrlAndAccountId&quot;: {
     &quot;url&quot;: &quot;https://github.com/kaziwahidaltaher-droid/kaziwahidaltaher-gmail.com.git&quot;,
@@ -44,7 +67,7 @@
   }
 }</component>
   <component name="ProblemsViewState">
-    <option name="selectedTabId" value="CurrentFile" />
+    <option name="selectedTabId" value="ProjectErrors" />
   </component>
   <component name="ProjectColorInfo">{
   &quot;customColor&quot;: &quot;&quot;,
@@ -55,6 +78,22 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "Application.Unnamed.executor": "Run",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "com.google.services.firebase.aqiPopupShown": "true",
+    "git-widget-placeholder": "codespace-reimagined-spork-5g96ppw4vxvq2pvgp",
+    "settings.editor.selected.configurable": "com.google.urlassistant.datalayer.db.AppLinksAssistantSettingsConfigurable"
   <component name="PropertiesComponent">{
   &quot;keyToString&quot;: {
     &quot;Application.Unnamed.executor&quot;: &quot;Run&quot;,
@@ -100,7 +139,7 @@
     &quot;git-widget-placeholder&quot;: &quot;codespace-reimagined-spork-5g96ppw4vxvq2pvgp&quot;,
     &quot;settings.editor.selected.configurable&quot;: &quot;com.google.urlassistant.datalayer.db.AppLinksAssistantSettingsConfigurable&quot;
   }
-}</component>
+}]]></component>
   <component name="RunManager" selected="Application.Unnamed">
     <configuration name="Unnamed" type="Application" factoryName="Application" singleton="false" nameIsGenerated="true">
       <option name="ALTERNATIVE_JRE_PATH" value="jbr-21" />
