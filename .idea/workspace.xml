@@ -8,7 +8,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ccdffba3-8798-4c30-83d0-2a0490a0cff6" name="Changes" comment="Merge remote-tracking branch 'origin/main'">
-      <change beforePath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/appInsightsSettings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/appInsightsSettings.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/runConfigurations/AXEE.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/runConfigurations/AXEE.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -29,6 +30,9 @@
       </state>
     </system>
   </component>
+  <component name="FormatOnSaveOptions">
+    <option name="myRunOnSave" value="true" />
+  </component>
   <component name="Git.Settings">
     <option name="PUSH_AUTO_UPDATE" value="true" />
     <option name="RECENT_BRANCH_BY_REPOSITORY">
@@ -41,32 +45,42 @@
   <component name="GitHubPullRequestSearchHistory">{
   &quot;lastFilter&quot;: {}
 }</component>
-  <component name="GitHubPullRequestState">{
-  &quot;prStates&quot;: [
+  <component name="GitHubPullRequestState"><![CDATA[{
+  "prStates": [
     {
-      &quot;id&quot;: {
-        &quot;id&quot;: &quot;PR_kwDOPiKDJM6q4pqz&quot;,
-        &quot;number&quot;: 3
+      "id": {
+        "id": "PR_kwDOPiKDJM6q4pqz",
+        "number": 3
       },
-      &quot;lastSeen&quot;: 1759064194891
+      "lastSeen": 1759064194891
     },
     {
-      &quot;id&quot;: {
-        &quot;id&quot;: &quot;PR_kwDOPiKDJM6q7uQA&quot;,
-        &quot;number&quot;: 4
+      "id": {
+        "id": "PR_kwDOPiKDJM6q7uQA",
+        "number": 4
       },
-      &quot;lastSeen&quot;: 1759411926314
+      "lastSeen": 1759411926314
+    },
+    {
+      "id": {
+        "id": "PR_kwDOPiKDJM6rxOSR",
+        "number": 6
+      },
+      "lastSeen": 1759514100077
     }
   ]
-}</component>
+}]]></component>
   <component name="GithubPullRequestsUISettings">{
   &quot;selectedUrlAndAccountId&quot;: {
     &quot;url&quot;: &quot;https://github.com/kaziwahidaltaher-droid/kaziwahidaltaher-gmail.com.git&quot;,
     &quot;accountId&quot;: &quot;7eca9218-8229-404c-9959-41138dbf9737&quot;
   }
 }</component>
+  <component name="OptimizeOnSaveOptions">
+    <option name="myRunOnSave" value="true" />
+  </component>
   <component name="ProblemsViewState">
-    <option name="selectedTabId" value="ProjectErrors" />
+    <option name="selectedTabId" value="CurrentFile" />
   </component>
   <component name="ProjectColorInfo">{
   &quot;customColor&quot;: &quot;&quot;,
@@ -80,7 +94,11 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "Application.AXEE.executor": "Debug",
     "Application.Unnamed.executor": "Run",
+    "DEBUGGABLE_DEVICE": "samsung-galaxy_tab_2_3g-c1607ae09d4aa11",
+    "DEBUGGABLE_PROCESS": "com.android.messaging",
+    "DEBUGGER_ID": "Java",
     "Journeys Test (experimental).Unnamed.executor": "Debug",
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
@@ -89,29 +107,26 @@
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.readMode.enableVisualFormatting": "true",
     "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "SHOW_ALL_PROCESSES": "true",
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
+    "code.cleanup.on.save": "true",
     "com.google.services.firebase.aqiPopupShown": "true",
     "git-widget-placeholder": "#7 on codespace-reimagined-spork-5g96ppw4vxvq2pvgp",
-    "settings.editor.selected.configurable": "com.google.urlassistant.datalayer.db.AppLinksAssistantSettingsConfigurable"
+    "rearrange.code.on.save": "true",
+    "run.code.analysis.last.selected.profile": "pProject Default",
+    "settings.editor.selected.configurable": "com.android.studio.ml.bot.mainConfigurable"
   }
 }]]></component>
   <component name="RunDashboard">
     <option name="configurationTypes">
       <set>
+        <option value="Application" />
         <option value="JourneysRunConfigurationType" />
       </set>
     </option>
   </component>
-  <component name="RunManager" selected="Application.Unnamed">
-    <configuration name="Unnamed" type="Application" factoryName="Application" singleton="false" nameIsGenerated="true">
-      <option name="ALTERNATIVE_JRE_PATH" value="jbr-21" />
-      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="true" />
-      <module name="kaziwahidaltaher-gmail.com" />
-      <method v="2">
-        <option name="Make" enabled="true" />
-      </method>
-    </configuration>
+  <component name="RunManager" selected="Shell Script.Unnamed (1)">
     <configuration name="Unnamed" type="ShConfigurationType" singleton="false" nameIsGenerated="true">
       <option name="SCRIPT_TEXT" value="" />
       <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
@@ -128,7 +143,8 @@
       <method v="2" />
     </configuration>
     <list>
-      <item itemvalue="Application.Unnamed" />
+      <item itemvalue="Application.AXEE" />
+      <item itemvalue="Shell Script.Unnamed (1)" />
       <item itemvalue="Shell Script.Unnamed" />
     </list>
   </component>
@@ -239,7 +255,19 @@
       <map>
         <entry key="MAIN">
           <value>
-            <State />
+            <State>
+              <option name="FILTERS">
+                <map>
+                  <entry key="branch">
+                    <value>
+                      <list>
+                        <option value="codespace-reimagined-spork-5g96ppw4vxvq2pvgp" />
+                      </list>
+                    </value>
+                  </entry>
+                </map>
+              </option>
+            </State>
           </value>
         </entry>
       </map>
@@ -255,6 +283,9 @@
     <option name="OPTIMIZE_IMPORTS_BEFORE_PROJECT_COMMIT" value="true" />
     <option name="REFORMAT_BEFORE_PROJECT_COMMIT" value="true" />
     <option name="REARRANGE_BEFORE_PROJECT_COMMIT" value="true" />
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/kaziwahidaltaher_gmail_com$AXEE.ic" NAME="AXEE Coverage Results" MODIFIED="1759507982757" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="idea" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="true" />
   </component>
   <component name="dal_apis">
     <option name="consented" value="true" />
