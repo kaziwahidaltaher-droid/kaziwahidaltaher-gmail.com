@@ -289,23 +289,44 @@ export class CosmosVisualizer extends LitElement {
 
     if (this.galaxyVisuals) this.galaxyVisuals.rotation.y += 0.0003;
     
-    // Animate orbits in galaxy view
+    // Animate orbits and planets in galaxy view
     if (this.viewMode === 'galaxy') {
-        this.galaxyOrbits.forEach(orbit => {
+        this.galaxyOrbits.forEach((orbit, id) => {
             const material = orbit.material as THREE.MeshBasicMaterial;
-            if (material.userData.isSelected) {
+            const isSelected = id === this.selectedPlanetId;
+            const isHovered = id === this.hoveredObjectId;
+
+            if (isSelected) {
                 // Intense pulse for selected orbit
                 material.opacity = 0.4 + Math.sin(elapsedTime * 4) * 0.3;
+            } else if (isHovered) {
+                // Medium pulse for hovered orbit
+                material.opacity = 0.3 + Math.sin(elapsedTime * 4) * 0.2;
             } else {
                 // Subtle pulse for non-selected orbits
                 material.opacity = 0.08 + Math.sin(elapsedTime * 0.5) * 0.07;
             }
         });
-    }
 
+        this.galaxyPlanetMeshes.forEach((group, id) => {
+            const isSelected = id === this.selectedPlanetId;
+            const isHovered = id === this.hoveredObjectId;
+            let pulseScale = 1.0;
+
+            if (isSelected) {
+                pulseScale = 1.0 + Math.sin(elapsedTime * 5.0) * 0.2;
+            } else if (isHovered) {
+                pulseScale = 1.0 + Math.sin(elapsedTime * 5.0) * 0.1;
+            }
+            
+            const baseScale = group.userData.baseScale || 1.0;
+            group.scale.set(baseScale * pulseScale, baseScale * pulseScale, baseScale * pulseScale);
+        });
+    }
+    
     // Update planets orbiting in system view
     if (this.viewMode === 'system') {
-        this.systemPlanetMeshes.forEach(group => {
+        this.systemPlanetMeshes.forEach((group, id) => {
             const radius = group.userData.orbitRadius;
             const speed = group.userData.orbitSpeed;
             group.position.set(
@@ -313,14 +334,30 @@ export class CosmosVisualizer extends LitElement {
                 0,
                 Math.sin(elapsedTime * speed) * radius
             );
+            
+            // Pulse effect
+            const isSelected = id === this.selectedPlanetId;
+            const isHovered = id === this.hoveredObjectId;
+            let scale = 1.0;
+            if (isSelected) {
+                scale = 1.0 + Math.sin(elapsedTime * 5.0) * 0.05; // More subtle for realistic planets
+            } else if (isHovered) {
+                scale = 1.0 + Math.sin(elapsedTime * 5.0) * 0.03;
+            }
+            group.scale.set(scale, scale, scale);
         });
+        
         this.systemOrbits.forEach((orbit, id) => {
             const material = orbit.material as THREE.MeshBasicMaterial;
             const isSelected = id === this.selectedPlanetId;
+            const isHovered = id === this.hoveredObjectId;
             
             if (isSelected) {
                 // More prominent pulse for the selected planet's orbit
                 material.opacity = 0.6 + Math.sin(elapsedTime * 4) * 0.3;
+                material.color.set(0xffffff);
+            } else if (isHovered) {
+                material.opacity = 0.4 + Math.sin(elapsedTime * 4) * 0.2;
                 material.color.set(0xffffff);
             } else {
                 // Subtle pulse for other orbits
@@ -585,18 +622,17 @@ export class CosmosVisualizer extends LitElement {
         if (!coords) return;
 
         if (!this.galaxyPlanetMeshes.has(planet.celestial_body_id)) {
-            // Create planet group
-            const group = new THREE.Group();
-            const geometry = new THREE.SphereGeometry(1, 32, 32);
-            const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
-                color: new THREE.Color(planet.visualization.atmosphereColor),
-                transparent: true
-            }));
-            mesh.userData.id = planet.celestial_body_id;
-            group.add(mesh);
+            const group = this.createPlanetMesh(planet);
+
+            // Normalize scale for galaxy view
+            const baseRadius = planet.planetRadiusEarths || 1;
+            const desiredRadius = 1.5; // All planets will appear this size
+            const scale = desiredRadius / baseRadius;
+            group.userData.baseScale = scale; // Store base scale for animation
+            group.scale.set(scale, scale, scale);
 
             const label = this.createSpriteLabel(planet.planetName);
-            label.position.y = 2;
+            label.position.y = desiredRadius + 1.0; // Position above scaled planet
             group.add(label);
             
             group.position.set(...coords);
@@ -1050,33 +1086,52 @@ export class CosmosVisualizer extends LitElement {
   private createGalaxyPointCloud(galaxyData: GalaxyData): THREE.Points {
     const params = {
         count: 150000, size: 0.8, radius: 150, spin: 1.5,
-        randomness: 0.6, randomnessPower: 3.0
+        randomness: 0.5, // Reduced for tighter arms
+        randomnessPower: 3.5 // Increased for more central randomness
     };
 
     const positions = new Float32Array(params.count * 3);
     const colors = new Float32Array(params.count * 3);
-    const distances = new Float32Array(params.count); // For differential rotation
+    const distances = new Float32Array(params.count);
     const colorInside = new THREE.Color(galaxyData.visualization.color1);
     const colorOutside = new THREE.Color(galaxyData.visualization.color2);
+    // New hot color for star-forming regions
+    const hotColor = new THREE.Color(0xff61c3); 
+
     let branches = 5;
     if (galaxyData.galaxyType.toLowerCase().includes('barred')) branches = 2;
     if (galaxyData.galaxyType.toLowerCase().includes('elliptical')) branches = 0;
 
     for (let i = 0; i < params.count; i++) {
         const i3 = i * 3;
-        const radius = Math.random() * params.radius;
+        // Concentrate stars towards the center for a brighter core and varying density
+        const radius = Math.pow(Math.random(), 2.5) * params.radius; 
         const spinAngle = radius * params.spin;
         const branchAngle = ((i % branches) / branches) * Math.PI * 2;
         
+        // Add some perturbation to the arm angle to make them less perfect
+        const angleRandomness = (Math.random() - 0.5) * 0.2;
+        const effectiveBranchAngle = branchAngle + angleRandomness;
+
         const randomX = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * radius;
         const randomY = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * 0.2;
         const randomZ = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * radius;
         
-        positions[i3 + 0] = Math.cos(branchAngle + spinAngle) * radius + randomX;
+        positions[i3 + 0] = Math.cos(effectiveBranchAngle + spinAngle) * radius + randomX;
         positions[i3 + 1] = randomY;
-        positions[i3 + 2] = Math.sin(branchAngle + spinAngle) * radius + randomZ;
+        positions[i3 + 2] = Math.sin(effectiveBranchAngle + spinAngle) * radius + randomZ;
 
+        // --- Color Variation ---
         const mixedColor = colorInside.clone().lerp(colorOutside, radius / params.radius);
+        
+        // Create clumpy, dense regions of "hot" stars
+        const clumpFactor = Math.sin(branchAngle * 8.0 - radius * 0.1 + 5.0) * 0.5 + 0.5;
+        const starFormationChance = Math.pow(clumpFactor, 4.0) * (1.0 - radius / params.radius);
+
+        if (Math.random() < starFormationChance * 0.3) {
+            mixedColor.lerp(hotColor, 0.6);
+        }
+
         colors[i3 + 0] = mixedColor.r;
         colors[i3 + 1] = mixedColor.g;
         colors[i3 + 2] = mixedColor.b;

@@ -1,3 +1,16 @@
 # Exported from Render on 2025-09-27T15:40:53Z
 version: "1"
-
+projects:
+- name: AXE-AURELION
+  environments:
+  - name: Production
+    services:
+    - type: web
+      name: kaziwahidaltaher-gmail.com
+      runtime: node
+      repo: https://github.com/kaziwahidaltaher-droid/kaziwahidaltaher-gmail.com
+      plan: free
+      region: oregon
+      buildCommand: yarn install; yarn build
+      startCommand: yarn start
+      autoDeployTrigger: commit
