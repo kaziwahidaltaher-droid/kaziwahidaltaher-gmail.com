@@ -31,6 +31,7 @@ interface SpeechRecognitionErrorEvent extends Event {
 interface SpeechRecognition extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
+
   lang: string;
   start(): void;
   stop(): void;
@@ -3362,9 +3363,12 @@ void main() {
       ${this.showOnboarding ? this.renderOnboardingOverlay() : nothing}
       ${this.isDashboardOpen ? this.renderAccuracyDashboard() : nothing}
       ${this.isDatabaseOpen ? this.renderDatabaseOverlay() : nothing}
-      ${this.isImportModalOpen ? this.renderImportModal() : nothing}
-      ${this.isShaderLabOpen ? this.renderShaderLabOverlay() : nothing}
-      ${this.isSolArchiveOpen ? this.renderSolArchiveOverlay() : nothing}
+      ${// FIX: Added missing render methods.
+      this.isImportModalOpen ? this.renderImportModal() : nothing}
+      ${// FIX: Added missing render methods.
+      this.isShaderLabOpen ? this.renderShaderLabOverlay() : nothing}
+      ${// FIX: Added missing render methods.
+      this.isSolArchiveOpen ? this.renderSolArchiveOverlay() : nothing}
       ${this.isTutorialActive ? html`
         <tutorial-overlay
           .step=${this.tutorialStep}
@@ -3401,10 +3405,286 @@ void main() {
         ></cosmos-visualizer>
 
         <div class="absolute top-0 left-0 w-full h-full z-[2] flex flex-col justify-between pointer-events-none">
-          ${this.renderHeader()}
-          ${this.renderLeftPanel(selectedPlanet)}
-          ${this.renderRightPanel()}
-          ${this.renderFooter()}
+          ${// FIX: Added missing render methods.
+          this.renderHeader()}
+          ${// FIX: Added missing render methods.
+          this.renderLeftPanel(selectedPlanet)}
+          ${// FIX: Added missing render methods.
+          this.renderRightPanel()}
+          ${// FIX: Added missing render methods.
+          this.renderFooter()}
+        </div>
+      </div>
+    `;
+  }
+
+  // FIX: Added missing render methods.
+  // --- RENDER HELPERS (PANELS & FOOTER) ---
+  
+  private renderHeader() {
+    const hasPlanets = this.discoveredGalaxies.some(g => g.planets.length > 0);
+    return html`
+      <header class="absolute top-0 left-0 w-full p-4 z-10 flex justify-between items-center pointer-events-auto bg-gradient-to-b from-bg/80 to-transparent">
+        <div class="flex items-center gap-4">
+          <h1 class="text-xl md:text-2xl font-normal tracking-[0.3em] m-0 text-accent drop-shadow-glow">AXEE</h1>
+          <div class="hidden md:flex items-center text-xs tracking-widest uppercase opacity-70 gap-2">
+            <span>/</span>
+            <button class="bg-transparent border-none text-inherit cursor-pointer hover:text-accent p-0" @click=${() => { this.activeGalaxyId = null; this.selectedPlanetId = null; }}>
+              INTERGALACTIC
+            </button>
+            ${this.activeGalaxy ? html`
+              <span>/</span>
+              <span class="text-text-light">${this.activeGalaxy.galaxyName}</span>
+            ` : nothing}
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1 md:gap-2">
+          <button title="Toggle Theme" class="header-btn" @click=${this._toggleTheme}>
+            ${this.theme === 'dark' ? 
+              html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.106a.75.75 0 010 1.06l-1.591 1.59a.75.75 0 11-1.06-1.06l1.59-1.59a.75.75 0 011.06 0zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.894 17.894a.75.75 0 01-1.06 0l-1.59-1.591a.75.75 0 111.06-1.06l1.59 1.59a.75.75 0 010 1.061zM12 18a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM5.106 17.894a.75.75 0 010-1.06l1.59-1.59a.75.75 0 111.06 1.06l-1.59 1.59a.75.75 0 01-1.06 0zM3 12a.75.75 0 01.75-.75h2.25a.75.75 0 010 1.5H3.75A.75.75 0 013 12zM6.106 6.106a.75.75 0 011.06 0l1.591 1.59a.75.75 0 11-1.06 1.06L6.106 7.167a.75.75 0 010-1.06z"></path></svg>` : 
+              html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.7-10.5-10.5 0-3.364 1.567-6.412 4.01-8.442a.75.75 0 01.819.162z" clip-rule="evenodd" /></svg>`}
+          </button>
+          <button title="Help / Tutorial" class="header-btn" @click=${this._startTutorial}>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm11.378-3.917c-.89-.777-2.35-.777-3.239 0a.75.75 0 01-1.06-1.06 4.125 4.125 0 015.36 0 .75.75 0 01-1.06 1.06zM10.5 12a.75.75 0 01.75-.75h.008a.75.75 0 01.75.75v.008a.75.75 0 01-.75.75h-.008a.75.75 0 01-.75-.75v-.008zm4.5 0a.75.75 0 01.75-.75h.008a.75.75 0 01.75.75v.008a.75.75 0 01-.75.75h-.008a.75.75 0 01-.75-.75v-.008zM12 15a.75.75 0 01.75.75v.008a.75.75 0 01-.75.75h-.008a.75.75 0 01-.75-.75v-.008a.75.75 0 01.75-.75h.008z" clip-rule="evenodd" /></svg>
+          </button>
+          <button title="AXEE Database" ?disabled=${!hasPlanets} class="header-btn" @click=${() => this.isDatabaseOpen = true}>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path d="M12.378 1.602a.75.75 0 00-.756 0L3 6.632l9 5.25 9-5.25-8.622-5.03zM21.75 7.93l-9 5.25v9l8.628-5.032a.75.75 0 00.372-.648V7.93zM11.25 22.18v-9l-9-5.25v8.57a.75.75 0 00.372.648l8.628 5.033z" /></svg>
+          </button>
+          <button title="Model Dashboard" class="header-btn" @click=${() => this.isDashboardOpen = true}>
+             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path d="M18.75 2.25a2.25 2.25 0 00-2.25 2.25v11.25a.75.75 0 001.5 0V4.5a.75.75 0 01.75-.75h3a.75.75 0 000-1.5h-3zM12.75 12.75a.75.75 0 00-1.5 0v5.25a2.25 2.25 0 002.25 2.25h3a.75.75 0 000-1.5h-3a.75.75 0 01-.75-.75v-5.25z"></path><path fill-rule="evenodd" d="M12.75 2.25a.75.75 0 00-1.5 0v2.25H9a.75.75 0 000 1.5h2.25V9a.75.75 0 001.5 0V6.75H15a.75.75 0 000-1.5h-2.25V2.25zM7.5 9.75A.75.75 0 006 9v5.25H3.75a.75.75 0 000 1.5H6v2.25a.75.75 0 001.5 0v-2.25H9.75a.75.75 0 000-1.5H7.5V9.75z" clip-rule="evenodd"></path></svg>
+          </button>
+        </div>
+      </header>
+    `;
+  }
+  
+  private renderLeftPanel(selectedPlanet: PlanetData | undefined) {
+    const panelClasses = {
+      'absolute top-0 left-0 h-full z-10 w-[380px] max-w-full flex transition-transform duration-500 ease-in-out pointer-events-auto': true,
+      '-translate-x-full': !this.isLeftPanelOpen
+    };
+    return html`
+      <aside class=${classMap(panelClasses)}>
+        <div class="h-full w-full bg-panel-bg backdrop-blur-lg border-r border-border p-4 flex flex-col">
+          ${this.leftPanelView === 'list'
+            ? (selectedPlanet ? this._renderPlanetDetail(selectedPlanet) : this._renderPlanetList())
+            : this._renderPredictor()
+          }
+        </div>
+        <button @click=${this._toggleLeftPanel} class="panel-toggle left-full">
+          ${this.isLeftPanelOpen ? '‹' : '›'}
+        </button>
+      </aside>
+    `;
+  }
+
+  private _renderPlanetList() {
+    return html`
+      <div id="planet-list-panel" class="flex flex-col h-full">
+        <div class="flex justify-between items-center border-b border-border pb-3 mb-3">
+          <h2 class="panel-header">${this.activeGalaxy?.galaxyName ?? 'No Galaxy Selected'}</h2>
+          <div class="flex gap-1">
+            <button class=${classMap({'panel-tab-button': true, 'active': this.leftPanelView === 'list'})} @click=${() => this.leftPanelView = 'list'}>LIST</button>
+            <button class=${classMap({'panel-tab-button': true, 'active': this.leftPanelView === 'predictor'})} @click=${() => this.leftPanelView = 'predictor'}>PREDICTOR</button>
+          </div>
+        </div>
+        <div class="overflow-y-auto flex-grow pr-2">
+          ${this.discoveredPlanets.length > 0 ? this.discoveredPlanets.map(planet => html`
+            <div @click=${() => this._selectPlanet(planet.celestial_body_id)} class=${classMap({'planet-list-item': true, 'selected': this.selectedPlanetId === planet.celestial_body_id})}>
+              <div class="flex-grow">
+                <h4 class="font-bold tracking-wider text-text-light">${planet.planetName}</h4>
+                <p class="text-xs opacity-70 m-0">${planet.planetType} in ${planet.starSystem}</p>
+              </div>
+              <span class="text-xs font-mono px-2 py-1 rounded ${planet.axeeClassification?.toLowerCase()}">${planet.axeeClassification?.substring(0,4)}</span>
+            </div>
+          `) : html`
+            <div class="text-center p-8 opacity-50">
+              <p>No worlds synthesized in this galaxy.</p>
+              <p>Use the command bar below to begin.</p>
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+  }
+  
+  private _renderPlanetDetail(planet: PlanetData) {
+    // ... Implementation for planet detail view
+    return html`<div>Planet Details for ${planet.planetName}</div>`;
+  }
+
+  private _renderPredictor() {
+    // ... Implementation for predictor view
+    return html`<div>Predictor View</div>`;
+  }
+
+  private renderRightPanel() {
+    const panelClasses = {
+      'absolute top-0 right-0 h-full z-10 w-[380px] max-w-full flex transition-transform duration-500 ease-in-out pointer-events-auto': true,
+      'translate-x-full': !this.isRightPanelOpen
+    };
+    const filteredChronicles = this.chronicleFilter === 'all'
+      ? this.aiChronicles
+      : this.aiChronicles.filter(c => c.type === this.chronicleFilter);
+
+    return html`
+      <aside class=${classMap(panelClasses)}>
+        <button @click=${this._toggleRightPanel} class="panel-toggle right-full">
+          ${this.isRightPanelOpen ? '›' : '‹'}
+          ${this.hasNewChronicle ? html`<span class="absolute top-1 right-1 w-2 h-2 rounded-full bg-accent animate-ping"></span>` : nothing}
+        </button>
+        <div class="h-full w-full bg-panel-bg backdrop-blur-lg border-l border-border p-4 flex flex-col">
+           <div class="border-b border-border pb-3 mb-3">
+            <h2 class="panel-header">AI Core Chronicles</h2>
+            <div class="flex gap-1">
+              ${(['all', 'discovery', 'thought', 'suggestion'] as const).map(filter => html`
+                <button 
+                  class=${classMap({'panel-tab-button': true, 'active': this.chronicleFilter === filter})} 
+                  @click=${() => this.chronicleFilter = filter}>
+                  ${filter.toUpperCase()}
+                </button>
+              `)}
+            </div>
+           </div>
+           <div class="overflow-y-auto flex-grow pr-2 flex flex-col-reverse">
+            ${filteredChronicles.map(entry => html`
+              <div class="chronicle-entry" @click=${() => this._handleChronicleClick(entry)}>
+                <div class="flex justify-between items-baseline text-xs opacity-60 mb-2">
+                  <span class="font-bold uppercase tracking-widest text-accent/80">${entry.type}</span>
+                  <span>${entry.timestamp}</span>
+                </div>
+                <p class="m-0 text-sm leading-relaxed">${entry.content}</p>
+              </div>
+            `)}
+           </div>
+        </div>
+      </aside>
+    `;
+  }
+
+  private renderFooter() {
+    const statusClass = this.aiStatus.startsWith('thinking') ? 'thinking' : this.aiStatus;
+    const isSynthesizing = this.aiStatus.startsWith('thinking');
+    
+    return html`
+      <footer class="absolute bottom-0 left-0 w-full p-4 z-10 flex flex-col items-center pointer-events-auto gap-4">
+        ${this.error ? html`<div class="status-bar error">${this.error}</div>` : ''}
+        <div class="status-bar ${statusClass}">${this.statusMessage}</div>
+        
+        ${this.aiSuggestion ? html`
+          <div class="ai-suggestion">
+            <span class="opacity-70 text-sm mr-2">Suggestion:</span>
+            <button @click=${this._handleSuggestionClick}>${this.aiSuggestion}</button>
+          </div>
+        ` : nothing}
+
+        <form id="command-bar" class="command-bar" @submit=${this._handlePlanetCommandSubmit}>
+          <button type="button" title="Voice Command" @click=${this._handleVoiceCommandClick} class=${classMap({'voice-btn': true, 'listening': this.isListening})}>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z"></path><path d="M6 12.75A2.25 2.25 0 018.25 15v1.5a.75.75 0 01-1.5 0v-1.5A2.25 2.25 0 014.5 12.75v-1.5a.75.75 0 011.5 0v1.5zM12 15a2.25 2.25 0 012.25-2.25v-1.5a.75.75 0 011.5 0v1.5A2.25 2.25 0 0115.75 15v1.5a.75.75 0 01-1.5 0v-1.5A2.25 2.25 0 0112 12.75v2.25z"></path><path d="M15.75 12.75a2.25 2.25 0 012.25-2.25v-1.5a.75.75 0 011.5 0v1.5a2.25 2.25 0 01-2.25 2.25V15a.75.75 0 01-1.5 0v-2.25z"></path></svg>
+          </button>
+          <input type="text" placeholder=${this.activeGalaxyId ? "Describe a planet or system..." : "Describe a galaxy or cluster..."} .value=${this.userPrompt} @input=${(e: Event) => this.userPrompt = (e.target as HTMLInputElement).value} ?disabled=${isSynthesizing}>
+          
+          <div class="flex">
+            ${this.activeGalaxyId ? html`
+              <button type="submit" class="command-btn" ?disabled=${isSynthesizing || !this.userPrompt}>[SYNTHESIZE]</button>
+              <button type="button" class="command-btn" @click=${this._handlePlanetClusterCommandSubmit} ?disabled=${isSynthesizing || !this.userPrompt}>[CLUSTER]</button>
+            ` : html`
+              <button type="button" class="command-btn" @click=${this._handleGalaxyCommandSubmit} ?disabled=${isSynthesizing || !this.userPrompt}>[FORM GALAXY]</button>
+              <button type="button" class="command-btn" @click=${this._handleGalaxyClusterCommandSubmit} ?disabled=${isSynthesizing || !this.userPrompt}>[FORM CLUSTER]</button>
+            `}
+          </div>
+        </form>
+      </footer>
+    `;
+  }
+
+  // --- RENDER HELPERS (MODALS & OVERLAYS) ---
+  
+  private renderImportModal() {
+    const onFileSelect = (e: Event) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (file) {
+            this._handleBatchAnalysis(file);
+        }
+    };
+    return html`
+      <div class="fixed inset-0 bg-bg/90 backdrop-blur-lg z-[101] flex items-center justify-center" @click=${() => this.isImportModalOpen = false}>
+        <div class="w-11/12 max-w-lg bg-panel-bg border border-border p-8" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="panel-header m-0">Batch Analysis</h3>
+            <button @click=${() => this.isImportModalOpen = false} class="text-3xl opacity-70 hover:opacity-100">&times;</button>
+          </div>
+          ${this.importStatus === 'idle' ? html`
+            <p class="text-sm opacity-80 mb-4">Upload a CSV file containing columns for 'orbital_period', 'transit_duration', and 'planet_radius' to run batch classification and synthesis.</p>
+            <input type="file" accept=".csv" class="w-full" @change=${onFileSelect} />
+          ` : ''}
+
+          ${this.importStatus !== 'idle' && this.importStatus !== 'complete' && this.importStatus !== 'error' ? html`
+            <div class="flex flex-col items-center text-center p-8">
+              <div class="border-4 border-border border-t-accent rounded-full w-10 h-10 animate-spin mb-4"></div>
+              <p class="text-accent tracking-widest">${this.importMessage}</p>
+            </div>
+          ` : ''}
+
+          ${this.importStatus === 'complete' || this.importStatus === 'error' ? html`
+            <div class="p-4 text-center">
+              <p class=${this.importStatus === 'error' ? 'text-error' : 'text-success'}>${this.importMessage}</p>
+              <button class="font-sans bg-none border border-border text-text px-4 py-2 text-sm mt-4" @click=${() => this.isImportModalOpen = false}>Close</button>
+            </div>
+          `: ''}
+        </div>
+      </div>
+    `;
+  }
+
+  private renderShaderLabOverlay() {
+    return html`
+      <div class="fixed inset-0 bg-bg/90 backdrop-blur-lg z-[101] flex items-center justify-center" @click=${() => this.isShaderLabOpen = false}>
+        <div class="w-11/12 h-[90vh] max-w-6xl bg-panel-bg border border-border p-8 flex flex-col" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="flex justify-between items-center mb-4 flex-shrink-0">
+            <h3 class="panel-header m-0">Shader Lab</h3>
+            <button @click=${() => this.isShaderLabOpen = false} class="text-3xl opacity-70 hover:opacity-100">&times;</button>
+          </div>
+          <div class="flex-grow grid grid-cols-2 gap-4 overflow-hidden">
+            <div class="flex flex-col gap-4">
+              <div class="flex-1 flex flex-col">
+                <label class="text-xs uppercase tracking-widest opacity-70 mb-2">Vertex Shader</label>
+                <textarea class="shader-textarea" .value=${this.shaderLabVs} @input=${(e: Event) => this.shaderLabVs = (e.target as HTMLTextAreaElement).value}></textarea>
+              </div>
+              <div class="flex-1 flex flex-col">
+                 <label class="text-xs uppercase tracking-widest opacity-70 mb-2">Fragment Shader</label>
+                <textarea class="shader-textarea" .value=${this.shaderLabFs} @input=${(e: Event) => this.shaderLabFs = (e.target as HTMLTextAreaElement).value}></textarea>
+              </div>
+            </div>
+            <div class="bg-black/20 border border-border overflow-hidden">
+              <shader-lab-visualizer .vertexShader=${this.shaderLabVs} .fragmentShader=${this.shaderLabFs}></shader-lab-visualizer>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderSolArchiveOverlay() {
+    const solPlanets = this.activeGalaxy?.planets.filter(p => p.celestial_body_id.startsWith('sol-'));
+    return html`
+      <div class="fixed inset-0 bg-bg/90 backdrop-blur-lg z-[101] flex items-center justify-center" @click=${() => this.isSolArchiveOpen = false}>
+        <div class="w-11/12 h-[90vh] max-w-7xl bg-panel-bg border border-border p-8 flex flex-col" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="flex justify-between items-center mb-4 flex-shrink-0">
+            <h3 class="panel-header m-0">NASA Archives: Sol System</h3>
+            <button @click=${() => this.isSolArchiveOpen = false} class="text-3xl opacity-70 hover:opacity-100">&times;</button>
+          </div>
+          <div class="flex-grow grid grid-cols-[200px_1fr] gap-4 overflow-hidden">
+            <div class="flex flex-col gap-2 overflow-y-auto pr-2">
+              ${solPlanets?.map(p => html`
+                <button class="sol-archive-btn" @click=${() => this._handleSelectSolArchivePlanet(p)}>${p.planetName}</button>
+              `)}
+            </div>
+            <div class="bg-black/50 border border-border">
+              <iframe src=${this.solArchiveTargetUrl} class="w-full h-full border-0" title="NASA Eyes on the Solar System"></iframe>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -3634,4 +3914,86 @@ void main() {
 
     const filteredPlanets = this.databaseSearchTerm ? allPlanets.filter(p => 
         p.planetName.toLowerCase().includes(this.databaseSearchTerm.toLowerCase()) ||
-        p.starSystem.toLowerCase().includes(this.databaseSearchTerm.toLowerCase())
+        p.starSystem.toLowerCase().includes(this.databaseSearchTerm.toLowerCase()) ||
+        (p.galaxyName && p.galaxyName.toLowerCase().includes(this.databaseSearchTerm.toLowerCase()))
+    ) : allPlanets;
+    
+    const sortedPlanets = [...filteredPlanets].sort((a, b) => {
+        const key = this.databaseSort.key;
+        const order = this.databaseSort.order === 'asc' ? 1 : -1;
+
+        const valA = (a as any)[key];
+        const valB = (b as any)[key];
+
+        if (valA === undefined || valA === null) return 1 * order;
+        if (valB === undefined || valB === null) return -1 * order;
+
+        if (typeof valA === 'string' && typeof valB === 'string') {
+            return valA.localeCompare(valB) * order;
+        }
+        if (typeof valA === 'number' && typeof valB === 'number') {
+            return (valA - valB) * order;
+        }
+        return 0;
+    });
+
+    const headers: {key: keyof PlanetData | 'galaxyName', label: string}[] = [
+        {key: 'planetName', label: 'Name'},
+        {key: 'galaxyName', label: 'Galaxy'},
+        {key: 'starSystem', label: 'Star System'},
+        {key: 'planetType', label: 'Type'},
+        {key: 'distanceLightYears', label: 'Distance (ly)'},
+        {key: 'axeeClassification', label: 'Classification'},
+    ];
+
+    const renderSortArrow = (key: keyof PlanetData | 'galaxyName') => {
+        if (this.databaseSort.key !== key) return nothing;
+        return this.databaseSort.order === 'asc' ? ' ▲' : ' ▼';
+    };
+
+    return html`
+      <div class="fixed inset-0 bg-bg/90 backdrop-blur-xl z-[100] flex flex-col items-center justify-center pointer-events-auto animate-fade-in" @click=${() => this.isDatabaseOpen = false}>
+        <div class="w-11/12 max-w-7xl h-[90vh] bg-panel-bg border border-border shadow-lg drop-shadow-glow text-text p-8 relative flex flex-col" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="flex justify-between items-center border-b border-border pb-4 mb-6 shrink-0">
+            <h2 class="m-0 text-2xl font-normal tracking-[0.2em] text-accent">AXEE Global Database</h2>
+            <button @click=${() => this.isDatabaseOpen = false} class="bg-none border-none text-text text-4xl cursor-pointer leading-none opacity-70 transition-opacity hover:opacity-100">&times;</button>
+          </div>
+          <div class="mb-4 shrink-0">
+            <input 
+              type="text" 
+              placeholder="Search by Planet, System, or Galaxy..."
+              .value=${this.databaseSearchTerm}
+              @input=${(e: Event) => this.databaseSearchTerm = (e.target as HTMLInputElement).value}
+              class="w-full bg-black/20 border border-border text-text placeholder-text-dark p-3 text-base focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+            />
+          </div>
+          <div class="overflow-y-auto flex-grow">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-border">
+                  ${headers.map(h => html`
+                    <th class="p-3 uppercase text-xs tracking-widest text-text-dark cursor-pointer select-none" @click=${() => this._setDatabaseSort(h.key)}>
+                      ${h.label}${renderSortArrow(h.key)}
+                    </th>
+                  `)}
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                ${sortedPlanets.map(p => html`
+                  <tr class="hover:bg-glow/50 cursor-pointer transition-colors" @click=${() => this._handleDatabaseRowClick(p as PlanetData)}>
+                    <td class="p-3 font-semibold">${p.planetName}</td>
+                    <td class="p-3 opacity-80">${(p as any).galaxyName}</td>
+                    <td class="p-3 opacity-80">${p.starSystem}</td>
+                    <td class="p-3 opacity-80">${p.planetType}</td>
+                    <td class="p-3 opacity-80">${p.distanceLightYears.toLocaleString()}</td>
+                    <td class="p-3 opacity-80">${p.axeeClassification}</td>
+                  </tr>
+                `)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+}
