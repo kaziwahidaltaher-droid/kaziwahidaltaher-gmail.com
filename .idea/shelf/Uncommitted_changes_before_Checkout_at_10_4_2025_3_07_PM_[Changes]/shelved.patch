@@ -1,0 +1,196 @@
+Index: README.md
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><div align=\"center\">\r\n<img width=\"1200\" height=\"475\" alt=\"GHBanner\" src=\"https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6\" />\r\n</div>\r\n\r\n# Run and deploy your AI Studio app\r\n\r\nThis contains everything you need to run your app locally.\r\n\r\nView your app in AI Studio: https://ai.studio/apps/drive/1GQS8-1I-OPt4jcQSHPwQAqioLAmD7Tgz\r\n\r\n## Run Locally\r\n\r\n**Prerequisites:**  Node.js\r\n\r\n\r\n1. Install dependencies:\r\n   `npm install`\r\n2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key\r\n3. Run the app:\r\n   `npm run dev`\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/README.md b/README.md
+--- a/README.md	(revision 5e36b6752bc882248747a62ea9bf09c97464c063)
++++ b/README.md	(date 1759568836987)
+@@ -1,3 +1,4 @@
++<!--suppress HtmlDeprecatedAttribute -->
+ <div align="center">
+ <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+ </div>
+Index: .idea/workspace.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<project version=\"4\">\r\n  <component name=\"AnalysisUIOptions\">\r\n    <option name=\"CUSTOM_SCOPE_NAME\" value=\"All Changed Files\" />\r\n  </component>\r\n  <component name=\"AutoImportSettings\">\r\n    <option name=\"autoReloadType\" value=\"NONE\" />\r\n  </component>\r\n  <component name=\"ChangeListManager\">\r\n    <list default=\"true\" id=\"ccdffba3-8798-4c30-83d0-2a0490a0cff6\" name=\"Changes\" comment=\"Merge remote-tracking branch 'origin/main'\">\r\n      <change beforePath=\"$PROJECT_DIR$/.idea/workspace.xml\" beforeDir=\"false\" afterPath=\"$PROJECT_DIR$/.idea/workspace.xml\" afterDir=\"false\" />\r\n    </list>\r\n    <option name=\"SHOW_DIALOG\" value=\"false\" />\r\n    <option name=\"HIGHLIGHT_CONFLICTS\" value=\"true\" />\r\n    <option name=\"HIGHLIGHT_NON_ACTIVE_CHANGELIST\" value=\"false\" />\r\n    <option name=\"LAST_RESOLUTION\" value=\"IGNORE\" />\r\n  </component>\r\n  <component name=\"ClangdSettings\">\r\n    <option name=\"formatViaClangd\" value=\"false\" />\r\n  </component>\r\n  <component name=\"Git.Settings\">\r\n    <option name=\"PUSH_AUTO_UPDATE\" value=\"true\" />\r\n    <option name=\"RECENT_GIT_ROOT_PATH\" value=\"$PROJECT_DIR$\" />\r\n  </component>\r\n  <component name=\"GitHubPullRequestSearchHistory\">{\r\n  &quot;lastFilter&quot;: {}\r\n}</component>\r\n  <component name=\"GithubPullRequestsUISettings\">{\r\n  &quot;selectedUrlAndAccountId&quot;: {\r\n    &quot;url&quot;: &quot;https://github.com/kaziwahidaltaher-droid/kaziwahidaltaher-gmail.com.git&quot;,\r\n    &quot;accountId&quot;: &quot;7eca9218-8229-404c-9959-41138dbf9737&quot;\r\n  }\r\n}</component>\r\n  <component name=\"HighlightingSettingsPerFile\">\r\n    <setting file=\"file://$PROJECT_DIR$/README.md\" root0=\"FORCE_HIGHLIGHTING\" root1=\"FORCE_HIGHLIGHTING\" />\r\n  </component>\r\n  <component name=\"ProblemsViewState\">\r\n    <option name=\"selectedTabId\" value=\"CurrentFile\" />\r\n  </component>\r\n  <component name=\"ProjectColorInfo\">{\r\n  &quot;customColor&quot;: &quot;&quot;,\r\n  &quot;associatedIndex&quot;: 0\r\n}</component>\r\n  <component name=\"ProjectId\" id=\"33HltGmgnU6aqdp3DymyyrEclD7\" />\r\n  <component name=\"ProjectViewState\">\r\n    <option name=\"hideEmptyMiddlePackages\" value=\"true\" />\r\n    <option name=\"showLibraryContents\" value=\"true\" />\r\n  </component>\r\n  <component name=\"PropertiesComponent\"><![CDATA[{\r\n  \"keyToString\": {\r\n    \"Application.Unnamed.executor\": \"Coverage\",\r\n    \"ModuleVcsDetector.initialDetectionPerformed\": \"true\",\r\n    \"RunOnceActivity.ShowReadmeOnStart\": \"true\",\r\n    \"RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager\": \"true\",\r\n    \"RunOnceActivity.cidr.known.project.marker\": \"true\",\r\n    \"RunOnceActivity.git.unshallow\": \"true\",\r\n    \"RunOnceActivity.readMode.enableVisualFormatting\": \"true\",\r\n    \"cf.first.check.clang-format\": \"false\",\r\n    \"cidr.known.project.marker\": \"true\",\r\n    \"com.google.services.firebase.aqiPopupShown\": \"true\",\r\n    \"git-widget-placeholder\": \"main\",\r\n    \"run.code.analysis.last.selected.profile\": \"pProject Default\",\r\n    \"settings.editor.selected.configurable\": \"com.android.studio.ml.bot.mainConfigurable\"\r\n  }\r\n}]]></component>\r\n  <component name=\"RunManager\" selected=\"Application.Unnamed\">\r\n    <configuration name=\"Unnamed\" type=\"Application\" factoryName=\"Application\" singleton=\"false\" nameIsGenerated=\"true\">\r\n      <option name=\"ALTERNATIVE_JRE_PATH\" value=\"jbr-21\" />\r\n      <option name=\"ALTERNATIVE_JRE_PATH_ENABLED\" value=\"true\" />\r\n      <module name=\"kaziwahidaltaher-gmail.com\" />\r\n      <shortenClasspath name=\"ARGS_FILE\" />\r\n      <method v=\"2\">\r\n        <option name=\"Make\" enabled=\"true\" />\r\n      </method>\r\n    </configuration>\r\n    <configuration name=\"Unnamed\" type=\"ShConfigurationType\" singleton=\"false\" nameIsGenerated=\"true\">\r\n      <option name=\"SCRIPT_TEXT\" value=\"\" />\r\n      <option name=\"INDEPENDENT_SCRIPT_PATH\" value=\"true\" />\r\n      <option name=\"SCRIPT_PATH\" value=\"\" />\r\n      <option name=\"SCRIPT_OPTIONS\" value=\"\" />\r\n      <option name=\"INDEPENDENT_SCRIPT_WORKING_DIRECTORY\" value=\"true\" />\r\n      <option name=\"SCRIPT_WORKING_DIRECTORY\" value=\"$PROJECT_DIR$\" />\r\n      <option name=\"INDEPENDENT_INTERPRETER_PATH\" value=\"true\" />\r\n      <option name=\"INTERPRETER_PATH\" value=\"powershell.exe\" />\r\n      <option name=\"INTERPRETER_OPTIONS\" value=\"\" />\r\n      <option name=\"EXECUTE_IN_TERMINAL\" value=\"true\" />\r\n      <option name=\"EXECUTE_SCRIPT_FILE\" value=\"true\" />\r\n      <envs />\r\n      <method v=\"2\" />\r\n    </configuration>\r\n    <list>\r\n      <item itemvalue=\"Application.Unnamed\" />\r\n      <item itemvalue=\"Shell Script.Unnamed\" />\r\n    </list>\r\n  </component>\r\n  <component name=\"TaskManager\">\r\n    <task active=\"true\" id=\"Default\" summary=\"Default task\">\r\n      <changelist id=\"ccdffba3-8798-4c30-83d0-2a0490a0cff6\" name=\"Changes\" comment=\"\" />\r\n      <created>1758982092184</created>\r\n      <option name=\"number\" value=\"Default\" />\r\n      <option name=\"presentableId\" value=\"Default\" />\r\n      <updated>1758982092184</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00001\" summary=\"Create .gitignore\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1758986384980</created>\r\n      <option name=\"number\" value=\"00001\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00001\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1758986384980</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00002\" summary=\"Merge remote-tracking branch 'origin/main'\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1758987852139</created>\r\n      <option name=\"number\" value=\"00002\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00002\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1758987852139</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00003\" summary=\"Merge remote-tracking branch 'origin/main'\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1758987856862</created>\r\n      <option name=\"number\" value=\"00003\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00003\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1758987856862</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00004\" summary=\"Merge remote-tracking branch 'origin/main'\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1758987863841</created>\r\n      <option name=\"number\" value=\"00004\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00004\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1758987863841</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00005\" summary=\"Update issue templates\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1759018111547</created>\r\n      <option name=\"number\" value=\"00005\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00005\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1759018111547</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00006\" summary=\"Update issue templates\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1759018121755</created>\r\n      <option name=\"number\" value=\"00006\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00006\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1759018121755</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00007\" summary=\"Merge remote-tracking branch 'origin/main'\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1759018137361</created>\r\n      <option name=\"number\" value=\"00007\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00007\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1759018137361</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00008\" summary=\"Merge remote-tracking branch 'origin/main'\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1759018189784</created>\r\n      <option name=\"number\" value=\"00008\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00008\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1759018189784</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00009\" summary=\"Merge remote-tracking branch 'origin/main'\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1759018193763</created>\r\n      <option name=\"number\" value=\"00009\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00009\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1759018193763</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00010\" summary=\"Merge remote-tracking branch 'origin/main'\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1759018197949</created>\r\n      <option name=\"number\" value=\"00010\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00010\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1759018197949</updated>\r\n    </task>\r\n    <task id=\"LOCAL-00011\" summary=\"Merge remote-tracking branch 'origin/main'\">\r\n      <option name=\"closed\" value=\"true\" />\r\n      <created>1759018221855</created>\r\n      <option name=\"number\" value=\"00011\" />\r\n      <option name=\"presentableId\" value=\"LOCAL-00011\" />\r\n      <option name=\"project\" value=\"LOCAL\" />\r\n      <updated>1759018221855</updated>\r\n    </task>\r\n    <option name=\"localTasksCounter\" value=\"12\" />\r\n    <servers />\r\n  </component>\r\n  <component name=\"UpdateCopyrightCheckinHandler\">\r\n    <option name=\"UPDATE_COPYRIGHT\" value=\"true\" />\r\n  </component>\r\n  <component name=\"Vcs.Log.Tabs.Properties\">\r\n    <option name=\"TAB_STATES\">\r\n      <map>\r\n        <entry key=\"MAIN\">\r\n          <value>\r\n            <State />\r\n          </value>\r\n        </entry>\r\n      </map>\r\n    </option>\r\n  </component>\r\n  <component name=\"VcsManagerConfiguration\">\r\n    <option name=\"CHECK_CODE_CLEANUP_BEFORE_PROJECT_COMMIT_PROFILE\" value=\"Project Default\" />\r\n    <MESSAGE value=\"Create .gitignore\" />\r\n    <MESSAGE value=\"git add render.yaml&#10;git commit -m &quot;Add render.yaml&quot;&#10;git push\" />\r\n    <MESSAGE value=\"Update issue templates\" />\r\n    <MESSAGE value=\"Merge remote-tracking branch 'origin/main'\" />\r\n    <option name=\"LAST_COMMIT_MESSAGE\" value=\"Merge remote-tracking branch 'origin/main'\" />\r\n    <option name=\"OPTIMIZE_IMPORTS_BEFORE_PROJECT_COMMIT\" value=\"true\" />\r\n    <option name=\"REFORMAT_BEFORE_PROJECT_COMMIT\" value=\"true\" />\r\n    <option name=\"REARRANGE_BEFORE_PROJECT_COMMIT\" value=\"true\" />\r\n  </component>\r\n  <component name=\"dal_apis\">\r\n    <option name=\"consented\" value=\"true\" />\r\n  </component>\r\n</project>
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.idea/workspace.xml b/.idea/workspace.xml
+--- a/.idea/workspace.xml	(revision 5e36b6752bc882248747a62ea9bf09c97464c063)
++++ b/.idea/workspace.xml	(date 1759568836986)
+@@ -8,7 +8,9 @@
+   </component>
+   <component name="ChangeListManager">
+     <list default="true" id="ccdffba3-8798-4c30-83d0-2a0490a0cff6" name="Changes" comment="Merge remote-tracking branch 'origin/main'">
++      <change afterPath="$PROJECT_DIR$/.env.local" afterDir="false" />
+       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
++      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+     </list>
+     <option name="SHOW_DIALOG" value="false" />
+     <option name="HIGHLIGHT_CONFLICTS" value="true" />
+@@ -24,6 +26,17 @@
+   </component>
+   <component name="GitHubPullRequestSearchHistory">{
+   &quot;lastFilter&quot;: {}
++}</component>
++  <component name="GitHubPullRequestState">{
++  &quot;prStates&quot;: [
++    {
++      &quot;id&quot;: {
++        &quot;id&quot;: &quot;PR_kwDOPiKDJM6rxZln&quot;,
++        &quot;number&quot;: 7
++      },
++      &quot;lastSeen&quot;: 1759568537044
++    }
++  ]
+ }</component>
+   <component name="GithubPullRequestsUISettings">{
+   &quot;selectedUrlAndAccountId&quot;: {
+@@ -42,29 +55,41 @@
+   &quot;associatedIndex&quot;: 0
+ }</component>
+   <component name="ProjectId" id="33HltGmgnU6aqdp3DymyyrEclD7" />
++  <component name="ProjectLevelVcsManager">
++    <ConfirmationsSetting value="2" id="Add" />
++  </component>
+   <component name="ProjectViewState">
+     <option name="hideEmptyMiddlePackages" value="true" />
+     <option name="showLibraryContents" value="true" />
+   </component>
+-  <component name="PropertiesComponent"><![CDATA[{
+-  "keyToString": {
+-    "Application.Unnamed.executor": "Coverage",
+-    "ModuleVcsDetector.initialDetectionPerformed": "true",
+-    "RunOnceActivity.ShowReadmeOnStart": "true",
+-    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager": "true",
+-    "RunOnceActivity.cidr.known.project.marker": "true",
+-    "RunOnceActivity.git.unshallow": "true",
+-    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+-    "cf.first.check.clang-format": "false",
+-    "cidr.known.project.marker": "true",
+-    "com.google.services.firebase.aqiPopupShown": "true",
+-    "git-widget-placeholder": "main",
+-    "run.code.analysis.last.selected.profile": "pProject Default",
+-    "settings.editor.selected.configurable": "com.android.studio.ml.bot.mainConfigurable"
+-  }
+-}]]></component>
+-  <component name="RunManager" selected="Application.Unnamed">
+-    <configuration name="Unnamed" type="Application" factoryName="Application" singleton="false" nameIsGenerated="true">
++  <component name="PropertiesComponent">{
++  &quot;keyToString&quot;: {
++    &quot;Application.Axee.executor&quot;: &quot;Run&quot;,
++    &quot;Application.Unnamed.executor&quot;: &quot;Coverage&quot;,
++    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
++    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
++    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager&quot;: &quot;true&quot;,
++    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
++    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
++    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
++    &quot;Shell Script.Unnamed (1).executor&quot;: &quot;Run&quot;,
++    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
++    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
++    &quot;com.google.services.firebase.aqiPopupShown&quot;: &quot;true&quot;,
++    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
++    &quot;run.code.analysis.last.selected.profile&quot;: &quot;pProject Default&quot;,
++    &quot;settings.editor.selected.configurable&quot;: &quot;com.android.studio.ml.bot.mainConfigurable&quot;
++  }
++}</component>
++  <component name="RunDashboard">
++    <option name="configurationTypes">
++      <set>
++        <option value="Java Scratch" />
++      </set>
++    </option>
++  </component>
++  <component name="RunManager" selected="Application.Axee">
++    <configuration name="Axee" type="Application" factoryName="Application" singleton="false">
+       <option name="ALTERNATIVE_JRE_PATH" value="jbr-21" />
+       <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="true" />
+       <module name="kaziwahidaltaher-gmail.com" />
+@@ -73,6 +98,30 @@
+         <option name="Make" enabled="true" />
+       </method>
+     </configuration>
++    <configuration name="AXEE" type="Java Scratch" editBeforeRun="true" focusToolWindowBeforeRun="true">
++      <option name="INCLUDE_PROVIDED_SCOPE" value="true" />
++      <module name="kaziwahidaltaher-gmail.com" />
++      <option name="REDIRECT_INPUT" value="true" />
++      <shortenClasspath name="ARGS_FILE" />
++      <method v="2">
++        <option name="Make" enabled="true" />
++      </method>
++    </configuration>
++    <configuration name="Unnamed (1)" type="ShConfigurationType" nameIsGenerated="true">
++      <option name="SCRIPT_TEXT" value="" />
++      <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
++      <option name="SCRIPT_PATH" value="" />
++      <option name="SCRIPT_OPTIONS" value="" />
++      <option name="INDEPENDENT_SCRIPT_WORKING_DIRECTORY" value="true" />
++      <option name="SCRIPT_WORKING_DIRECTORY" value="$PROJECT_DIR$" />
++      <option name="INDEPENDENT_INTERPRETER_PATH" value="true" />
++      <option name="INTERPRETER_PATH" value="powershell.exe" />
++      <option name="INTERPRETER_OPTIONS" value="" />
++      <option name="EXECUTE_IN_TERMINAL" value="true" />
++      <option name="EXECUTE_SCRIPT_FILE" value="false" />
++      <envs />
++      <method v="2" />
++    </configuration>
+     <configuration name="Unnamed" type="ShConfigurationType" singleton="false" nameIsGenerated="true">
+       <option name="SCRIPT_TEXT" value="" />
+       <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
+@@ -89,7 +138,9 @@
+       <method v="2" />
+     </configuration>
+     <list>
+-      <item itemvalue="Application.Unnamed" />
++      <item itemvalue="Application.Axee" />
++      <item itemvalue="Java Scratch.AXEE" />
++      <item itemvalue="Shell Script.Unnamed (1)" />
+       <item itemvalue="Shell Script.Unnamed" />
+     </list>
+   </component>
+@@ -196,8 +247,37 @@
+     <option name="UPDATE_COPYRIGHT" value="true" />
+   </component>
+   <component name="Vcs.Log.Tabs.Properties">
++    <option name="OPEN_GENERIC_TABS">
++      <map>
++        <entry key="4ca43aec-e614-4137-9e15-9c608c968551" value="TOOL_WINDOW" />
++      </map>
++    </option>
+     <option name="TAB_STATES">
+       <map>
++        <entry key="4ca43aec-e614-4137-9e15-9c608c968551">
++          <value>
++            <State>
++              <option name="FILTERS">
++                <map>
++                  <entry key="range">
++                    <value>
++                      <list>
++                        <option value="origin/main..origin/codespace-reimagined-spork-5g96ppw4vxvq2pvgp" />
++                      </list>
++                    </value>
++                  </entry>
++                  <entry key="roots">
++                    <value>
++                      <list>
++                        <option value="$PROJECT_DIR$" />
++                      </list>
++                    </value>
++                  </entry>
++                </map>
++              </option>
++            </State>
++          </value>
++        </entry>
+         <entry key="MAIN">
+           <value>
+             <State />
+diff --git a/.env.local b/.env.local
+new file mode 100644
