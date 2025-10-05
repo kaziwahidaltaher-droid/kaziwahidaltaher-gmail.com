@@ -1,0 +1,12 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="AXEE AI" type="aws-ec2-server-deploy" factoryName="cloud-deploy-aws-docker" singleton="false" server-name="AWS EC2 Instance">
+    <deployment type="cloud-deploy-aws-docker">
+      <settings>
+        <option name="composeFile" value="C:\Users\kaziw\Downloads\axee-(aurelion-exoplanet-synthesis-engine) (9)\,env-8.local" />
+      </settings>
+    </deployment>
+    <method v="2">
+      <option name="LaunchBrowser.Before.Run" browser="98ca6316-2f89-46d9-a9e5-fa9e2b0625b3" url="https://aistudio.google.com/app/apps/drive/1GQS8-1I-OPt4jcQSHPwQAqioLAmD7Tgz?showAssistant=true&amp;showPreview=true" />
+    </method>
+  </configuration>
+</component>
