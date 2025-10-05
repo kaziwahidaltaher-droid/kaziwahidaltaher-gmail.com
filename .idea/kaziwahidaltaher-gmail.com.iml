@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="JAVA_MODULE" version="4">
+  <component name="NewModuleRootManager" LANGUAGE_LEVEL="JDK_X">
+    <output url="file://$MODULE_DIR$/out/production/kaziwahidaltaher-gmail.com" />
+    <output-test url="file://$MODULE_DIR$/out/test/kaziwahidaltaher-gmail.com" />
+    <exclude-output />
+    <annotation-paths>
+      <root url="file://$USER_HOME$/Downloads/axee-(aurelion-exoplanet-synthesis-engine) (9)" />
+    </annotation-paths>
+    <javadoc-paths>
+      <root url="jar://$USER_HOME$/Downloads/axee-(aurelion-exoplanet-synthesis-engine) (9).zip!/" />
+      <root url="https://aistudio.google.com/apps/drive/1GQS8-1I-OPt4jcQSHPwQAqioLAmD7Tgz?showPreview=true&amp;showAssistant=true" />
+    </javadoc-paths>
+    <content url="file://$MODULE_DIR$" />
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="library" exported="" scope="PROVIDED" name="axee-(aurelion-exoplanet-synthesis-engine) (9)" level="application" />
+    <orderEntry type="library" exported="" scope="PROVIDED" name="AXEE-AURELION-Exoplanet-Synthesis-Engine-" level="application" />
+  </component>
+</module>
