@@ -1,19 +1,24 @@
 import React, { useRef } from 'react';
 import * as THREE from 'three';
-import { useFrame } from '@react-three/fiber';
+// FIX: Extend THREE.ShaderMaterial to make <shaderMaterial> available in JSX.
+import { useFrame, extend } from '@react-three/fiber';
+
+extend({ ShaderMaterial: THREE.ShaderMaterial });
 
 interface ShieldingShaderProps {
   moodIntensity?: number;
   resonance?: number;
-  innerColor?: string;
-  outerColor?: string;
+  shieldColor?: string;
+  rippleColor?: string;
+  pulseSpeed?: number;
 }
 
 const ShieldingShader: React.FC<ShieldingShaderProps> = ({
-  moodIntensity = 0.5,
-  resonance = 1.0,
-  innerColor = '#00ffff',
-  outerColor = '#220044',
+  moodIntensity = 0.8,
+  resonance = 1.5,
+  shieldColor = '#00ccff',
+  rippleColor = '#ff66cc',
+  pulseSpeed = 0.6,
 }) => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 
@@ -32,13 +37,14 @@ const ShieldingShader: React.FC<ShieldingShaderProps> = ({
           time: { value: 0 },
           moodIntensity: { value: moodIntensity },
           resonance: { value: resonance },
-          innerColor: { value: new THREE.Color(innerColor) },
-          outerColor: { value: new THREE.Color(outerColor) },
+          pulseSpeed: { value: pulseSpeed },
+          shieldColor: { value: new THREE.Color(shieldColor) },
+          rippleColor: { value: new THREE.Color(rippleColor) },
         },
         vertexShader: `
-          varying vec2 vUv;
+          varying vec3 vPosition;
           void main() {
-            vUv = uv;
+            vPosition = position;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
           }
         `,
@@ -46,19 +52,21 @@ const ShieldingShader: React.FC<ShieldingShaderProps> = ({
           uniform float time;
           uniform float moodIntensity;
           uniform float resonance;
-          uniform vec3 innerColor;
-          uniform vec3 outerColor;
-          varying vec2 vUv;
+          uniform float pulseSpeed;
+          uniform vec3 shieldColor;
+          uniform vec3 rippleColor;
+          varying vec3 vPosition;
 
-          float shield(vec2 p, float t) {
-            float dist = length(p - 0.5);
-            float wave = sin(t * resonance + dist * 20.0);
-            return smoothstep(0.4, 0.0, dist) * (0.5 + 0.5 * wave);
+          float ripple(vec3 p) {
+            float r = length(p);
+            return sin(r * 10.0 - time * pulseSpeed) * 0.5 + 0.5;
           }
 
           void main() {
-            float glow = shield(vUv, time) * moodIntensity;
-            vec3 color = mix(outerColor, innerColor, glow);
+            float r = length(vPosition);
+            float glow = smoothstep(1.2, 0.4, r);
+            float pulse = ripple(vPosition) * moodIntensity;
+            vec3 color = mix(shieldColor, rippleColor, pulse * glow);
             gl_FragColor = vec4(color, 1.0);
           }
         `,

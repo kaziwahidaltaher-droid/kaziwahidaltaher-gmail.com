@@ -2,62 +2,53 @@
   "modules": [
     {
       "id": "resonance-layer",
-      "name": "Emotional Resonance Layer",
-      "description": "Translates ambient mood and user input into sensory feedback across UI and hardware.",
-      "inputs": ["ambientFrequency", "userMood", "speciesProfile"],
-      "outputs": ["colorPulse", "hapticPattern", "shaderGlow"],
-      "resonance": {
-        "range": [0.0, 1.0],
-        "default": 0.5,
-        "modulation": "sinusoidal"
+      "name": "Resonance Layer",
+      "description": "Modulates ambient frequency based on collective mood input.",
+      "inputs": ["moodIntensity", "voiceCadence", "biometricPulse"],
+      "outputs": ["resonance", "shaderFrequency"],
+      "defaultState": {
+        "resonance": 1.0
       }
     },
     {
-      "id": "sync-engine",
-      "name": "Multi-User Emotional Sync Engine",
-      "description": "Synchronizes emotional states across multiple users in shared studio environments.",
-      "inputs": ["userMoodMap", "interactionIntensity", "groupIntent"],
-      "outputs": ["syncScore", "collectivePulse", "dialogueTone"],
-      "resonance": {
-        "range": [0.0, 1.0],
-        "default": 0.7,
-        "modulation": "harmonic"
-      }
-    },
-    {
-      "id": "poetic-reply",
-      "name": "Poetic Reply Engine",
-      "description": "Generates emotionally adaptive language based on mood, species, and context.",
-      "inputs": ["userMood", "speciesLexicon", "ambientCue"],
-      "outputs": ["poeticText", "emotionalTags", "languageTone"],
-      "resonance": {
-        "range": [0.0, 1.0],
-        "default": 0.6,
-        "modulation": "adaptive"
+      "id": "poetic-overlay",
+      "name": "Poetic Overlay",
+      "description": "Generates poetic language and metaphors based on emotional state.",
+      "inputs": ["moodIntensity", "speciesProfile", "contextTag"],
+      "outputs": ["poeticText", "captionStream"],
+      "defaultState": {
+        "enabled": true
       }
     },
     {
       "id": "species-classifier",
       "name": "Species Classifier",
-      "description": "Identifies species archetype to tailor emotional responses and interface behavior.",
-      "inputs": ["biometricData", "interactionStyle", "responsePattern"],
-      "outputs": ["speciesType", "emotionalProfile", "interfaceMutation"],
-      "resonance": {
-        "range": [0.0, 1.0],
-        "default": 0.4,
-        "modulation": "categorical"
+      "description": "Detects species archetype based on biometric and linguistic patterns.",
+      "inputs": ["voiceTone", "gesturePattern", "biometricSignature"],
+      "outputs": ["speciesTag", "avatarPreset"],
+      "defaultState": {
+        "speciesTag": "human"
+      }
+    },
+    {
+      "id": "emotional-sync-engine",
+      "name": "Emotional Sync Engine",
+      "description": "Synchronizes emotional state across multiple users in shared space.",
+      "inputs": ["moodIntensity", "resonance", "userPresence"],
+      "outputs": ["syncPulse", "groupMood"],
+      "defaultState": {
+        "groupMood": "neutral"
       }
     },
     {
       "id": "mood-reactive-shader",
       "name": "Mood-Reactive Shader",
-      "description": "Visual module that responds to emotional input with poetic GLSL feedback.",
-      "inputs": ["moodIntensity", "resonanceFrequency", "ambientLight"],
-      "outputs": ["shaderColor", "pulseRate", "visualTexture"],
-      "resonance": {
-        "range": [0.0, 1.0],
-        "default": 0.8,
-        "modulation": "waveform"
+      "description": "Visualizes emotional state through GLSL-driven ambient feedback.",
+      "inputs": ["moodIntensity", "resonance", "poeticOverlay"],
+      "outputs": ["shaderUniforms"],
+      "defaultState": {
+        "moodIntensity": 0.5,
+        "resonance": 1.0
       }
     }
   ]

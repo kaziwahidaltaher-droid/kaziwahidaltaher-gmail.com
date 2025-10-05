@@ -1,36 +1,63 @@
 import React, { useState } from 'react';
 import AurelionEngine from './aurelion-engine';
-
-const defaultConfig = {
-  numStars: 10000,
-  radius: 500,
-  starColors: [], // Optional: can be used for mood tinting
-  moodIntensity: 0.7,
-  resonance: 1.2,
-};
+import AiConfigPanel from './AiConfigPanel';
+import ArtisticLensPanel from './ArtisticLensPanel';
 
 const AurelionApp: React.FC = () => {
-  const [config, setConfig] = useState(defaultConfig);
-  const [isTransition, setIsTransition] = useState(false);
-
-  const handleMoodChange = (intensity: number, resonance: number) => {
-    setConfig(prev => ({
-      ...prev,
-      moodIntensity: intensity,
-      resonance: resonance,
-    }));
-    setIsTransition(true);
-    setTimeout(() => setIsTransition(false), 1000); // Reset transition flag
-  };
+  const [moodIntensity, setMoodIntensity] = useState(0.75);
+  const [resonance, setResonance] = useState(1.4);
+  const [sunColor, setSunColor] = useState('#ffcc33');
+  const [foamColor, setFoamColor] = useState('#88ffff');
+  const [shieldColor, setShieldColor] = useState('#220044');
+  const [signalColor, setSignalColor] = useState('#00ffcc');
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#000' }}>
-      <AurelionEngine config={config} isTransition={isTransition} />
-      {/* Optional mood controls */}
-      <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff' }}>
-        <button onClick={() => handleMoodChange(0.3, 0.8)}>Calm</button>
-        <button onClick={() => handleMoodChange(0.7, 1.2)}>Neutral</button>
-        <button onClick={() => handleMoodChange(1.0, 2.0)}>Intense</button>
+    <div style={{ display: 'flex', flexDirection: 'row', height: '100vh', background: '#000' }}>
+      {/* Control Panel */}
+      <div style={{ width: '360px', padding: '20px', background: '#111', color: '#eee' }}>
+        <h1>Aurelion Control</h1>
+
+        <AiConfigPanel
+          initialConfig={{
+            moodIntensity,
+            resonance,
+            poeticOverlay: true,
+            voiceTone: 'poetic',
+          }}
+          onChange={(config) => {
+            setMoodIntensity(config.moodIntensity);
+            setResonance(config.resonance);
+          }}
+        />
+
+        <ArtisticLensPanel
+          initialConfig={{
+            lensType: 'sunCore',
+            moodIntensity,
+            resonance,
+            colorPrimary: sunColor,
+            colorSecondary: foamColor,
+            poeticOverlay: true,
+          }}
+          onChange={(lens) => {
+            setMoodIntensity(lens.moodIntensity);
+            setResonance(lens.resonance);
+            setSunColor(lens.colorPrimary);
+            setFoamColor(lens.colorSecondary);
+          }}
+        />
+      </div>
+
+      {/* Visual Engine */}
+      <div style={{ flex: 1 }}>
+        <AurelionEngine
+          moodIntensity={moodIntensity}
+          resonance={resonance}
+          sunColor={sunColor}
+          foamColor={foamColor}
+          shieldColor={shieldColor}
+          signalColor={signalColor}
+        />
       </div>
     </div>
   );

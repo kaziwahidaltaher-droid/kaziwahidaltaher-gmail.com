@@ -1,63 +1,68 @@
-import React, { useRef } from 'react';
+import React from 'react';
+// FIX: The `extend` function from react-three-fiber should not be called with the entire THREE namespace.
+// Built-in THREE components are available in JSX by default with R3F.
+// Removed `extend(THREE)` and unused `extend` import.
+import { Canvas } from '@react-three/fiber';
+import SphereShader from './sphere-shader';
+import ShieldingShader from './shielding-shader';
+import PhantomGlowShader from './phantom-glow-shader';
 import * as THREE from 'three';
-import { Canvas, useFrame } from '@react-three/fiber';
 
-interface FaceProps {
-  mood?: 'neutral' | 'happy' | 'sad' | 'curious';
-  color?: string;
+interface BasicFaceRenderProps {
+  moodIntensity?: number;
+  resonance?: number;
+  faceColor?: string;
+  auraColor?: string;
+  glowColor?: string;
 }
 
-const Face: React.FC<FaceProps> = ({ mood = 'neutral', color = '#ffffff' }) => {
-  const leftEyeRef = useRef<THREE.Mesh>(null);
-  const rightEyeRef = useRef<THREE.Mesh>(null);
-  const mouthRef = useRef<THREE.Mesh>(null);
-
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
-    if (mood === 'curious') {
-      leftEyeRef.current!.position.y = Math.sin(t) * 0.05;
-      rightEyeRef.current!.position.y = Math.cos(t) * 0.05;
-    }
-  });
-
-  const mouthShape = () => {
-    switch (mood) {
-      case 'happy':
-        return <circleGeometry args={[0.2, 32]} />;
-      case 'sad':
-        return <ringGeometry args={[0.15, 0.2, 32]} />;
-      default:
-        return <planeGeometry args={[0.4, 0.05]} />;
-    }
-  };
-
+const BasicFaceRender: React.FC<BasicFaceRenderProps> = ({
+  moodIntensity = 0.6,
+  resonance = 1.2,
+  faceColor = '#ff66cc',
+  auraColor = '#00ffff',
+  glowColor = '#88ccff',
+}) => {
   return (
-    <>
-      {/* Eyes */}
-      <mesh ref={leftEyeRef} position={[-0.3, 0.2, 0]}>
-        <circleGeometry args={[0.05, 32]} />
-        <meshBasicMaterial color={color} />
-      </mesh>
-      <mesh ref={rightEyeRef} position={[0.3, 0.2, 0]}>
-        <circleGeometry args={[0.05, 32]} />
-        <meshBasicMaterial color={color} />
-      </mesh>
+    <div style={{ width: '100vw', height: '100vh', background: '#000' }}>
+      <Canvas>
+        <ambientLight intensity={0.5} />
 
-      {/* Mouth */}
-      <mesh ref={mouthRef} position={[0, -0.2, 0]}>
-        {mouthShape()}
-        <meshBasicMaterial color={color} />
-      </mesh>
-    </>
-  );
-};
+        {/* Phantom Glow Layer */}
+        <mesh>
+          <sphereGeometry args={[3.2, 64, 64]} />
+          <PhantomGlowShader
+            moodIntensity={moodIntensity}
+            resonance={resonance}
+            glowColor={glowColor}
+            shadowColor="#000022"
+          />
+        </mesh>
 
-const BasicFaceRender: React.FC = () => {
-  return (
-    <Canvas>
-      <ambientLight intensity={0.5} />
-      <Face mood="neutral" color="#ffccaa" />
-    </Canvas>
+        {/* Shielding Aura */}
+        <mesh>
+          <sphereGeometry args={[2.8, 64, 64]} />
+          {/* FIX: Corrected prop names for ShieldingShader. `innerColor` should be `shieldColor`. */}
+          <ShieldingShader
+            moodIntensity={moodIntensity}
+            resonance={resonance}
+            shieldColor={auraColor}
+          />
+        </mesh>
+
+        {/* Core Face Sphere */}
+        <mesh>
+          <sphereGeometry args={[2.2, 64, 64]} />
+          {/* FIX: Corrected prop names for SphereShader. `coreColor` should be `innerColor` and `auraColor` should be `outerColor`. */}
+          <SphereShader
+            moodIntensity={moodIntensity}
+            resonance={resonance}
+            innerColor={faceColor}
+            outerColor={auraColor}
+          />
+        </mesh>
+      </Canvas>
+    </div>
   );
 };
 

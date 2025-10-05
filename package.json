@@ -1,16 +1,25 @@
 {
-  "name": "axee-web",
+  "name": "aurelion-exoplanet-synthesis-engine",
   "version": "1.0.0",
-  "description": "Web version of the AURELION Exoplanet Synthesis Engine",
-  "type": "module",
+  "description": "An interactive exoplanet discovery engine powered by Gemini, featuring poetic shaders and emotional sync.",
+  "author": "Kazi Wahid",
+  "license": "MIT",
   "scripts": {
-    "dev": "vite --port 8000",
+    "start": "vite",
     "build": "vite build",
-    "preview": "vite preview --port 8000"
+    "dev": "vite",
+    "preview": "vite preview"
   },
-  "author": "AURELION",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@react-three/fiber": "^8.0.27",
+    "@react-three/drei": "^9.56.4",
+    "three": "^0.160.0"
+  },
   "devDependencies": {
-    "typescript": "^5.2.2",
-    "vite": "^5.2.0"
+    "typescript": "^5.3.3",
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^4.0.0"
   }
 }

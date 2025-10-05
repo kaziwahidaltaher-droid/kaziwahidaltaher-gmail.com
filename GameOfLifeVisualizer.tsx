@@ -1,81 +1,61 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { GameOfLife } from './Conway.GameOfLife';
 
-interface VisualizerProps {
-  rows?: number;
-  cols?: number;
+interface GameOfLifeVisualizerProps {
+  width?: number;
+  height?: number;
   cellSize?: number;
-  interval?: number; // milliseconds between steps
+  tickRate?: number; // milliseconds per frame
+  aliveColor?: string;
+  deadColor?: string;
 }
 
-const GameOfLifeVisualizer: React.FC<VisualizerProps> = ({
-  rows = 50,
-  cols = 50,
-  cellSize = 10,
-  interval = 200,
+const GameOfLifeVisualizer: React.FC<GameOfLifeVisualizerProps> = ({
+  width = 100,
+  height = 100,
+  cellSize = 6,
+  tickRate = 100,
+  aliveColor = '#00ffcc',
+  deadColor = '#111111',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [game] = useState(() => new GameOfLife(rows, cols));
-  const [running, setRunning] = useState(true);
+  const gameRef = useRef<GameOfLife>(new GameOfLife(width, height));
 
   useEffect(() => {
-    game.randomize();
-    drawGrid();
-  }, []);
-
-  useEffect(() => {
-    if (!running) return;
-
-    const timer = setInterval(() => {
-      game.step();
-      drawGrid();
-    }, interval);
-
-    return () => clearInterval(timer);
-  }, [running, interval]);
-
-  const drawGrid = () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const grid = game.getGrid();
-
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const alive = grid[r][c] === 1;
-        ctx.fillStyle = alive ? '#00ffcc' : '#111111';
-        ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
-      }
-    }
-  };
-
-  const toggleRunning = () => setRunning(prev => !prev);
-  const resetGrid = () => {
-    game.clear();
+    const ctx = canvas?.getContext('2d');
+    const game = gameRef.current;
     game.randomize();
-    drawGrid();
-  };
+
+    const render = () => {
+      if (!ctx || !canvas) return;
+      const grid = game.getGrid();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          ctx.fillStyle = grid[y][x] ? aliveColor : deadColor;
+          ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+        }
+      }
+    };
+
+    const loop = () => {
+      game.step();
+      render();
+    };
+
+    const interval = setInterval(loop, tickRate);
+    return () => clearInterval(interval);
+  }, [width, height, cellSize, tickRate, aliveColor, deadColor]);
 
   return (
-    <div style={{ textAlign: 'center' }}>
-      <canvas
-        ref={canvasRef}
-        width={cols * cellSize}
-        height={rows * cellSize}
-        style={{ border: '1px solid #333', background: '#000' }}
-      />
-      <div style={{ marginTop: 10 }}>
-        <button onClick={toggleRunning}>
-          {running ? 'Pause' : 'Resume'}
-        </button>
-        <button onClick={resetGrid} style={{ marginLeft: 10 }}>
-          Reset
-        </button>
-      </div>
-    </div>
+    <canvas
+      ref={canvasRef}
+      width={width * cellSize}
+      height={height * cellSize}
+      style={{ display: 'block', background: '#000' }}
+    />
   );
 };
 

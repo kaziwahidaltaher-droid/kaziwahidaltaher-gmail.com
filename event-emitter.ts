@@ -1,47 +1,32 @@
-type Listener<T = any> = (payload: T) => void;
+type Listener<T> = (payload: T) => void;
 
-export class EventEmitter {
-  private events: Map<string, Listener[]> = new Map();
+export class EventEmitter<T = any> {
+  private listeners: Map<string, Listener<T>[]> = new Map();
 
-  /**
-   * Subscribe to an event
-   */
-  public on<T>(event: string, listener: Listener<T>): void {
-    if (!this.events.has(event)) {
-      this.events.set(event, []);
+  on(event: string, listener: Listener<T>): void {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, []);
     }
-    this.events.get(event)!.push(listener);
+    this.listeners.get(event)!.push(listener);
   }
 
-  /**
-   * Unsubscribe from an event
-   */
-  public off<T>(event: string, listener: Listener<T>): void {
-    const listeners = this.events.get(event);
-    if (!listeners) return;
-    this.events.set(event, listeners.filter(l => l !== listener));
+  off(event: string, listener: Listener<T>): void {
+    const group = this.listeners.get(event);
+    if (!group) return;
+    this.listeners.set(event, group.filter(l => l !== listener));
   }
 
-  /**
-   * Emit an event with optional payload
-   */
-  public emit<T>(event: string, payload?: T): void {
-    const listeners = this.events.get(event);
-    if (!listeners) return;
-    listeners.forEach(listener => listener(payload));
+  emit(event: string, payload: T): void {
+    const group = this.listeners.get(event);
+    if (!group) return;
+    group.forEach(listener => listener(payload));
   }
 
-  /**
-   * Clear all listeners for an event
-   */
-  public clear(event: string): void {
-    this.events.delete(event);
-  }
-
-  /**
-   * Clear all events
-   */
-  public clearAll(): void {
-    this.events.clear();
+  clear(event?: string): void {
+    if (event) {
+      this.listeners.delete(event);
+    } else {
+      this.listeners.clear();
+    }
   }
 }

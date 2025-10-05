@@ -1,67 +1,83 @@
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
+// FIX: The `extend` function from react-three-fiber should not be called with the entire THREE namespace.
+// Built-in THREE components are available in JSX by default with R3F.
+// Removed `extend(THREE)` and unused `extend` import.
+import { Canvas } from '@react-three/fiber';
+// FIX: Import SphereShader instead of SunShader, as sun-shader.tsx is not a component.
+import SphereShader from './sphere-shader';
+import QuantumFoamShader from './quantum-foam-shader';
+import ShieldingShader from './shielding-shader';
+import SignalSphereShader from './signal-sphere-shader';
 import * as THREE from 'three';
-import { useFrame, Canvas } from '@react-three/fiber';
-import { galaxyVertexShader, galaxyFragmentShader } from './galaxy-point-shaders';
-
-interface GalaxyConfig {
-  numStars: number;
-  radius: number;
-  starColors?: THREE.Color[];
-  moodIntensity?: number;
-  resonance?: number;
-}
 
 interface AurelionEngineProps {
-  config: GalaxyConfig;
-  isTransition?: boolean;
+  moodIntensity?: number;
+  resonance?: number;
+  sunColor?: string;
+  foamColor?: string;
+  shieldColor?: string;
+  signalColor?: string;
 }
 
-const AurelionEngine: React.FC<AurelionEngineProps> = ({ config, isTransition = false }) => {
-  const starfieldRef = useRef<THREE.Points>(null);
-  const starPositions = useRef<Float32Array>(new Float32Array(config.numStars * 3));
-
-  useEffect(() => {
-    const { numStars, radius } = config;
-    let i3 = 0;
-    for (let i = 0; i < numStars; i++) {
-      starPositions.current[i3] = (Math.random() - 0.5) * radius * 2;
-      starPositions.current[i3 + 1] = (Math.random() - 0.5) * radius * 2;
-      starPositions.current[i3 + 2] = (Math.random() - 0.5) * radius * 2;
-      i3 += 3;
-    }
-  }, [config]);
-
-  const Starfield = () => {
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(starPositions.current, 3));
-
-    const material = new THREE.ShaderMaterial({
-      uniforms: {
-        time: { value: 0 },
-        moodIntensity: { value: config.moodIntensity || 0.5 },
-        resonanceFrequency: { value: config.resonance || 1.0 },
-      },
-      vertexShader: galaxyVertexShader,
-      fragmentShader: galaxyFragmentShader,
-      blending: THREE.AdditiveBlending,
-      depthTest: true,
-      transparent: true,
-    });
-
-    useFrame(({ clock }) => {
-      if (starfieldRef.current) {
-        (starfieldRef.current.material as THREE.ShaderMaterial).uniforms.time.value = clock.getElapsedTime();
-      }
-    });
-
-    return <points ref={starfieldRef} geometry={geometry} material={material} />;
-  };
-
+const AurelionEngine: React.FC<AurelionEngineProps> = ({
+  moodIntensity = 0.75,
+  resonance = 1.4,
+  sunColor = '#ffcc33',
+  foamColor = '#88ffff',
+  shieldColor = '#220044',
+  signalColor = '#00ffcc',
+}) => {
   return (
-    <Canvas>
-      <ambientLight intensity={0.5} />
-      <Starfield />
-    </Canvas>
+    <div style={{ width: '100vw', height: '100vh', background: '#000' }}>
+      <Canvas>
+        <ambientLight intensity={0.5} />
+
+        {/* Quantum Foam Layer */}
+        <mesh>
+          <planeGeometry args={[1000, 1000]} />
+          <QuantumFoamShader
+            moodIntensity={moodIntensity}
+            resonance={resonance}
+            baseColor="#111122"
+            flickerColor={foamColor}
+          />
+        </mesh>
+
+        {/* Shielding Layer */}
+        <mesh>
+          <sphereGeometry args={[3.5, 64, 64]} />
+          {/* FIX: Corrected prop names for ShieldingShader. `innerColor` should be `shieldColor`. */}
+          <ShieldingShader
+            moodIntensity={moodIntensity}
+            resonance={resonance}
+            shieldColor={shieldColor}
+          />
+        </mesh>
+
+        {/* Signal Sphere */}
+        <mesh>
+          <sphereGeometry args={[3.0, 64, 64]} />
+          <SignalSphereShader
+            moodIntensity={moodIntensity}
+            resonance={resonance}
+            coreColor={signalColor}
+            pulseColor="#ffffff"
+          />
+        </mesh>
+
+        {/* Sun Core */}
+        {/* FIX: Replaced SunShader component with SphereShader and mapped props correctly. */}
+        <mesh>
+          <sphereGeometry args={[2.5, 64, 64]} />
+          <SphereShader
+            moodIntensity={moodIntensity}
+            resonance={resonance}
+            innerColor={sunColor}
+            outerColor="#ff6600"
+          />
+        </mesh>
+      </Canvas>
+    </div>
   );
 };
 
