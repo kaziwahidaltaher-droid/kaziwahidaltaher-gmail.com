@@ -1,65 +1,79 @@
 export class GameOfLife {
-  private width: number;
-  private height: number;
+  private rows: number;
+  private cols: number;
   private grid: number[][];
   private nextGrid: number[][];
 
-  constructor(width: number, height: number) {
-    this.width = width;
-    this.height = height;
+  constructor(rows: number, cols: number) {
+    this.rows = rows;
+    this.cols = cols;
     this.grid = this.createEmptyGrid();
     this.nextGrid = this.createEmptyGrid();
   }
 
   private createEmptyGrid(): number[][] {
-    return Array.from({ length: this.height }, () =>
-      Array.from({ length: this.width }, () => 0)
+    return Array.from({ length: this.rows }, () =>
+      Array.from({ length: this.cols }, () => 0)
     );
   }
 
-  randomize(): void {
-    for (let y = 0; y < this.height; y++) {
-      for (let x = 0; x < this.width; x++) {
-        this.grid[y][x] = Math.random() > 0.8 ? 1 : 0;
+  public randomize(): void {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        this.grid[r][c] = Math.random() > 0.7 ? 1 : 0;
       }
     }
   }
 
-  private countNeighbors(x: number, y: number): number {
+  public getGrid(): number[][] {
+    return this.grid;
+  }
+
+  public step(): void {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const neighbors = this.countNeighbors(r, c);
+        const cell = this.grid[r][c];
+
+        if (cell === 1 && (neighbors < 2 || neighbors > 3)) {
+          this.nextGrid[r][c] = 0; // Death
+        } else if (cell === 0 && neighbors === 3) {
+          this.nextGrid[r][c] = 1; // Birth
+        } else {
+          this.nextGrid[r][c] = cell; // Survival
+        }
+      }
+    }
+
+    // Swap grids
+    const temp = this.grid;
+    this.grid = this.nextGrid;
+    this.nextGrid = temp;
+  }
+
+  private countNeighbors(row: number, col: number): number {
     let count = 0;
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (dx === 0 && dy === 0) continue;
-        const nx = (x + dx + this.width) % this.width;
-        const ny = (y + dy + this.height) % this.height;
-        count += this.grid[ny][nx];
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const r = row + dr;
+        const c = col + dc;
+        if (r >= 0 && r < this.rows && c >= 0 && c < this.cols) {
+          count += this.grid[r][c];
+        }
       }
     }
     return count;
   }
 
-  step(): void {
-    for (let y = 0; y < this.height; y++) {
-      for (let x = 0; x < this.width; x++) {
-        const neighbors = this.countNeighbors(x, y);
-        const cell = this.grid[y][x];
-        this.nextGrid[y][x] =
-          cell === 1
-            ? neighbors === 2 || neighbors === 3 ? 1 : 0
-            : neighbors === 3 ? 1 : 0;
-      }
-    }
-
-    // Swap grids
-    [this.grid, this.nextGrid] = [this.nextGrid, this.grid];
-  }
-
-  getGrid(): number[][] {
-    return this.grid;
-  }
-
-  clear(): void {
+  public clear(): void {
     this.grid = this.createEmptyGrid();
     this.nextGrid = this.createEmptyGrid();
+  }
+
+  public toggleCell(row: number, col: number): void {
+    if (row >= 0 && row < this.rows && col >= 0 && col < this.cols) {
+      this.grid[row][col] = this.grid[row][col] ? 0 : 1;
+    }
   }
 }

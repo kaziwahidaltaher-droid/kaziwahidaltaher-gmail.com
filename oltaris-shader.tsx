@@ -1,24 +1,19 @@
 import React, { useRef } from 'react';
 import * as THREE from 'three';
-// FIX: Extend THREE.ShaderMaterial to make <shaderMaterial> available in JSX.
-import { useFrame, extend } from '@react-three/fiber';
-
-extend({ ShaderMaterial: THREE.ShaderMaterial });
+import { useFrame } from '@react-three/fiber';
 
 interface OltarisShaderProps {
   moodIntensity?: number;
   resonance?: number;
-  starColor?: string;
-  pulseColor?: string;
-  density?: number;
+  colorCore?: string;
+  colorAura?: string;
 }
 
 const OltarisShader: React.FC<OltarisShaderProps> = ({
-  moodIntensity = 0.7,
-  resonance = 1.3,
-  starColor = '#ffffff',
-  pulseColor = '#ff66cc',
-  density = 0.8,
+  moodIntensity = 0.5,
+  resonance = 1.0,
+  colorCore = '#ffccaa',
+  colorAura = '#220044',
 }) => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 
@@ -37,9 +32,8 @@ const OltarisShader: React.FC<OltarisShaderProps> = ({
           time: { value: 0 },
           moodIntensity: { value: moodIntensity },
           resonance: { value: resonance },
-          density: { value: density },
-          starColor: { value: new THREE.Color(starColor) },
-          pulseColor: { value: new THREE.Color(pulseColor) },
+          colorCore: { value: new THREE.Color(colorCore) },
+          colorAura: { value: new THREE.Color(colorAura) },
         },
         vertexShader: `
           varying vec2 vUv;
@@ -52,20 +46,19 @@ const OltarisShader: React.FC<OltarisShaderProps> = ({
           uniform float time;
           uniform float moodIntensity;
           uniform float resonance;
-          uniform float density;
-          uniform vec3 starColor;
-          uniform vec3 pulseColor;
+          uniform vec3 colorCore;
+          uniform vec3 colorAura;
           varying vec2 vUv;
 
-          float star(vec2 p) {
-            float flicker = sin(dot(p, vec2(12.9898, 78.233)) + time * resonance) * 0.5 + 0.5;
-            return step(1.0 - density, fract(sin(dot(p, vec2(43.2321, 21.123))) * 43758.5453)) * flicker;
+          float radial(vec2 p) {
+            return smoothstep(0.0, 1.0, 1.0 - length(p - 0.5) * 2.0);
           }
 
           void main() {
-            float s = star(vUv * 100.0);
-            vec3 color = mix(starColor, pulseColor, moodIntensity * s);
-            gl_FragColor = vec4(color * s, 1.0);
+            float pulse = sin(time * resonance + vUv.x * 3.0 + vUv.y * 3.0) * 0.5 + 0.5;
+            float glow = radial(vUv) * moodIntensity;
+            vec3 color = mix(colorAura, colorCore, glow * pulse);
+            gl_FragColor = vec4(color, 1.0);
           }
         `,
         transparent: false,

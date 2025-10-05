@@ -1,64 +1,78 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 
-interface LiveMessage {
-  type: 'emotion' | 'text' | 'sync' | 'config';
-  payload: any;
-}
+type Listener<T = any> = (payload: T) => void;
 
 interface UseLiveAPIOptions {
   url: string;
-  onMessage?: (msg: LiveMessage) => void;
-  autoReconnect?: boolean;
+  onConnect?: () => void;
+  onDisconnect?: () => void;
+  onError?: (error: Event) => void;
 }
 
-export function useLiveAPI({ url, onMessage, autoReconnect = true }: UseLiveAPIOptions) {
+export const useLiveAPI = ({
+  url,
+  onConnect,
+  onDisconnect,
+  onError,
+}: UseLiveAPIOptions) => {
   const socketRef = useRef<WebSocket | null>(null);
-  const [connected, setConnected] = useState(false);
+  const listenersRef = useRef<Map<string, Listener[]>>(new Map());
+
+  const connect = useCallback(() => {
+    socketRef.current = new WebSocket(url);
+
+    socketRef.current.onopen = () => {
+      if (onConnect) onConnect();
+    };
+
+    socketRef.current.onmessage = (event: MessageEvent) => {
+      const { type, payload } = JSON.parse(event.data);
+      const listeners = listenersRef.current.get(type);
+      if (listeners) {
+        listeners.forEach(listener => listener(payload));
+      }
+    };
+
+    socketRef.current.onclose = () => {
+      if (onDisconnect) onDisconnect();
+    };
+
+    socketRef.current.onerror = (error) => {
+      if (onError) onError(error);
+    };
+  }, [url, onConnect, onDisconnect, onError]);
+
+  const send = useCallback((type: string, payload: any) => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type, payload }));
+    }
+  }, []);
+
+  const on = useCallback(<T,>(type: string, listener: Listener<T>) => {
+    if (!listenersRef.current.has(type)) {
+      listenersRef.current.set(type, []);
+    }
+    listenersRef.current.get(type)!.push(listener);
+  }, []);
+
+  const off = useCallback(<T,>(type: string, listener: Listener<T>) => {
+    const listeners = listenersRef.current.get(type);
+    if (listeners) {
+      listenersRef.current.set(type, listeners.filter(l => l !== listener));
+    }
+  }, []);
+
+  const disconnect = useCallback(() => {
+    if (socketRef.current) {
+      socketRef.current.close();
+      socketRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
-    // FIX: Changed type from NodeJS.Timeout to a more general type that works in browser environments.
-    let reconnectTimeout: ReturnType<typeof setTimeout>;
-
-    const connect = () => {
-      socketRef.current = new WebSocket(url);
-
-      socketRef.current.onopen = () => {
-        setConnected(true);
-      };
-
-      socketRef.current.onmessage = (event) => {
-        try {
-          const msg: LiveMessage = JSON.parse(event.data);
-          onMessage?.(msg);
-        } catch (err) {
-          console.warn('Live API message parse error:', err);
-        }
-      };
-
-      socketRef.current.onclose = () => {
-        setConnected(false);
-        if (autoReconnect) {
-          reconnectTimeout = setTimeout(connect, 3000);
-        }
-      };
-
-      socketRef.current.onerror = (err) => {
-        console.error('Live API socket error:', err);
-      };
-    };
-
     connect();
-    return () => {
-      clearTimeout(reconnectTimeout);
-      socketRef.current?.close();
-    };
-  }, [url, autoReconnect, onMessage]);
+    return () => disconnect();
+  }, [connect, disconnect]);
 
-  const send = (msg: LiveMessage) => {
-    if (connected && socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify(msg));
-    }
-  };
-
-  return { connected, send };
-}
+  return { send, on, off };
+};

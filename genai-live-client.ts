@@ -1,73 +1,79 @@
-type GenAIMessage = {
-  type: 'emotion' | 'text' | 'sync' | 'config';
+type GenAIEvent = {
+  type: string;
   payload: any;
 };
 
-type GenAIEvent = {
-  type: string;
-  data: any;
-};
+type Listener<T = any> = (payload: T) => void;
 
 export class GenAILiveClient {
   private socket: WebSocket | null = null;
-  private listeners: Map<string, ((data: any) => void)[]> = new Map();
-  private connected: boolean = false;
+  private listeners: Map<string, Listener[]> = new Map();
+  private url: string;
 
-  constructor(private serverURL: string) {}
+  constructor(url: string) {
+    this.url = url;
+  }
 
-  connect(): void {
-    this.socket = new WebSocket(this.serverURL);
+  /**
+   * Connect to the GenAI live backend
+   */
+  public connect(): void {
+    this.socket = new WebSocket(this.url);
 
     this.socket.onopen = () => {
-      this.connected = true;
-      this.emitLocal('connected', {});
+      console.log('[GenAI] Connected to live stream');
     };
 
-    this.socket.onmessage = (event) => {
-      const message: GenAIEvent = JSON.parse(event.data);
-      this.emitLocal(message.type, message.data);
+    this.socket.onmessage = (event: MessageEvent) => {
+      const data: GenAIEvent = JSON.parse(event.data);
+      this.emit(data.type, data.payload);
     };
 
     this.socket.onclose = () => {
-      this.connected = false;
-      this.emitLocal('disconnected', {});
+      console.log('[GenAI] Connection closed');
     };
 
-    this.socket.onerror = (err) => {
-      this.emitLocal('error', err);
+    this.socket.onerror = (error) => {
+      console.error('[GenAI] Connection error:', error);
     };
   }
 
-  send(message: GenAIMessage): void {
-    if (this.socket && this.connected) {
-      this.socket.send(JSON.stringify(message));
+  /**
+   * Send a message to the GenAI backend
+   */
+  public send(type: string, payload: any): void {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      const message = JSON.stringify({ type, payload });
+      this.socket.send(message);
     }
   }
 
-  on(eventType: string, callback: (data: any) => void): void {
-    if (!this.listeners.has(eventType)) {
-      this.listeners.set(eventType, []);
+  /**
+   * Subscribe to a specific event type
+   */
+  public on<T>(type: string, listener: Listener<T>): void {
+    if (!this.listeners.has(type)) {
+      this.listeners.set(type, []);
     }
-    this.listeners.get(eventType)!.push(callback);
+    this.listeners.get(type)!.push(listener);
   }
 
-  off(eventType: string, callback: (data: any) => void): void {
-    const group = this.listeners.get(eventType);
-    if (!group) return;
-    this.listeners.set(eventType, group.filter(fn => fn !== callback));
+  /**
+   * Emit an event to all listeners
+   */
+  private emit<T>(type: string, payload: T): void {
+    const listeners = this.listeners.get(type);
+    if (!listeners) return;
+    listeners.forEach(listener => listener(payload));
   }
 
-  private emitLocal(eventType: string, data: any): void {
-    const group = this.listeners.get(eventType);
-    if (!group) return;
-    group.forEach(fn => fn(data));
-  }
-
-  disconnect(): void {
+  /**
+   * Disconnect from the GenAI backend
+   */
+  public disconnect(): void {
     if (this.socket) {
       this.socket.close();
       this.socket = null;
-      this.connected = false;
     }
   }
 }

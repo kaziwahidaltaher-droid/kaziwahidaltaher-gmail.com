@@ -1,9 +1,6 @@
 import React, { useRef } from 'react';
 import * as THREE from 'three';
-// FIX: Extend THREE.ShaderMaterial to make <shaderMaterial> available in JSX.
-import { useFrame, extend } from '@react-three/fiber';
-
-extend({ ShaderMaterial: THREE.ShaderMaterial });
+import { useFrame } from '@react-three/fiber';
 
 interface PhantomGlowShaderProps {
   moodIntensity?: number;
@@ -13,8 +10,8 @@ interface PhantomGlowShaderProps {
 }
 
 const PhantomGlowShader: React.FC<PhantomGlowShaderProps> = ({
-  moodIntensity = 0.6,
-  resonance = 1.2,
+  moodIntensity = 0.5,
+  resonance = 1.0,
   glowColor = '#88ccff',
   shadowColor = '#000022',
 }) => {
@@ -39,9 +36,9 @@ const PhantomGlowShader: React.FC<PhantomGlowShaderProps> = ({
           shadowColor: { value: new THREE.Color(shadowColor) },
         },
         vertexShader: `
-          varying vec3 vPosition;
+          varying vec2 vUv;
           void main() {
-            vPosition = position;
+            vUv = uv;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
           }
         `,
@@ -51,12 +48,16 @@ const PhantomGlowShader: React.FC<PhantomGlowShaderProps> = ({
           uniform float resonance;
           uniform vec3 glowColor;
           uniform vec3 shadowColor;
-          varying vec3 vPosition;
+          varying vec2 vUv;
+
+          float phantom(vec2 p) {
+            float dist = length(p - 0.5);
+            float wave = sin(time * resonance + dist * 10.0);
+            return smoothstep(0.3, 0.0, dist) * (0.5 + 0.5 * wave);
+          }
 
           void main() {
-            float r = length(vPosition);
-            float pulse = sin(time * resonance + r * 2.0) * 0.5 + 0.5;
-            float glow = smoothstep(1.5, 0.5, r) * pulse * moodIntensity;
+            float glow = phantom(vUv) * moodIntensity;
             vec3 color = mix(shadowColor, glowColor, glow);
             gl_FragColor = vec4(color, 1.0);
           }

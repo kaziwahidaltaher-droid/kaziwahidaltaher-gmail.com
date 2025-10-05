@@ -1,15 +1,7 @@
 {
-  "name": "AURELION Exoplanet Synthesis Engine",
+  "name": "AXEE (AURELION Exoplanet Synthesis Engine)",
   "description": "An interactive exoplanet discovery engine powered by Gemini.",
   "requestFramePermissions": [
     "microphone"
-  ],
-  "version": "1.0.0",
-  "entry": "index.html",
-  "modules": [
-    "resonance-layer",
-    "poetic-overlay",
-    "species-classifier",
-    "emotional-sync-engine"
   ]
 }

@@ -1,24 +1,19 @@
 import React, { useRef } from 'react';
 import * as THREE from 'three';
-// FIX: Extend THREE.ShaderMaterial to make <shaderMaterial> available in JSX.
-import { useFrame, extend } from '@react-three/fiber';
-
-extend({ ShaderMaterial: THREE.ShaderMaterial });
+import { useFrame } from '@react-three/fiber';
 
 interface ProbeShaderProps {
   moodIntensity?: number;
   resonance?: number;
-  coreColor?: string;
-  pulseColor?: string;
-  scanSpeed?: number;
+  scanColor?: string;
+  backgroundColor?: string;
 }
 
 const ProbeShader: React.FC<ProbeShaderProps> = ({
-  moodIntensity = 0.7,
-  resonance = 1.4,
-  coreColor = '#00ffcc',
-  pulseColor = '#ff66cc',
-  scanSpeed = 0.5,
+  moodIntensity = 0.5,
+  resonance = 1.0,
+  scanColor = '#00ffcc',
+  backgroundColor = '#000022',
 }) => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 
@@ -37,14 +32,13 @@ const ProbeShader: React.FC<ProbeShaderProps> = ({
           time: { value: 0 },
           moodIntensity: { value: moodIntensity },
           resonance: { value: resonance },
-          scanSpeed: { value: scanSpeed },
-          coreColor: { value: new THREE.Color(coreColor) },
-          pulseColor: { value: new THREE.Color(pulseColor) },
+          scanColor: { value: new THREE.Color(scanColor) },
+          backgroundColor: { value: new THREE.Color(backgroundColor) },
         },
         vertexShader: `
-          varying vec3 vPosition;
+          varying vec2 vUv;
           void main() {
-            vPosition = position;
+            vUv = uv;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
           }
         `,
@@ -52,17 +46,19 @@ const ProbeShader: React.FC<ProbeShaderProps> = ({
           uniform float time;
           uniform float moodIntensity;
           uniform float resonance;
-          uniform float scanSpeed;
-          uniform vec3 coreColor;
-          uniform vec3 pulseColor;
-          varying vec3 vPosition;
+          uniform vec3 scanColor;
+          uniform vec3 backgroundColor;
+          varying vec2 vUv;
+
+          float radialPulse(vec2 p, float t) {
+            float dist = length(p - 0.5);
+            float wave = sin(t * resonance - dist * 10.0);
+            return smoothstep(0.2, 0.0, dist) * (0.5 + 0.5 * wave);
+          }
 
           void main() {
-            float r = length(vPosition);
-            float scan = sin(time * scanSpeed + r * 4.0) * 0.5 + 0.5;
-            float pulse = sin(time * resonance + r * 2.0) * 0.5 + 0.5;
-            float glow = smoothstep(1.5, 0.3, r) * scan * pulse * moodIntensity;
-            vec3 color = mix(coreColor, pulseColor, glow);
+            float pulse = radialPulse(vUv, time);
+            vec3 color = mix(backgroundColor, scanColor, pulse * moodIntensity);
             gl_FragColor = vec4(color, 1.0);
           }
         `,

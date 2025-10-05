@@ -1,69 +1,59 @@
 import React, { useRef } from 'react';
 import * as THREE from 'three';
-// FIX: Extend THREE.ShaderMaterial to make <shaderMaterial> available in JSX.
-import { useFrame, extend } from '@react-three/fiber';
-
-extend({ ShaderMaterial: THREE.ShaderMaterial });
+import { useFrame } from '@react-three/fiber';
 
 interface BackdropShaderProps {
   moodIntensity?: number;
   resonance?: number;
-  colorStart?: string;
-  colorEnd?: string;
 }
 
 const BackdropShader: React.FC<BackdropShaderProps> = ({
   moodIntensity = 0.5,
   resonance = 1.0,
-  colorStart = '#220044',
-  colorEnd = '#00ffff',
 }) => {
-  const materialRef = useRef<THREE.ShaderMaterial>(null);
+  const meshRef = useRef<THREE.Mesh>(null);
+
+  const shaderMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      time: { value: 0 },
+      moodIntensity: { value: moodIntensity },
+      resonanceFrequency: { value: resonance },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float time;
+      uniform float moodIntensity;
+      uniform float resonanceFrequency;
+      varying vec2 vUv;
+
+      void main() {
+        float pulse = sin(time * resonanceFrequency) * 0.5 + 0.5;
+        vec3 color = mix(vec3(0.05, 0.1, 0.2), vec3(0.3, 0.6, 1.0), moodIntensity * pulse);
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+    side: THREE.DoubleSide,
+    transparent: false,
+    depthWrite: false,
+  });
 
   useFrame(({ clock }) => {
-    if (materialRef.current) {
-      materialRef.current.uniforms.time.value = clock.getElapsedTime();
+    if (shaderMaterial.uniforms.time) {
+      shaderMaterial.uniforms.time.value = clock.getElapsedTime();
     }
   });
 
   return (
-    <shaderMaterial
-      ref={materialRef}
-      attach="material"
-      args={[{
-        uniforms: {
-          time: { value: 0 },
-          moodIntensity: { value: moodIntensity },
-          resonance: { value: resonance },
-          colorStart: { value: new THREE.Color(colorStart) },
-          colorEnd: { value: new THREE.Color(colorEnd) },
-        },
-        vertexShader: `
-          varying vec2 vUv;
-          void main() {
-            vUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          }
-        `,
-        fragmentShader: `
-          uniform float time;
-          uniform float moodIntensity;
-          uniform float resonance;
-          uniform vec3 colorStart;
-          uniform vec3 colorEnd;
-          varying vec2 vUv;
-
-          void main() {
-            float pulse = sin(time * resonance + vUv.y * 5.0) * 0.5 + 0.5;
-            vec3 color = mix(colorStart, colorEnd, vUv.y + pulse * moodIntensity * 0.3);
-            gl_FragColor = vec4(color, 1.0);
-          }
-        `,
-        transparent: false,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      }]}
-    />
+    <mesh ref={meshRef}>
+      <planeGeometry args={[1000, 1000]} />
+      <primitive object={shaderMaterial} attach="material" />
+    </mesh>
   );
 };
 

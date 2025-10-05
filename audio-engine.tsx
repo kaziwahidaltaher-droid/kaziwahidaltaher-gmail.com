@@ -5,30 +5,34 @@
 
 import {LitElement} from 'lit';
 import {customElement, property} from 'lit/decorators.js';
-import type {MusicMood} from './index.tsx';
+import type {MusicMood} from './index';
 
 interface ActiveSound {
-  gainNode: GainNode;
   stop: () => void;
 }
 
 @customElement('axee-audio-engine')
 export class AxeeAudioEngine extends LitElement {
   @property({type: String}) mood: MusicMood = 'off';
-  @property({type: Boolean}) muted = false;
+  @property({type:Boolean}) muted = false;
 
   private audioContext: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private musicGain: GainNode | null = null; // New node specifically for music
   private activeSound: ActiveSound | null = null;
   private currentMood: MusicMood = 'off';
-  private readonly FADE_TIME = 2.0;
 
   private initializeAudio() {
     if (this.audioContext) return;
     try {
       this.audioContext = new AudioContext();
       this.masterGain = this.audioContext.createGain();
+      this.musicGain = this.audioContext.createGain();
+
+      // Music flows through musicGain -> masterGain -> destination
+      this.musicGain.connect(this.masterGain);
       this.masterGain.connect(this.audioContext.destination);
+
       this.updateMasterGain();
       console.log('Audio Engine Initialized.');
     } catch (e) {
@@ -41,7 +45,7 @@ export class AxeeAudioEngine extends LitElement {
     const targetGain = this.muted ? 0 : 1;
     this.masterGain.gain.linearRampToValueAtTime(
       targetGain,
-      this.audioContext.currentTime + this.FADE_TIME / 2,
+      this.audioContext.currentTime + 1,
     );
   }
 
@@ -64,11 +68,6 @@ export class AxeeAudioEngine extends LitElement {
     }
 
     if (this.activeSound) {
-      const now = this.audioContext.currentTime;
-      this.activeSound.gainNode.gain.linearRampToValueAtTime(
-        0.0001,
-        now + this.FADE_TIME,
-      );
       this.activeSound.stop();
       this.activeSound = null;
     }
@@ -77,243 +76,230 @@ export class AxeeAudioEngine extends LitElement {
 
     if (this.mood === 'off') return;
 
-    // Start new sound halfway through the fade out of the old one
+    // Wait for the old sound's fade-out to complete before starting the new one.
     setTimeout(() => {
-      if (this.mood !== this.currentMood || !this.audioContext) return;
+      // Ensure the mood hasn't changed again during the timeout
+      if (this.currentMood !== this.mood) return;
 
-      if (this.mood === 'galaxy') this.activeSound = this.playGalaxyDrone();
-      else if (this.mood === 'serene') this.activeSound = this.playSerenePad();
-      else if (this.mood === 'tense')
-        this.activeSound = this.playTenseAmbience();
-      else if (this.mood === 'mysterious')
-        this.activeSound = this.playMysteriousChimes();
-    }, this.FADE_TIME * 1000 * 0.5);
+      switch (this.mood) {
+        case 'galaxy':
+          this.activeSound = this.createGalaxySound();
+          break;
+        case 'serene':
+          this.activeSound = this.createSereneSound();
+          break;
+        case 'tense':
+          this.activeSound = this.createTenseSound();
+          break;
+        case 'mysterious':
+          this.activeSound = this.createMysteriousSound();
+          break;
+      }
+    }, 2100);
   }
 
-  // FIX: Add sound effect methods to resolve errors in index.tsx
+  private createSound(
+    oscillators: {type: OscillatorType; freq: number; detune?: number}[],
+    lfo?: {freq: number; depth: number},
+    volume = 0.1,
+  ): ActiveSound {
+    const actx = this.audioContext!;
+    const nodes: (AudioNode | OscillatorNode)[] = [];
+    const gain = actx.createGain();
+    gain.gain.value = 0;
+    // Background music connects to the musicGain node so it can be ducked
+    gain.connect(this.musicGain!);
+    gain.gain.linearRampToValueAtTime(volume, actx.currentTime + 2);
+
+    oscillators.forEach((oscConfig) => {
+      const osc = actx.createOscillator();
+      osc.type = oscConfig.type;
+      osc.frequency.value = oscConfig.freq;
+      if (oscConfig.detune) {
+        osc.detune.value = oscConfig.detune;
+      }
+      osc.connect(gain);
+      osc.start();
+      nodes.push(osc);
+    });
+
+    if (lfo) {
+      const lfoOsc = actx.createOscillator();
+      const lfoGain = actx.createGain();
+      lfoOsc.type = 'sine';
+      lfoOsc.frequency.value = lfo.freq;
+      lfoGain.gain.value = lfo.depth;
+      lfoOsc.connect(lfoGain);
+      nodes.forEach((node) => {
+        if (node instanceof OscillatorNode) {
+          lfoGain.connect(node.frequency);
+        }
+      });
+      lfoOsc.start();
+      nodes.push(lfoOsc);
+    }
+    
+    return {
+        stop: () => {
+            gain.gain.linearRampToValueAtTime(0, actx.currentTime + 2);
+            setTimeout(() => {
+                nodes.forEach(node => {
+                    if (node instanceof OscillatorNode) {
+                        node.stop();
+                    }
+                    node.disconnect();
+                });
+                gain.disconnect();
+            }, 2100);
+        }
+    };
+  }
+
+  private createGalaxySound(): ActiveSound {
+    return this.createSound(
+      [
+        {type: 'sine', freq: 60, detune: 0},
+        {type: 'sine', freq: 62, detune: 2},
+        {type: 'sawtooth', freq: 120, detune: -2},
+      ],
+      {freq: 0.05, depth: 20},
+      0.08,
+    );
+  }
+
+  private createSereneSound(): ActiveSound {
+    return this.createSound(
+      [
+        {type: 'sine', freq: 100},
+        {type: 'sine', freq: 202},
+        {type: 'sine', freq: 305},
+      ],
+      {freq: 0.1, depth: 5},
+      0.12,
+    );
+  }
+
+  private createTenseSound(): ActiveSound {
+    return this.createSound(
+      [
+        {type: 'sawtooth', freq: 55},
+        {type: 'sawtooth', freq: 58, detune: 10},
+      ],
+      {freq: 2, depth: 5},
+      0.07,
+    );
+  }
+
+  private createMysteriousSound(): ActiveSound {
+    return this.createSound(
+      [
+        {type: 'square', freq: 80},
+        {type: 'sine', freq: 165, detune: 5},
+      ],
+      {freq: 0.2, depth: 15},
+      0.09,
+    );
+  }
+
+  // --- PUBLIC METHODS FOR SFX & CONTROL ---
+
+  // FIX: Implement method to duck music volume.
+  public duck(isDucked: boolean) {
+    if (!this.musicGain || !this.audioContext) return;
+    const targetGain = isDucked ? 0.2 : 1.0;
+    this.musicGain.gain.linearRampToValueAtTime(
+      targetGain,
+      this.audioContext.currentTime + 0.5,
+    );
+  }
+
+  // Fix: Add a generic sound effect player.
+  private playSfx(
+    type: OscillatorType,
+    startFreq: number,
+    endFreq: number,
+    duration: number,
+    volume = 0.3,
+  ) {
+    if (!this.audioContext || !this.masterGain) {
+      if (!this.audioContext) this.initializeAudio();
+      if (!this.audioContext || !this.masterGain) return;
+    }
+
+    const actx = this.audioContext;
+    const now = actx.currentTime;
+
+    const osc = actx.createOscillator();
+    const gain = actx.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(startFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(endFreq, now + duration);
+
+    gain.gain.setValueAtTime(volume, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    osc.connect(gain);
+    // SFX connect to masterGain directly to bypass music ducking
+    gain.connect(this.masterGain);
+
+    osc.start(now);
+    osc.stop(now + duration);
+  }
+
+  // Fix: Add all the missing sound effect methods.
   public playInteractionSound() {
-    this.playSoundEffect('sine', 880, 0.1, 0.02);
+    this.playSfx('sine', 880, 440, 0.1, 0.2);
   }
 
   public playSuccessSound() {
-    this.playSoundEffect('triangle', 523.25, 0.2, 0.05, 1046.5);
+    if (!this.audioContext || !this.masterGain) {
+      if (!this.audioContext) this.initializeAudio();
+      if (!this.audioContext || !this.masterGain) return;
+    }
+    const actx = this.audioContext;
+    const now = actx.currentTime;
+    const volume = 0.25;
+
+    // A simple major chord (C5-E5-G5)
+    const freqs = [523.25, 659.25, 783.99];
+    freqs.forEach((freq, i) => {
+      const osc = actx.createOscillator();
+      const gain = actx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.05); // Stagger the notes slightly
+
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(volume, now + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+
+      osc.connect(gain);
+      // SFX connect to masterGain directly to bypass music ducking
+      gain.connect(this.masterGain!);
+
+      osc.start(now + i * 0.05);
+      osc.stop(now + 0.5);
+    });
   }
 
   public playErrorSound() {
-    this.playSoundEffect('sawtooth', 220, 0.3, 0.03, 110);
+    this.playSfx('sawtooth', 220, 110, 0.3, 0.2);
   }
 
-  private playSoundEffect(
-    type: OscillatorType,
-    startFreq: number,
-    duration: number,
-    gainValue: number,
-    endFreq?: number,
-  ) {
-    this.initializeAudio();
-    if (!this.audioContext || !this.masterGain) {
-      return;
-    }
-
-    const now = this.audioContext.currentTime;
-    const effectGain = this.audioContext.createGain();
-    effectGain.connect(this.masterGain);
-    effectGain.gain.setValueAtTime(gainValue, now);
-    effectGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-
-    const oscillator = this.audioContext.createOscillator();
-    oscillator.connect(effectGain);
-    oscillator.type = type;
-    oscillator.frequency.setValueAtTime(startFreq, now);
-    if (endFreq) {
-      oscillator.frequency.exponentialRampToValueAtTime(
-        endFreq,
-        now + duration * 0.8,
-      );
-    }
-
-    oscillator.start(now);
-    oscillator.stop(now + duration);
+  public playJumpEngageSound() {
+    this.playSfx('sawtooth', 50, 200, 1.0, 0.4);
   }
 
-  private playGalaxyDrone(): ActiveSound | null {
-    if (!this.audioContext || !this.masterGain) return null;
-
-    const ctx = this.audioContext;
-    const now = ctx.currentTime;
-
-    const moodGain = ctx.createGain();
-    moodGain.gain.setValueAtTime(0, now);
-    moodGain.gain.linearRampToValueAtTime(0.15, now + this.FADE_TIME);
-    moodGain.connect(this.masterGain);
-
-    const osc1 = ctx.createOscillator();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(60, now); // Low hum
-    osc1.connect(moodGain);
-
-    const osc2 = ctx.createOscillator();
-    osc2.type = 'sawtooth';
-    osc2.frequency.setValueAtTime(61, now); // Slight detune for texture
-    const osc2Gain = ctx.createGain();
-    osc2Gain.gain.value = 0.2;
-    osc2.connect(osc2Gain).connect(moodGain);
-
-    const lfo = ctx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 0.05; // Very slow modulation
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.05;
-    lfo.connect(lfoGain).connect(moodGain.gain);
-
-    osc1.start(now);
-    osc2.start(now);
-    lfo.start(now);
-
-    return {
-      gainNode: moodGain,
-      stop: () => {
-        const stopTime = ctx.currentTime + this.FADE_TIME;
-        osc1.stop(stopTime);
-        osc2.stop(stopTime);
-        lfo.stop(stopTime);
-        setTimeout(() => moodGain.disconnect(), this.FADE_TIME * 1000 + 100);
-      },
-    };
+  public playClearSound() {
+    this.playSfx('sine', 2000, 100, 0.5, 0.2);
   }
 
-  private playSerenePad(): ActiveSound | null {
-    if (!this.audioContext || !this.masterGain) return null;
-    const ctx = this.audioContext;
-    const now = ctx.currentTime;
-
-    const moodGain = ctx.createGain();
-    moodGain.gain.setValueAtTime(0, now);
-    moodGain.gain.linearRampToValueAtTime(0.1, now + this.FADE_TIME);
-    moodGain.connect(this.masterGain);
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 600;
-    filter.Q.value = 8;
-    filter.connect(moodGain);
-
-    const osc1 = ctx.createOscillator();
-    osc1.type = 'sawtooth';
-    osc1.frequency.value = 220; // A3
-    osc1.detune.value = -4;
-    osc1.connect(filter);
-
-    const osc2 = ctx.createOscillator();
-    osc2.type = 'sawtooth';
-    osc2.frequency.value = 220;
-    osc2.detune.value = 4;
-    osc2.connect(filter);
-
-    const lfo = ctx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 0.2;
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 150; // Affects filter frequency
-    lfo.connect(lfoGain).connect(filter.frequency);
-
-    osc1.start(now);
-    osc2.start(now);
-    lfo.start(now);
-
-    return {
-      gainNode: moodGain,
-      stop: () => {
-        const stopTime = ctx.currentTime + this.FADE_TIME;
-        osc1.stop(stopTime);
-        osc2.stop(stopTime);
-        lfo.stop(stopTime);
-        setTimeout(() => moodGain.disconnect(), this.FADE_TIME * 1000 + 100);
-      },
-    };
+  public playToggleSound() {
+    this.playSfx('triangle', 1200, 1200, 0.05, 0.15);
   }
 
-  private playTenseAmbience(): ActiveSound | null {
-    if (!this.audioContext || !this.masterGain) return null;
-    const ctx = this.audioContext;
-    const now = ctx.currentTime;
-
-    const moodGain = ctx.createGain();
-    moodGain.gain.setValueAtTime(0, now);
-    moodGain.gain.linearRampToValueAtTime(0.08, now + this.FADE_TIME);
-    moodGain.connect(this.masterGain);
-
-    const osc1 = ctx.createOscillator();
-    osc1.type = 'square';
-    osc1.frequency.value = 110;
-    osc1.connect(moodGain);
-
-    const osc2 = ctx.createOscillator();
-    osc2.type = 'square';
-    osc2.frequency.value = 111.2; // Dissonance
-    osc2.connect(moodGain);
-
-    return {
-      gainNode: moodGain,
-      stop: () => {
-        const stopTime = ctx.currentTime + this.FADE_TIME;
-        osc1.stop(stopTime);
-        osc2.stop(stopTime);
-        setTimeout(() => moodGain.disconnect(), this.FADE_TIME * 1000 + 100);
-      },
-    };
-  }
-
-  private playMysteriousChimes(): ActiveSound | null {
-    if (!this.audioContext || !this.masterGain) return null;
-    const ctx = this.audioContext;
-    const now = ctx.currentTime;
-
-    const moodGain = ctx.createGain();
-    moodGain.gain.setValueAtTime(0, now);
-    moodGain.gain.linearRampToValueAtTime(0.2, now + this.FADE_TIME);
-    moodGain.connect(this.masterGain);
-
-    const delay = ctx.createDelay(5.0);
-    delay.delayTime.value = 0.45;
-    const feedback = ctx.createGain();
-    feedback.gain.value = 0.7;
-    delay.connect(feedback);
-    feedback.connect(delay);
-    moodGain.connect(delay);
-    delay.connect(this.masterGain); // Connect delay output to master as well
-
-    const notes = [523.25, 659.25, 783.99, 1046.5, 349.23]; // C5, E5, G5, C6, F4
-    const interval = setInterval(() => {
-      if (!this.audioContext) {
-        clearInterval(interval);
-        return;
-      }
-      const chimeNow = this.audioContext.currentTime;
-      const note = notes[Math.floor(Math.random() * notes.length)];
-      const chimeGain = this.audioContext.createGain();
-      chimeGain.gain.setValueAtTime(0.3, chimeNow);
-      chimeGain.gain.exponentialRampToValueAtTime(0.0001, chimeNow + 4.0);
-      chimeGain.connect(moodGain);
-
-      const osc = this.audioContext.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.value = note;
-      osc.connect(chimeGain);
-      osc.start(chimeNow);
-      osc.stop(chimeNow + 4.0);
-    }, 4500);
-
-    return {
-      gainNode: moodGain,
-      stop: () => {
-        clearInterval(interval);
-        setTimeout(() => {
-          moodGain.disconnect();
-          delay.disconnect();
-          feedback.disconnect();
-        }, this.FADE_TIME * 1000 + 100);
-      },
-    };
+  public playHoverSound() {
+    this.playSfx('sine', 1500, 1500, 0.03, 0.05);
   }
 }

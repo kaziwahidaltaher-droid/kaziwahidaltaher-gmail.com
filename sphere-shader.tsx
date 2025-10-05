@@ -1,24 +1,19 @@
 import React, { useRef } from 'react';
 import * as THREE from 'three';
-// FIX: Extend THREE.ShaderMaterial to make <shaderMaterial> available in JSX.
-import { useFrame, extend } from '@react-three/fiber';
-
-extend({ ShaderMaterial: THREE.ShaderMaterial });
+import { useFrame } from '@react-three/fiber';
 
 interface SphereShaderProps {
   moodIntensity?: number;
   resonance?: number;
-  innerColor?: string;
-  outerColor?: string;
-  pulseSpeed?: number;
+  coreColor?: string;
+  auraColor?: string;
 }
 
 const SphereShader: React.FC<SphereShaderProps> = ({
   moodIntensity = 0.6,
   resonance = 1.2,
-  innerColor = '#00ffff',
-  outerColor = '#220044',
-  pulseSpeed = 0.4,
+  coreColor = '#ff66cc',
+  auraColor = '#00ffff',
 }) => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 
@@ -37,9 +32,8 @@ const SphereShader: React.FC<SphereShaderProps> = ({
           time: { value: 0 },
           moodIntensity: { value: moodIntensity },
           resonance: { value: resonance },
-          pulseSpeed: { value: pulseSpeed },
-          innerColor: { value: new THREE.Color(innerColor) },
-          outerColor: { value: new THREE.Color(outerColor) },
+          coreColor: { value: new THREE.Color(coreColor) },
+          auraColor: { value: new THREE.Color(auraColor) },
         },
         vertexShader: `
           varying vec3 vPosition;
@@ -52,22 +46,20 @@ const SphereShader: React.FC<SphereShaderProps> = ({
           uniform float time;
           uniform float moodIntensity;
           uniform float resonance;
-          uniform float pulseSpeed;
-          uniform vec3 innerColor;
-          uniform vec3 outerColor;
+          uniform vec3 coreColor;
+          uniform vec3 auraColor;
           varying vec3 vPosition;
 
           void main() {
             float r = length(vPosition);
-            float pulse = sin(time * pulseSpeed + r * 5.0) * 0.5 + 0.5;
-            float glow = smoothstep(1.2, 0.3, r) * pulse * moodIntensity;
-            vec3 color = mix(outerColor, innerColor, glow);
+            float pulse = sin(time * resonance + r * 5.0) * 0.5 + 0.5;
+            vec3 color = mix(coreColor, auraColor, pulse * moodIntensity);
             gl_FragColor = vec4(color, 1.0);
           }
         `,
         transparent: false,
-        depthWrite: false,
-        side: THREE.DoubleSide,
+        depthWrite: true,
+        side: THREE.FrontSide,
       }]}
     />
   );
