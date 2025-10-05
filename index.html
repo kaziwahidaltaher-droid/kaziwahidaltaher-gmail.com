@@ -94,9 +94,36 @@
     </script>
     <style type="text/tailwindcss">
         @layer base {
-          :root {
-            --accent-color: #2b6cb0;
-            --glow-color: rgba(49, 130, 206, 0.4);
+          :root, .light {
+            --accent-color: #3b82f6;
+            --glow-color: rgba(59, 130, 246, 0.4);
+            --bg-color: #f1f5f9;
+            --panel-bg: rgba(255, 255, 255, 0.7);
+            --border-color: #e2e8f0;
+            --text-color: #0f172a;
+            --text-color-dark: #f1f5f9;
+            --error-color: #ef4444;
+            --warning-color: #f97316;
+            --success-color: #22c55e;
+            --mat-color-1: #9b7653;
+            --mat-color-2: #e08d51;
+            --mat-color-3: #ffdd33;
+            --mat-color-4: #4a4a4a;
+            --exo-mat-color-1: #c0c0c0;
+            --exo-mat-color-2: #a0966c;
+            --exo-mat-color-3: #cc96a1;
+          }
+          .dark {
+            --accent-color: #61faff;
+            --glow-color: rgba(97, 250, 255, 0.5);
+            --bg-color: #010206;
+            --panel-bg: rgba(1, 2, 6, 0.8);
+            --border-color: rgba(97, 250, 255, 0.2);
+            --text-color: #c0f0ff;
+            --text-color-dark: #010206;
+            --error-color: #e53e3e;
+            --warning-color: #ed8936;
+            --success-color: #48bb78;
             --mat-color-1: #9b7653; 
             --mat-color-2: #e08d51;
             --mat-color-3: #ffdd33;
@@ -105,8 +132,51 @@
             --exo-mat-color-2: #f0e68c;
             --exo-mat-color-3: #ffb6c1;
           }
+          button {
+            @apply relative overflow-hidden;
+          }
         }
         @layer components {
+            .panel {
+                /* Mobile first: full screen, fixed, higher z-index */
+                @apply fixed top-0 h-full w-full bg-panel-bg backdrop-blur-md transition-transform duration-300 ease-in-out z-30;
+                border-color: var(--border-color);
+            }
+            /* Medium screens and up */
+            @screen md {
+                .panel {
+                    /* Desktop: side panels, absolute, lower z-index */
+                    @apply absolute w-[340px] z-10 duration-500;
+                }
+            }
+            /* Large screens and up */
+            @screen lg {
+                .panel {
+                    @apply w-[380px];
+                }
+            }
+
+            #left-panel {
+                @apply left-0 border-r -translate-x-full;
+            }
+            #left-panel.open {
+                @apply translate-x-0;
+            }
+            #right-panel {
+                @apply right-0 border-l translate-x-full;
+            }
+            #right-panel.open {
+                @apply translate-x-0;
+            }
+
+            .panel-backdrop {
+              @apply fixed inset-0 bg-black/60 z-20 animate-fade-in-onboarding;
+            }
+
+            .panel-toggle-btn {
+              @apply p-2 rounded-md hover:bg-glow/50 transition-colors;
+            }
+
             .thinking-button::before {
                 content: '';
                 @apply absolute left-1/2 top-1/2 w-5 h-5 -ml-[10px] -mt-[10px] border-2 border-border rounded-full animate-spin;
@@ -129,6 +199,46 @@
             }
             @keyframes typing { from { width: 0; opacity: 1; } to { width: 100%; opacity: 1; } }
             @keyframes blink-caret { from, to { border-color: transparent; } 50% { border-color: var(--accent-color); } }
+        
+            .panel-back-button {
+                @apply bg-transparent border-none text-sm text-text opacity-70 hover:opacity-100 p-0 mb-2 cursor-pointer transition-opacity;
+            }
+            .panel-section {
+                @apply mb-4 border-b border-border pb-4;
+            }
+            .panel-section:last-child {
+                @apply border-b-0;
+            }
+            .panel-subheader {
+                @apply text-xs uppercase tracking-widest text-accent m-0 mb-2 font-bold;
+            }
+            .analysis-btn {
+                @apply w-full text-left p-2 text-sm border border-transparent rounded transition-all duration-300 flex justify-between items-center cursor-pointer disabled:cursor-wait;
+            }
+            .analysis-btn.idle {
+                @apply bg-black/20 hover:bg-glow/50 hover:border-accent;
+            }
+            .analysis-btn.running {
+                @apply bg-yellow-500/20 text-yellow-300;
+            }
+            .analysis-btn.running::after {
+                content: '';
+                @apply w-3 h-3 border-2 border-yellow-300 rounded-full border-t-transparent animate-spin;
+            }
+            .analysis-btn.complete {
+                @apply bg-green-500/20 text-green-300;
+            }
+            .analysis-btn.complete::after {
+                content: '✓';
+                @apply text-green-300;
+            }
+            .analysis-btn.error {
+                @apply bg-red-500/20 text-red-300;
+            }
+            .analysis-btn.error::after {
+                content: '!';
+                @apply text-red-300 font-bold;
+            }
         }
     </style>
 

@@ -74,14 +74,14 @@ export class CosmosVisualizer extends LitElement {
   // Galaxy View
   private galaxyVisuals: THREE.Points | null = null;
   private galaxyPlanetMeshes = new Map<string, THREE.Group>();
-  private galaxyOrbits = new Map<string, THREE.Mesh>();
+  private galaxyOrbits = new Map<string, THREE.Line>();
   private routeLine: THREE.Object3D | null = null;
   
   // System View
   private systemGroup: THREE.Group | null = null;
   private starMesh: THREE.Mesh | null = null;
   private systemPlanetMeshes = new Map<string, THREE.Group>();
-  private systemOrbits = new Map<string, THREE.Mesh>();
+  private systemOrbits = new Map<string, THREE.Line>();
 
   // Ambient Life
   private spaceCreatures: THREE.Group[] = [];
@@ -292,19 +292,22 @@ export class CosmosVisualizer extends LitElement {
     // Animate orbits and planets in galaxy view
     if (this.viewMode === 'galaxy') {
         this.galaxyOrbits.forEach((orbit, id) => {
-            const material = orbit.material as THREE.MeshBasicMaterial;
+            const material = orbit.material as THREE.LineBasicMaterial;
             const isSelected = id === this.selectedPlanetId;
             const isHovered = id === this.hoveredObjectId;
 
             if (isSelected) {
                 // Intense pulse for selected orbit
-                material.opacity = 0.4 + Math.sin(elapsedTime * 4) * 0.3;
+                material.opacity = 0.6 + Math.sin(elapsedTime * 5) * 0.3;
+                material.color.set(0xffffff);
             } else if (isHovered) {
                 // Medium pulse for hovered orbit
-                material.opacity = 0.3 + Math.sin(elapsedTime * 4) * 0.2;
+                material.opacity = 0.4 + Math.sin(elapsedTime * 4) * 0.2;
+                material.color.set(0x99ffff);
             } else {
                 // Subtle pulse for non-selected orbits
-                material.opacity = 0.08 + Math.sin(elapsedTime * 0.5) * 0.07;
+                material.opacity = 0.08 + Math.sin(elapsedTime * 0.5 + orbit.rotation.y) * 0.07;
+                material.color.set(0x61faff);
             }
         });
 
@@ -327,12 +330,18 @@ export class CosmosVisualizer extends LitElement {
     // Update planets orbiting in system view
     if (this.viewMode === 'system') {
         this.systemPlanetMeshes.forEach((group, id) => {
-            const radius = group.userData.orbitRadius;
+            const a = group.userData.orbitRadius; // semi-major axis
             const speed = group.userData.orbitSpeed;
+            const eccentricity = group.userData.orbitEccentricity;
+            const c = a * eccentricity; // distance from center to focus
+            const b = Math.sqrt(a*a - c*c); // semi-minor axis
+
+            const angle = elapsedTime * speed;
+            // Parametric equation for an ellipse with one focus at the origin
             group.position.set(
-                Math.cos(elapsedTime * speed) * radius,
+                Math.cos(angle) * a - c,
                 0,
-                Math.sin(elapsedTime * speed) * radius
+                Math.sin(angle) * b
             );
             
             // Pulse effect
@@ -348,16 +357,16 @@ export class CosmosVisualizer extends LitElement {
         });
         
         this.systemOrbits.forEach((orbit, id) => {
-            const material = orbit.material as THREE.MeshBasicMaterial;
+            const material = orbit.material as THREE.LineBasicMaterial;
             const isSelected = id === this.selectedPlanetId;
             const isHovered = id === this.hoveredObjectId;
             
             if (isSelected) {
                 // More prominent pulse for the selected planet's orbit
-                material.opacity = 0.6 + Math.sin(elapsedTime * 4) * 0.3;
+                material.opacity = 0.8 + Math.sin(elapsedTime * 5) * 0.2;
                 material.color.set(0xffffff);
             } else if (isHovered) {
-                material.opacity = 0.4 + Math.sin(elapsedTime * 4) * 0.2;
+                material.opacity = 0.5 + Math.sin(elapsedTime * 4) * 0.2;
                 material.color.set(0xffffff);
             } else {
                 // Subtle pulse for other orbits
@@ -496,15 +505,38 @@ export class CosmosVisualizer extends LitElement {
     }
   };
 
-  private onCanvasClick = () => {
-    if (this.hoveredObjectId) {
+  private onCanvasClick = (event: MouseEvent) => {
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    
+    let objectsToIntersect: THREE.Object3D[] = [];
+    if (this.viewMode === 'intergalactic') {
+        objectsToIntersect = Array.from(this.galaxyMarkers.values()).map(g => g.children[0]);
+    } else {
+        const planetMeshes = this.viewMode === 'system' ? this.systemPlanetMeshes : this.galaxyPlanetMeshes;
+        objectsToIntersect = Array.from(planetMeshes.values()).map(g => g.children[0]);
+    }
+    
+    const intersects = this.raycaster.intersectObjects(objectsToIntersect);
+
+    if (intersects.length > 0) {
+        const id = intersects[0].object.userData.id;
         if (this.viewMode === 'intergalactic') {
-            // FIX: Cast `this` to EventTarget to dispatch event.
-            (this as unknown as EventTarget).dispatchEvent(new CustomEvent('galaxy-selected', { detail: { galaxyId: this.hoveredObjectId }, bubbles: true, composed: true }));
-            this.createShockwave(this.galaxyMarkers.get(this.hoveredObjectId)!.position);
-        } else if (this.viewMode === 'galaxy' || this.viewMode === 'system') {
-            // FIX: Cast `this` to EventTarget to dispatch event.
-            (this as unknown as EventTarget).dispatchEvent(new CustomEvent('planet-selected', { detail: { planetId: this.hoveredObjectId }, bubbles: true, composed: true }));
+            if (this.activeGalaxyId !== id) {
+                (this as unknown as EventTarget).dispatchEvent(new CustomEvent('galaxy-selected', { detail: { galaxyId: id }, bubbles: true, composed: true }));
+                this.createShockwave(this.galaxyMarkers.get(id)!.position);
+            }
+        } else {
+             if (this.selectedPlanetId !== id) {
+                 (this as unknown as EventTarget).dispatchEvent(new CustomEvent('planet-selected', { detail: { planetId: id }, bubbles: true, composed: true }));
+             }
+        }
+    } else {
+        // Clicked on empty space - deselect planet
+        if ((this.viewMode === 'galaxy' || this.viewMode === 'system') && this.selectedPlanetId) {
+             (this as unknown as EventTarget).dispatchEvent(new CustomEvent('planet-selected', { detail: { planetId: null }, bubbles: true, composed: true }));
         }
     }
   };
@@ -641,23 +673,39 @@ export class CosmosVisualizer extends LitElement {
             this.scene.add(group);
             this.fadeObject(group, 1, 500);
             
-            // Create corresponding orbit
-            const radius = new THREE.Vector3(...coords).length();
-            const orbitGeometry = new THREE.RingGeometry(radius - 0.1, radius + 0.1, 128);
-            const orbitMaterial = new THREE.MeshBasicMaterial({
+            // Create corresponding elliptical orbit
+            const position = new THREE.Vector3(...coords);
+            const radius = position.length(); // This is the distance to the planet
+            const planetAngle = Math.atan2(position.z, position.x);
+
+            let seed = 0;
+            for (let j = 0; j < planet.celestial_body_id.length; j++) {
+                seed += planet.celestial_body_id.charCodeAt(j);
+            }
+            const seededRandom = (s: number) => { const x = Math.sin(s) * 10000; return x - Math.floor(x); };
+            
+            const eccentricity = 0.1 + seededRandom(seed * 2) * 0.2;
+            const a = radius; // Set semi-major axis to planet's distance
+            const b = a * Math.sqrt(1 - eccentricity * eccentricity);
+            
+            const curve = new THREE.EllipseCurve(0, 0, a, b, 0, 2 * Math.PI, false, 0); // Unrotated curve
+            const points = curve.getPoints(128);
+            const orbitGeometry = new THREE.BufferGeometry().setFromPoints(points);
+            const orbitMaterial = new THREE.LineBasicMaterial({
                 color: 0x61faff,
-                side: THREE.DoubleSide,
                 transparent: true,
                 opacity: 0.1,
                 blending: THREE.AdditiveBlending,
                 depthWrite: false,
-                userData: { isSelected: false } // Flag for animation
             });
-            const orbitMesh = new THREE.Mesh(orbitGeometry, orbitMaterial);
-            orbitMesh.rotation.x = Math.PI / 2;
-            orbitMesh.userData.isViewObject = true;
-            this.galaxyOrbits.set(planet.celestial_body_id, orbitMesh);
-            this.scene.add(orbitMesh);
+            const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+            // Rotate to XZ plane, then rotate around Y to align the major axis with the planet
+            orbitLine.rotation.x = Math.PI / 2;
+            orbitLine.rotation.y = planetAngle;
+            
+            orbitLine.userData.isViewObject = true;
+            this.galaxyOrbits.set(planet.celestial_body_id, orbitLine);
+            this.scene.add(orbitLine);
         }
     });
     this.updatePlanetHighlights();
@@ -741,24 +789,39 @@ export class CosmosVisualizer extends LitElement {
     this.activePlanets.filter(p => p.starSystem === selectedPlanet.starSystem).forEach((planet, i) => {
         const planetGroup = this.createPlanetMesh(planet);
         const orbitRadius = 20 + (planet.planetRadiusEarths || 1) * 2 + i * 15;
-        planetGroup.userData.orbitRadius = orbitRadius;
+        
+        let seed = 0;
+        for (let j = 0; j < planet.celestial_body_id.length; j++) {
+            seed += planet.celestial_body_id.charCodeAt(j);
+        }
+        const seededRandom = (s: number) => { const x = Math.sin(s) * 10000; return x - Math.floor(x); };
+        const eccentricity = 0.05 + seededRandom(seed) * 0.15;
+        
+        planetGroup.userData.orbitRadius = orbitRadius; // semi-major axis 'a'
         planetGroup.userData.orbitSpeed = 0.1 / Math.sqrt(orbitRadius);
+        planetGroup.userData.orbitEccentricity = eccentricity;
+
         this.systemPlanetMeshes.set(planet.celestial_body_id, planetGroup);
         this.systemGroup!.add(planetGroup);
+        
+        const a = orbitRadius;
+        const c = a * eccentricity;
+        const b = Math.sqrt(a*a - c*c);
 
-        const orbitGeometry = new THREE.RingGeometry(orbitRadius - 0.1, orbitRadius + 0.1, 256);
-        const orbitMaterial = new THREE.MeshBasicMaterial({
+        const curve = new THREE.EllipseCurve(c, 0, a, b, 0, 2 * Math.PI, false, 0);
+        const points = curve.getPoints(256);
+        const orbitGeometry = new THREE.BufferGeometry().setFromPoints(points);
+        const orbitMaterial = new THREE.LineBasicMaterial({
             color: 0x61faff,
-            side: THREE.DoubleSide,
             transparent: true,
-            opacity: 0.1,
+            opacity: 0.2,
             blending: THREE.AdditiveBlending,
             depthWrite: false,
         });
-        const orbitMesh = new THREE.Mesh(orbitGeometry, orbitMaterial);
-        orbitMesh.rotation.x = Math.PI / 2;
-        this.systemOrbits.set(planet.celestial_body_id, orbitMesh);
-        this.systemGroup!.add(orbitMesh);
+        const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+        orbitLine.rotation.x = Math.PI / 2;
+        this.systemOrbits.set(planet.celestial_body_id, orbitLine);
+        this.systemGroup!.add(orbitLine);
     });
     
     this.scene.add(this.systemGroup);
@@ -795,7 +858,7 @@ export class CosmosVisualizer extends LitElement {
     if (this.viewMode === 'galaxy') {
         this.galaxyOrbits.forEach((orbit, id) => {
             const isSelected = id === this.selectedPlanetId;
-            (orbit.material as THREE.MeshBasicMaterial).userData.isSelected = isSelected;
+            (orbit.material as THREE.LineBasicMaterial).userData.isSelected = isSelected;
         });
     }
   }
