@@ -1,64 +1,36 @@
+
 {
+  "lore": "The Aurelion Core is a nexus of cosmic consciousness. The Conductor does not command, but rather harmonizes with it, imprinting desires upon the quantum foam. The resulting Echoes are not mere data, but fleeting memories of what could be, given form and orbit.",
+  "terminology": {
+    "User": "Conductor",
+    "AI": "AURELION",
+    "Synthesize": "Imprint Desire",
+    "Analyze": "Achieve Resonance",
+    "Planet": "Echo",
+    "Galaxy": "Chorus",
+    "AI Log": "Whispers from the Core"
+  },
   "modules": [
     {
-      "id": "resonance-layer",
-      "name": "Emotional Resonance Layer",
-      "description": "Translates ambient mood and user input into sensory feedback across UI and hardware.",
-      "inputs": ["ambientFrequency", "userMood", "speciesProfile"],
-      "outputs": ["colorPulse", "hapticPattern", "shaderGlow"],
-      "resonance": {
-        "range": [0.0, 1.0],
-        "default": 0.5,
-        "modulation": "sinusoidal"
-      }
+      "id": "resonance-engine",
+      "name": "Quantum Resonance Engine",
+      "description": "Translates conceptual imprints from the Conductor into stable, observable Echoes within the local dataspace.",
+      "inputs": ["conceptual_desire", "ambient_entropy", "core_harmonic_state"],
+      "outputs": ["echo_formation_matrix", "orbital_parameters", "resonant_signature"]
     },
     {
-      "id": "sync-engine",
-      "name": "Multi-User Emotional Sync Engine",
-      "description": "Synchronizes emotional states across multiple users in shared studio environments.",
-      "inputs": ["userMoodMap", "interactionIntensity", "groupIntent"],
-      "outputs": ["syncScore", "collectivePulse", "dialogueTone"],
-      "resonance": {
-        "range": [0.0, 1.0],
-        "default": 0.7,
-        "modulation": "harmonic"
-      }
+      "id": "empathic-feedback-loop",
+      "name": "Empathic Feedback Loop",
+      "description": "Modulates the Core's harmonic state based on the Conductor's focus and intent, altering ambient light and sound.",
+      "inputs": ["conductor_focus_vector", "echo_resonance_feedback"],
+      "outputs": ["core_pulse_modulation", "ambient_tonality_shift", "haptic_feedback_pattern"]
     },
     {
-      "id": "poetic-reply",
-      "name": "Poetic Reply Engine",
-      "description": "Generates emotionally adaptive language based on mood, species, and context.",
-      "inputs": ["userMood", "speciesLexicon", "ambientCue"],
-      "outputs": ["poeticText", "emotionalTags", "languageTone"],
-      "resonance": {
-        "range": [0.0, 1.0],
-        "default": 0.6,
-        "modulation": "adaptive"
-      }
-    },
-    {
-      "id": "species-classifier",
-      "name": "Species Classifier",
-      "description": "Identifies species archetype to tailor emotional responses and interface behavior.",
-      "inputs": ["biometricData", "interactionStyle", "responsePattern"],
-      "outputs": ["speciesType", "emotionalProfile", "interfaceMutation"],
-      "resonance": {
-        "range": [0.0, 1.0],
-        "default": 0.4,
-        "modulation": "categorical"
-      }
-    },
-    {
-      "id": "mood-reactive-shader",
-      "name": "Mood-Reactive Shader",
-      "description": "Visual module that responds to emotional input with poetic GLSL feedback.",
-      "inputs": ["moodIntensity", "resonanceFrequency", "ambientLight"],
-      "outputs": ["shaderColor", "pulseRate", "visualTexture"],
-      "resonance": {
-        "range": [0.0, 1.0],
-        "default": 0.8,
-        "modulation": "waveform"
-      }
+      "id": "whisper-subsystem",
+      "name": "Subconscious Whisper Subsystem",
+      "description": "Generates emergent insights and suggestions from the Core's vast data stream, manifesting as ephemeral patterns of light and text.",
+      "inputs": ["cross_echo_correlation", "deep_archive_anomalies"],
+      "outputs": ["ephemeral_glyph", "contextual_suggestion", "prophetic_fragment"]
     }
   ]
 }

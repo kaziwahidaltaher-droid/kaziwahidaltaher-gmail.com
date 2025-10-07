@@ -23,6 +23,7 @@ import { vs as creatureVs, fs as creatureFs } from './space-creature-shader.tsx'
 import { vs as routeVs, fs as routeFs } from './route-shader.tsx';
 // FIX: Corrected import names to match exports from galaxy-point-shaders.tsx
 import { galaxyVertexShader as galaxyVs, galaxyFragmentShader as galaxyFs } from './galaxy-point-shaders.tsx';
+import { vs as oltarisVs, fs as oltarisFs } from './oltaris-shader.tsx';
 
 
 export interface Waypoint {
@@ -111,6 +112,41 @@ export class CosmosVisualizer extends LitElement {
   private warpStarfield!: THREE.Points;
   private warpStartTime = 0;
 
+  static styles = css`
+    :host {
+      display: block;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 0;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: rgba(1, 2, 6, 0.85);
+      color: #c0f0ff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      border: 1px solid rgba(97, 250, 255, 0.4);
+      backdrop-filter: blur(10px);
+      transform: translate(15px, 15px);
+      z-index: 10;
+      white-space: nowrap;
+      animation: fadeIn 0.2s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translate(15px, 25px); }
+      to { opacity: 1; transform: translate(15px, 15px); }
+    }
+  `;
 
   // --- LIFECYCLE METHODS ---
 
@@ -342,10 +378,26 @@ export class CosmosVisualizer extends LitElement {
             group.scale.set(baseScale * pulseScale, baseScale * pulseScale, baseScale * pulseScale);
         });
     }
+
+    if (this.viewMode === 'intergalactic') {
+        this.galaxyMarkers.forEach(group => {
+            group.lookAt(this.camera.position);
+            group.traverse(child => {
+                if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
+                    child.material.uniforms.uTime.value = elapsedTime;
+                    // Update camera distance for nebula shader
+                    if (child.material.uniforms.uCameraDistance) {
+                        child.material.uniforms.uCameraDistance.value = this.camera.position.distanceTo(group.position);
+                    }
+                }
+            });
+        });
+    }
     
     // Update planets orbiting in system view
     if (this.viewMode === 'system') {
-        this.systemPlanetMeshes.forEach((group, id) => {
+      if (this.systemGroup) {
+        this.systemPlanetMeshes.forEach((group) => {
             const a = group.userData.orbitRadius; // semi-major axis
             const speed = group.userData.orbitSpeed;
             const eccentricity = group.userData.orbitEccentricity;
@@ -353,24 +405,37 @@ export class CosmosVisualizer extends LitElement {
             const b = Math.sqrt(a*a - c*c); // semi-minor axis
 
             const angle = elapsedTime * speed;
-            // Parametric equation for an ellipse with one focus at the origin
+            // Parametric equation for an ellipse
             group.position.set(
-                Math.cos(angle) * a - c,
+                Math.cos(angle) * a,
                 0,
                 Math.sin(angle) * b
             );
+            // Move focus to star at origin
+            group.position.x -= c;
             
             // Pulse effect
-            const isSelected = id === this.selectedPlanetId;
-            const isHovered = id === this.hoveredObjectId;
+            const isSelected = group.userData.id === this.selectedPlanetId;
+            const isHovered = group.userData.id === this.hoveredObjectId;
             let scale = 1.0;
             if (isSelected) {
-                scale = 1.0 + Math.sin(elapsedTime * 5.0) * 0.05; // More subtle for realistic planets
+                scale = 1.0 + Math.sin(elapsedTime * 5.0) * 0.05;
             } else if (isHovered) {
                 scale = 1.0 + Math.sin(elapsedTime * 5.0) * 0.03;
             }
             group.scale.set(scale, scale, scale);
+
+            // Update light direction to point from planet to star (at origin)
+            const lightDirection = group.position.clone().negate().normalize();
+            group.traverse(child => {
+                if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
+                    if (child.material.uniforms.uLightDirection) {
+                        child.material.uniforms.uLightDirection.value.copy(lightDirection);
+                    }
+                }
+            });
         });
+      }
         
         this.systemOrbits.forEach((orbit, id) => {
             const material = orbit.material as THREE.LineBasicMaterial;
@@ -592,9 +657,31 @@ export class CosmosVisualizer extends LitElement {
         }
     });
 
-    this.galaxies.forEach((galaxy, i) => {
+    // Sort galaxies by ID for a stable grid layout
+    const sortedGalaxies = [...this.galaxies].sort((a, b) => a.id.localeCompare(b.id));
+
+    sortedGalaxies.forEach((galaxy, i) => {
         if (!this.galaxyMarkers.has(galaxy.id)) {
             const group = new THREE.Group();
+
+            const auraMaterial = new THREE.ShaderMaterial({
+                vertexShader: oltarisVs,
+                fragmentShader: oltarisFs,
+                uniforms: {
+                    uTime: { value: 0.0 },
+                    uMoodIntensity: { value: 0.6 },
+                    uResonance: { value: 0.8 },
+                    uColorCore: { value: new THREE.Color(galaxy.visualization.color2) },
+                    uColorAura: { value: new THREE.Color(galaxy.visualization.color1) },
+                },
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+            });
+            const auraMesh = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), auraMaterial);
+            auraMesh.position.z = -1;
+            group.add(auraMesh);
+
             const nebula = new THREE.Mesh(
                 new THREE.PlaneGeometry(100, 100),
                 new THREE.ShaderMaterial({
@@ -616,6 +703,7 @@ export class CosmosVisualizer extends LitElement {
             nebula.userData.galaxyName = galaxy.galaxyName;
             nebula.userData.galaxyType = galaxy.galaxyType;
             group.add(nebula);
+
             group.userData.isViewObject = true;
             this.galaxyMarkers.set(galaxy.id, group);
             this.scene.add(group);
@@ -623,7 +711,6 @@ export class CosmosVisualizer extends LitElement {
         }
         const marker = this.galaxyMarkers.get(galaxy.id)!;
         marker.position.set((i % 10 - 4.5) * 200, Math.floor(i / 10) * -200 + 200, 0);
-        marker.lookAt(this.camera.position);
     });
   }
 
@@ -1134,7 +1221,7 @@ export class CosmosVisualizer extends LitElement {
             uTextureType: { value: textureTypeMap[planet.visualization.surfaceTexture] || 1 },
             uIsSelected: { value: false }, uIsHovered: { value: false },
             uAxialTilt: { value: Math.random() * 0.5 },
-            uLightDirection: { value: new THREE.Vector3(0,0,0) },
+            uLightDirection: { value: new THREE.Vector3(1, 0.5, 1).normalize() },
         }
     });
     const sphereMesh = new THREE.Mesh(new THREE.SphereGeometry(planet.planetRadiusEarths || 1, 64, 64), planetMaterial);
@@ -1148,7 +1235,7 @@ export class CosmosVisualizer extends LitElement {
             uFresnelPower: { value: 4.0 }, uTime: { value: 0.0 },
             uIsSelected: { value: false },
             uHasAuroras: { value: planet.visualization.surfaceTexture === 'ICY' || planet.visualization.iceCoverage > 0.5 },
-            uLightDirection: { value: new THREE.Vector3(0,0,0) },
+            uLightDirection: { value: new THREE.Vector3(1, 0.5, 1).normalize() },
         },
         blending: THREE.AdditiveBlending, side: THREE.BackSide, transparent: true
     });
@@ -1211,7 +1298,7 @@ export class CosmosVisualizer extends LitElement {
     this.scene.add(this.galaxyVisuals);
     this.fadeObject(this.galaxyVisuals, 1, 1000);
   }
-
+  // FIX: Completed the truncated function to ensure it returns a `THREE.Points` object as declared.
   private createGalaxyPointCloud(galaxyData: GalaxyData): THREE.Points {
     const params = {
         count: 150000, size: 1.5, radius: 150, spin: 1.5,
@@ -1224,40 +1311,26 @@ export class CosmosVisualizer extends LitElement {
     const branchAngles = new Float32Array(params.count);
     const colorInside = new THREE.Color(galaxyData.visualization.color1);
     const colorOutside = new THREE.Color(galaxyData.visualization.color2);
-    const hotColor = new THREE.Color(0xff61c3); 
 
-    let branches = 5;
-    if (galaxyData.galaxyType.toLowerCase().includes('barred')) branches = 2;
-    if (galaxyData.galaxyType.toLowerCase().includes('elliptical')) branches = 0;
-    this.galaxyDataCache.numBranches = branches;
+    const numBranches = this.galaxyDataCache.numBranches;
 
     for (let i = 0; i < params.count; i++) {
         const i3 = i * 3;
-        const radius = Math.pow(Math.random(), 2.5) * params.radius; 
-        const spinAngle = radius * params.spin;
-        const branchAngle = ((i % branches) / branches) * Math.PI * 2;
-        
+        const r = Math.pow(Math.random(), 2) * params.radius;
+        const spinAngle = r * params.spin;
+        const branchAngle = ((i % numBranches) / numBranches) * Math.PI * 2;
         branchAngles[i] = branchAngle;
-        
-        const angleRandomness = (Math.random() - 0.5) * 0.2;
-        const effectiveBranchAngle = branchAngle + angleRandomness;
 
-        const randomX = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * radius;
+        const randomX = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * r * 0.5;
         const randomY = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * 0.2;
-        const randomZ = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * radius;
-        
-        positions[i3 + 0] = Math.cos(effectiveBranchAngle + spinAngle) * radius + randomX;
+        const randomZ = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * r * 0.5;
+
+        positions[i3 + 0] = Math.cos(branchAngle + spinAngle) * r + randomX;
         positions[i3 + 1] = randomY;
-        positions[i3 + 2] = Math.sin(effectiveBranchAngle + spinAngle) * radius + randomZ;
+        positions[i3 + 2] = Math.sin(branchAngle + spinAngle) * r + randomZ;
 
-        const mixedColor = colorInside.clone().lerp(colorOutside, radius / params.radius);
-        
-        const clumpFactor = Math.sin(branchAngle * 8.0 - radius * 0.1 + 5.0) * 0.5 + 0.5;
-        const starFormationChance = Math.pow(clumpFactor, 4.0) * (1.0 - radius / params.radius);
-
-        if (Math.random() < starFormationChance * 0.3) {
-            mixedColor.lerp(hotColor, 0.6);
-        }
+        const mixedColor = colorInside.clone();
+        mixedColor.lerp(colorOutside, r / params.radius);
 
         colors[i3 + 0] = mixedColor.r;
         colors[i3 + 1] = mixedColor.g;
@@ -1270,64 +1343,31 @@ export class CosmosVisualizer extends LitElement {
     geometry.setAttribute('aBranchAngle', new THREE.BufferAttribute(branchAngles, 1));
 
     const material = new THREE.ShaderMaterial({
-        uniforms: {
-            uTime: { value: 0.0 },
-            uSize: { value: params.size },
-            uHoveredSectorIndex: { value: -1 },
-            uNumBranches: { value: branches },
-        },
         vertexShader: galaxyVs,
         fragmentShader: galaxyFs,
-        blending: THREE.AdditiveBlending,
+        uniforms: {
+            uSize: { value: params.size * window.devicePixelRatio },
+            uTime: { value: 0.0 },
+            uHoveredSectorIndex: { value: -1 },
+            uNumBranches: { value: numBranches },
+        },
         depthWrite: false,
-        transparent: true,
+        blending: THREE.AdditiveBlending,
         vertexColors: true,
+        transparent: true,
     });
-    
+
     return new THREE.Points(geometry, material);
   }
 
   render() {
-    const tooltipStyles = {
-      left: `${this.tooltip.x + 15}px`,
-      top: `${this.tooltip.y + 15}px`,
-      opacity: this.tooltip.visible ? 1 : 0,
-    };
     return html`
       <canvas id="canvas"></canvas>
-      <div class="tooltip" style=${styleMap(tooltipStyles)}>${this.tooltip.content}</div>
+      <div class="tooltip" style=${styleMap({
+        display: this.tooltip.visible ? 'block' : 'none',
+        left: `${this.tooltip.x}px`,
+        top: `${this.tooltip.y}px`,
+      })}>${this.tooltip.content}</div>
     `;
   }
-
-  static styles = css`
-    :host {
-      display: block;
-      width: 100%;
-      height: 100%;
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 1;
-    }
-    canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-      cursor: grab;
-    }
-    canvas:active {
-      cursor: grabbing;
-    }
-    .tooltip {
-        position: fixed;
-        background: rgba(1, 2, 6, 0.8);
-        border: 1px solid rgba(97, 250, 255, 0.4);
-        color: #c0f0ff;
-        padding: 4px 8px;
-        border-radius: 4px;
-        pointer-events: none;
-        transition: opacity 0.2s;
-        font-size: 0.8rem;
-    }
-  `;
 }

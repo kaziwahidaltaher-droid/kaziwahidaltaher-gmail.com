@@ -1,3 +1,4 @@
+
 /**
  * @license
  * Copyright Google LLC
@@ -10,7 +11,7 @@
  */
 
 // Use a descriptive and versioned cache name.
-const CACHE_NAME = 'axee-cache-v3'; // Bump version for new assets
+const CACHE_NAME = 'axee-cache-v5'; // Bump version for new assets
 
 // A list of all the essential files (the "app shell") that need to be cached.
 const urlsToCache = [
@@ -39,9 +40,13 @@ const urlsToCache = [
   'starfield-shaders.tsx',
   'nebula-shader.tsx',
   'star-shader.tsx',
+  'shader-utils.tsx',
   'solar-system-data.ts',
   'volume-meter.ts',
-  'route-shader.tsx'
+  'route-shader.tsx',
+  'galaxy-point-shaders.tsx',
+  'space-creature-shader.tsx',
+  'oltaris-shader.tsx'
 ];
 
 /**

@@ -1,3 +1,4 @@
+
 export const galaxyVertexShader = `
   attribute float aBranchAngle;
   uniform float uSize;

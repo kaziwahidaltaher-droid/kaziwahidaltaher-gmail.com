@@ -43,7 +43,7 @@ export class TutorialOverlay extends LitElement {
     .highlight-box {
       position: absolute;
       border: 2px solid var(--accent-color);
-      box-shadow: 0 0 15px var(--glow-color), inset 0 0 15px var(--glow-color);
+      box-shadow: 0 0 15px var(--glow-color), inset 0 0 15px var(--glow-color), 0 0 0 9999px rgba(0, 0, 0, 0.7);
       border-radius: 4px;
       transition: all 0.5s ease-in-out;
       pointer-events: none;
@@ -148,17 +148,17 @@ export class TutorialOverlay extends LitElement {
 
   private _onNext() {
     const isLastStep = this.step >= this.steps.length - 1;
-    // FIX: Cast `this` to `EventTarget` to resolve TypeScript error.
+    // FIX: Cast `this` to `EventTarget` to dispatch the event.
     (this as unknown as EventTarget).dispatchEvent(new CustomEvent(isLastStep ? 'skip' : 'next'));
   }
 
   private _onSkip() {
-    // FIX: Cast `this` to `EventTarget` to resolve TypeScript error.
+    // FIX: Cast `this` to `EventTarget` to dispatch the event.
     (this as unknown as EventTarget).dispatchEvent(new CustomEvent('skip'));
   }
 
   private _onUseSample() {
-    // FIX: Cast `this` to `EventTarget` to resolve TypeScript error.
+    // FIX: Cast `this` to `EventTarget` to dispatch the event.
     (this as unknown as EventTarget).dispatchEvent(new CustomEvent('use-sample-prompt'));
   }
 
