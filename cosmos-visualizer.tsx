@@ -21,6 +21,10 @@ import {vs as atmosphereVs, fs as atmosphereFs} from './atmosphere-shader.tsx';
 import { vs as starVs, fs as starFs } from './star-shader.tsx';
 import { vs as creatureVs, fs as creatureFs } from './space-creature-shader.tsx';
 import { vs as routeVs, fs as routeFs } from './route-shader.tsx';
+// FIX: Corrected import names to match exports from galaxy-point-shaders.tsx
+import { galaxyVertexShader as galaxyVs, galaxyFragmentShader as galaxyFs } from './galaxy-point-shaders.tsx';
+import { vs as oltarisVs, fs as oltarisFs } from './oltaris-shader.tsx';
+
 
 export interface Waypoint {
   name: string;
@@ -47,6 +51,7 @@ export class CosmosVisualizer extends LitElement {
   @state() private viewMode: ViewMode = 'intergalactic';
   @state() private tooltip = {visible: false, content: '', x: 0, y: 0};
   @state() private hoveredObjectId: string | null = null;
+  @state() private hoveredSectorIndex: number | null = null;
   @state() private isTransitioning = false;
 
   // --- QUERIES ---
@@ -74,14 +79,16 @@ export class CosmosVisualizer extends LitElement {
   // Galaxy View
   private galaxyVisuals: THREE.Points | null = null;
   private galaxyPlanetMeshes = new Map<string, THREE.Group>();
-  private galaxyOrbits = new Map<string, THREE.Mesh>();
+  private galaxyOrbits = new Map<string, THREE.Line>();
   private routeLine: THREE.Object3D | null = null;
+  private galaxyInteractionPlane: THREE.Mesh | null = null;
+  private galaxyDataCache = { numBranches: 5 };
   
   // System View
   private systemGroup: THREE.Group | null = null;
   private starMesh: THREE.Mesh | null = null;
   private systemPlanetMeshes = new Map<string, THREE.Group>();
-  private systemOrbits = new Map<string, THREE.Mesh>();
+  private systemOrbits = new Map<string, THREE.Line>();
 
   // Ambient Life
   private spaceCreatures: THREE.Group[] = [];
@@ -98,12 +105,48 @@ export class CosmosVisualizer extends LitElement {
 
   // FIX: Added missing property.
   private colors = ['#ff61c3', '#61ffca', '#ffc261', '#61faff', '#d861ff'];
+  private armNames = ["Orion-Cygnus Arm", "Sagittarius Arm", "Perseus Arm", "Norma Arm", "Scutum-Centaurus Arm"];
   
   // Warp effect state
   private warpEffectActive = false;
   private warpStarfield!: THREE.Points;
   private warpStartTime = 0;
 
+  static styles = css`
+    :host {
+      display: block;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 0;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: rgba(1, 2, 6, 0.85);
+      color: #c0f0ff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      border: 1px solid rgba(97, 250, 255, 0.4);
+      backdrop-filter: blur(10px);
+      transform: translate(15px, 15px);
+      z-index: 10;
+      white-space: nowrap;
+      animation: fadeIn 0.2s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translate(15px, 25px); }
+      to { opacity: 1; transform: translate(15px, 15px); }
+    }
+  `;
 
   // --- LIFECYCLE METHODS ---
 
@@ -220,6 +263,7 @@ export class CosmosVisualizer extends LitElement {
       this.systemOrbits.clear();
       this.starMesh = null;
       this.routeLine = null;
+      if (this.galaxyInteractionPlane) this.galaxyInteractionPlane.visible = false;
   }
 
   private transitionView(newMode: ViewMode) {
@@ -227,6 +271,7 @@ export class CosmosVisualizer extends LitElement {
     this.isTransitioning = true;
     this.viewMode = newMode;
     this.hoveredObjectId = null;
+    this.hoveredSectorIndex = null;
     this.tooltip.visible = false;
 
     const fadeOutPromises: Promise<void>[] = [];
@@ -287,24 +332,34 @@ export class CosmosVisualizer extends LitElement {
         (nebula.material as THREE.ShaderMaterial).uniforms.uCameraDistance.value = this.camera.position.length();
     });
 
-    if (this.galaxyVisuals) this.galaxyVisuals.rotation.y += 0.0003;
+    if (this.galaxyVisuals) {
+      this.galaxyVisuals.rotation.y += 0.0003;
+      const mat = this.galaxyVisuals.material as THREE.ShaderMaterial;
+      if (mat) {
+        mat.uniforms.uTime.value = elapsedTime;
+        mat.uniforms.uHoveredSectorIndex.value = this.hoveredSectorIndex ?? -1;
+      }
+    }
     
     // Animate orbits and planets in galaxy view
     if (this.viewMode === 'galaxy') {
         this.galaxyOrbits.forEach((orbit, id) => {
-            const material = orbit.material as THREE.MeshBasicMaterial;
+            const material = orbit.material as THREE.LineBasicMaterial;
             const isSelected = id === this.selectedPlanetId;
             const isHovered = id === this.hoveredObjectId;
 
             if (isSelected) {
                 // Intense pulse for selected orbit
-                material.opacity = 0.4 + Math.sin(elapsedTime * 4) * 0.3;
+                material.opacity = 0.6 + Math.sin(elapsedTime * 5) * 0.3;
+                material.color.set(0xffffff);
             } else if (isHovered) {
                 // Medium pulse for hovered orbit
-                material.opacity = 0.3 + Math.sin(elapsedTime * 4) * 0.2;
+                material.opacity = 0.4 + Math.sin(elapsedTime * 4) * 0.2;
+                material.color.set(0x99ffff);
             } else {
                 // Subtle pulse for non-selected orbits
-                material.opacity = 0.08 + Math.sin(elapsedTime * 0.5) * 0.07;
+                material.opacity = 0.08 + Math.sin(elapsedTime * 0.5 + orbit.rotation.y) * 0.07;
+                material.color.set(0x61faff);
             }
         });
 
@@ -323,41 +378,76 @@ export class CosmosVisualizer extends LitElement {
             group.scale.set(baseScale * pulseScale, baseScale * pulseScale, baseScale * pulseScale);
         });
     }
+
+    if (this.viewMode === 'intergalactic') {
+        this.galaxyMarkers.forEach(group => {
+            group.lookAt(this.camera.position);
+            group.traverse(child => {
+                if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
+                    child.material.uniforms.uTime.value = elapsedTime;
+                    // Update camera distance for nebula shader
+                    if (child.material.uniforms.uCameraDistance) {
+                        child.material.uniforms.uCameraDistance.value = this.camera.position.distanceTo(group.position);
+                    }
+                }
+            });
+        });
+    }
     
     // Update planets orbiting in system view
     if (this.viewMode === 'system') {
-        this.systemPlanetMeshes.forEach((group, id) => {
-            const radius = group.userData.orbitRadius;
+      if (this.systemGroup) {
+        this.systemPlanetMeshes.forEach((group) => {
+            const a = group.userData.orbitRadius; // semi-major axis
             const speed = group.userData.orbitSpeed;
+            const eccentricity = group.userData.orbitEccentricity;
+            const c = a * eccentricity; // distance from center to focus
+            const b = Math.sqrt(a*a - c*c); // semi-minor axis
+
+            const angle = elapsedTime * speed;
+            // Parametric equation for an ellipse
             group.position.set(
-                Math.cos(elapsedTime * speed) * radius,
+                Math.cos(angle) * a,
                 0,
-                Math.sin(elapsedTime * speed) * radius
+                Math.sin(angle) * b
             );
+            // Move focus to star at origin
+            group.position.x -= c;
             
             // Pulse effect
-            const isSelected = id === this.selectedPlanetId;
-            const isHovered = id === this.hoveredObjectId;
+            const isSelected = group.userData.id === this.selectedPlanetId;
+            const isHovered = group.userData.id === this.hoveredObjectId;
             let scale = 1.0;
             if (isSelected) {
-                scale = 1.0 + Math.sin(elapsedTime * 5.0) * 0.05; // More subtle for realistic planets
+                scale = 1.0 + Math.sin(elapsedTime * 5.0) * 0.05;
             } else if (isHovered) {
                 scale = 1.0 + Math.sin(elapsedTime * 5.0) * 0.03;
             }
             group.scale.set(scale, scale, scale);
+
+            // Update light direction to point from planet to star (at origin)
+            const lightDirection = group.position.clone().negate().normalize();
+            group.traverse(child => {
+                if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
+                    if (child.material.uniforms.uLightDirection) {
+                        child.material.uniforms.uLightDirection.value.copy(lightDirection);
+                    }
+                }
+            });
         });
+      }
         
         this.systemOrbits.forEach((orbit, id) => {
-            const material = orbit.material as THREE.MeshBasicMaterial;
+            const material = orbit.material as THREE.LineBasicMaterial;
             const isSelected = id === this.selectedPlanetId;
             const isHovered = id === this.hoveredObjectId;
             
             if (isSelected) {
                 // More prominent pulse for the selected planet's orbit
-                material.opacity = 0.6 + Math.sin(elapsedTime * 4) * 0.3;
+                material.opacity = 0.8 + Math.sin(elapsedTime * 5) * 0.2;
                 material.color.set(0xffffff);
             } else if (isHovered) {
-                material.opacity = 0.4 + Math.sin(elapsedTime * 4) * 0.2;
+                material.opacity = 0.5 + Math.sin(elapsedTime * 4) * 0.2;
                 material.color.set(0xffffff);
             } else {
                 // Subtle pulse for other orbits
@@ -454,6 +544,24 @@ export class CosmosVisualizer extends LitElement {
     if (this.viewMode === 'intergalactic') {
         objectsToIntersect = Array.from(this.galaxyMarkers.values()).map(g => g.children[0]);
     } else if (this.viewMode === 'galaxy') {
+        if (this.galaxyInteractionPlane) {
+          const intersects = this.raycaster.intersectObject(this.galaxyInteractionPlane);
+          if (intersects.length > 0) {
+            const point = intersects[0].point;
+            const angle = Math.atan2(point.z, point.x);
+            const normalizedAngle = angle < 0 ? angle + 2 * Math.PI : angle;
+            const numBranches = this.galaxyDataCache.numBranches;
+            const sectorIndex = Math.floor(normalizedAngle / (2 * Math.PI / numBranches));
+            
+            if (this.hoveredSectorIndex !== sectorIndex) {
+              this.hoveredSectorIndex = sectorIndex;
+              const sectorName = this.armNames[sectorIndex % this.armNames.length];
+              this.tooltip = { visible: true, content: sectorName, x: event.clientX, y: event.clientY };
+            }
+          } else {
+            this.hoveredSectorIndex = null;
+          }
+        }
         objectsToIntersect = Array.from(this.galaxyPlanetMeshes.values()).map(g => g.children[0]);
     } else if (this.viewMode === 'system') {
         objectsToIntersect = Array.from(this.systemPlanetMeshes.values()).map(g => g.children[0]);
@@ -471,18 +579,14 @@ export class CosmosVisualizer extends LitElement {
             
             let name = '';
             if (this.viewMode === 'intergalactic') {
-                const galaxy = this.galaxies.find(g => g.id === id);
-                name = galaxy?.galaxyName || 'Unknown Galaxy';
+                const { galaxyName, galaxyType } = intersectedObject.userData;
+                name = galaxyName && galaxyType ? `${galaxyName} - ${galaxyType}` : 'Unknown Galaxy';
             } else {
                 const planet = this.activePlanets.find(p => p.celestial_body_id === id);
                 name = planet?.planetName || 'Unknown Planet';
             }
-            this.tooltip = {
-                visible: true,
-                content: name,
-                x: event.clientX,
-                y: event.clientY,
-            };
+            this.tooltip.visible = true;
+            this.tooltip.content = name;
         }
         this.tooltip.x = event.clientX;
         this.tooltip.y = event.clientY;
@@ -490,21 +594,56 @@ export class CosmosVisualizer extends LitElement {
     } else {
         if (this.hoveredObjectId !== null) {
             this.hoveredObjectId = null;
-            this.tooltip.visible = false;
+            if (this.viewMode !== 'galaxy' || this.hoveredSectorIndex === null) {
+              this.tooltip.visible = false;
+            }
         }
+        if (this.viewMode === 'galaxy' && this.hoveredSectorIndex === null) {
+          this.tooltip.visible = false;
+        }
+
         this.canvas.style.cursor = 'grab';
     }
   };
 
-  private onCanvasClick = () => {
-    if (this.hoveredObjectId) {
+  private onCanvasClick = (event: MouseEvent) => {
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    
+    let objectsToIntersect: THREE.Object3D[] = [];
+    if (this.viewMode === 'intergalactic') {
+        objectsToIntersect = Array.from(this.galaxyMarkers.values()).map(g => g.children[0]);
+    } else if (this.viewMode === 'galaxy') {
+        const planetMeshes = this.galaxyPlanetMeshes;
+        objectsToIntersect = Array.from(planetMeshes.values()).map(g => g.children[0]);
+    } else {
+        const planetMeshes = this.systemPlanetMeshes;
+        objectsToIntersect = Array.from(planetMeshes.values()).map(g => g.children[0]);
+    }
+    
+    const intersects = this.raycaster.intersectObjects(objectsToIntersect);
+
+    if (intersects.length > 0) {
+        const id = intersects[0].object.userData.id;
         if (this.viewMode === 'intergalactic') {
-            // FIX: Cast `this` to EventTarget to dispatch event.
-            (this as unknown as EventTarget).dispatchEvent(new CustomEvent('galaxy-selected', { detail: { galaxyId: this.hoveredObjectId }, bubbles: true, composed: true }));
-            this.createShockwave(this.galaxyMarkers.get(this.hoveredObjectId)!.position);
-        } else if (this.viewMode === 'galaxy' || this.viewMode === 'system') {
-            // FIX: Cast `this` to EventTarget to dispatch event.
-            (this as unknown as EventTarget).dispatchEvent(new CustomEvent('planet-selected', { detail: { planetId: this.hoveredObjectId }, bubbles: true, composed: true }));
+            if (this.activeGalaxyId !== id) {
+                (this as unknown as EventTarget).dispatchEvent(new CustomEvent('galaxy-selected', { detail: { galaxyId: id }, bubbles: true, composed: true }));
+                this.createShockwave(this.galaxyMarkers.get(id)!.position);
+            }
+        } else {
+             if (this.selectedPlanetId !== id) {
+                 (this as unknown as EventTarget).dispatchEvent(new CustomEvent('planet-selected', { detail: { planetId: id }, bubbles: true, composed: true }));
+             }
+        }
+    } else {
+        // Clicked on empty space
+        if (this.viewMode === 'galaxy' && this.hoveredSectorIndex !== null) {
+            const sectorName = this.armNames[this.hoveredSectorIndex % this.armNames.length];
+            (this as unknown as EventTarget).dispatchEvent(new CustomEvent('galaxy-sector-clicked', { detail: { sectorIndex: this.hoveredSectorIndex, sectorName }, bubbles: true, composed: true }));
+        } else if ((this.viewMode === 'galaxy' || this.viewMode === 'system') && this.selectedPlanetId) {
+             (this as unknown as EventTarget).dispatchEvent(new CustomEvent('planet-selected', { detail: { planetId: null }, bubbles: true, composed: true }));
         }
     }
   };
@@ -518,9 +657,31 @@ export class CosmosVisualizer extends LitElement {
         }
     });
 
-    this.galaxies.forEach((galaxy, i) => {
+    // Sort galaxies by ID for a stable grid layout
+    const sortedGalaxies = [...this.galaxies].sort((a, b) => a.id.localeCompare(b.id));
+
+    sortedGalaxies.forEach((galaxy, i) => {
         if (!this.galaxyMarkers.has(galaxy.id)) {
             const group = new THREE.Group();
+
+            const auraMaterial = new THREE.ShaderMaterial({
+                vertexShader: oltarisVs,
+                fragmentShader: oltarisFs,
+                uniforms: {
+                    uTime: { value: 0.0 },
+                    uMoodIntensity: { value: 0.6 },
+                    uResonance: { value: 0.8 },
+                    uColorCore: { value: new THREE.Color(galaxy.visualization.color2) },
+                    uColorAura: { value: new THREE.Color(galaxy.visualization.color1) },
+                },
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+            });
+            const auraMesh = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), auraMaterial);
+            auraMesh.position.z = -1;
+            group.add(auraMesh);
+
             const nebula = new THREE.Mesh(
                 new THREE.PlaneGeometry(100, 100),
                 new THREE.ShaderMaterial({
@@ -539,7 +700,10 @@ export class CosmosVisualizer extends LitElement {
                 })
             );
             nebula.userData.id = galaxy.id;
+            nebula.userData.galaxyName = galaxy.galaxyName;
+            nebula.userData.galaxyType = galaxy.galaxyType;
             group.add(nebula);
+
             group.userData.isViewObject = true;
             this.galaxyMarkers.set(galaxy.id, group);
             this.scene.add(group);
@@ -547,7 +711,6 @@ export class CosmosVisualizer extends LitElement {
         }
         const marker = this.galaxyMarkers.get(galaxy.id)!;
         marker.position.set((i % 10 - 4.5) * 200, Math.floor(i / 10) * -200 + 200, 0);
-        marker.lookAt(this.camera.position);
     });
   }
 
@@ -641,23 +804,39 @@ export class CosmosVisualizer extends LitElement {
             this.scene.add(group);
             this.fadeObject(group, 1, 500);
             
-            // Create corresponding orbit
-            const radius = new THREE.Vector3(...coords).length();
-            const orbitGeometry = new THREE.RingGeometry(radius - 0.1, radius + 0.1, 128);
-            const orbitMaterial = new THREE.MeshBasicMaterial({
+            // Create corresponding elliptical orbit
+            const position = new THREE.Vector3(...coords);
+            const radius = position.length(); // This is the distance to the planet
+            const planetAngle = Math.atan2(position.z, position.x);
+
+            let seed = 0;
+            for (let j = 0; j < planet.celestial_body_id.length; j++) {
+                seed += planet.celestial_body_id.charCodeAt(j);
+            }
+            const seededRandom = (s: number) => { const x = Math.sin(s) * 10000; return x - Math.floor(x); };
+            
+            const eccentricity = 0.1 + seededRandom(seed * 2) * 0.2;
+            const a = radius; // Set semi-major axis to planet's distance
+            const b = a * Math.sqrt(1 - eccentricity * eccentricity);
+            
+            const curve = new THREE.EllipseCurve(0, 0, a, b, 0, 2 * Math.PI, false, 0); // Unrotated curve
+            const points = curve.getPoints(128);
+            const orbitGeometry = new THREE.BufferGeometry().setFromPoints(points);
+            const orbitMaterial = new THREE.LineBasicMaterial({
                 color: 0x61faff,
-                side: THREE.DoubleSide,
                 transparent: true,
                 opacity: 0.1,
                 blending: THREE.AdditiveBlending,
                 depthWrite: false,
-                userData: { isSelected: false } // Flag for animation
             });
-            const orbitMesh = new THREE.Mesh(orbitGeometry, orbitMaterial);
-            orbitMesh.rotation.x = Math.PI / 2;
-            orbitMesh.userData.isViewObject = true;
-            this.galaxyOrbits.set(planet.celestial_body_id, orbitMesh);
-            this.scene.add(orbitMesh);
+            const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+            // Rotate to XZ plane, then rotate around Y to align the major axis with the planet
+            orbitLine.rotation.x = Math.PI / 2;
+            orbitLine.rotation.y = planetAngle;
+            
+            orbitLine.userData.isViewObject = true;
+            this.galaxyOrbits.set(planet.celestial_body_id, orbitLine);
+            this.scene.add(orbitLine);
         }
     });
     this.updatePlanetHighlights();
@@ -741,24 +920,39 @@ export class CosmosVisualizer extends LitElement {
     this.activePlanets.filter(p => p.starSystem === selectedPlanet.starSystem).forEach((planet, i) => {
         const planetGroup = this.createPlanetMesh(planet);
         const orbitRadius = 20 + (planet.planetRadiusEarths || 1) * 2 + i * 15;
-        planetGroup.userData.orbitRadius = orbitRadius;
+        
+        let seed = 0;
+        for (let j = 0; j < planet.celestial_body_id.length; j++) {
+            seed += planet.celestial_body_id.charCodeAt(j);
+        }
+        const seededRandom = (s: number) => { const x = Math.sin(s) * 10000; return x - Math.floor(x); };
+        const eccentricity = 0.05 + seededRandom(seed) * 0.15;
+        
+        planetGroup.userData.orbitRadius = orbitRadius; // semi-major axis 'a'
         planetGroup.userData.orbitSpeed = 0.1 / Math.sqrt(orbitRadius);
+        planetGroup.userData.orbitEccentricity = eccentricity;
+
         this.systemPlanetMeshes.set(planet.celestial_body_id, planetGroup);
         this.systemGroup!.add(planetGroup);
+        
+        const a = orbitRadius;
+        const c = a * eccentricity;
+        const b = Math.sqrt(a*a - c*c);
 
-        const orbitGeometry = new THREE.RingGeometry(orbitRadius - 0.1, orbitRadius + 0.1, 256);
-        const orbitMaterial = new THREE.MeshBasicMaterial({
+        const curve = new THREE.EllipseCurve(c, 0, a, b, 0, 2 * Math.PI, false, 0);
+        const points = curve.getPoints(256);
+        const orbitGeometry = new THREE.BufferGeometry().setFromPoints(points);
+        const orbitMaterial = new THREE.LineBasicMaterial({
             color: 0x61faff,
-            side: THREE.DoubleSide,
             transparent: true,
-            opacity: 0.1,
+            opacity: 0.2,
             blending: THREE.AdditiveBlending,
             depthWrite: false,
         });
-        const orbitMesh = new THREE.Mesh(orbitGeometry, orbitMaterial);
-        orbitMesh.rotation.x = Math.PI / 2;
-        this.systemOrbits.set(planet.celestial_body_id, orbitMesh);
-        this.systemGroup!.add(orbitMesh);
+        const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+        orbitLine.rotation.x = Math.PI / 2;
+        this.systemOrbits.set(planet.celestial_body_id, orbitLine);
+        this.systemGroup!.add(orbitLine);
     });
     
     this.scene.add(this.systemGroup);
@@ -795,7 +989,7 @@ export class CosmosVisualizer extends LitElement {
     if (this.viewMode === 'galaxy') {
         this.galaxyOrbits.forEach((orbit, id) => {
             const isSelected = id === this.selectedPlanetId;
-            (orbit.material as THREE.MeshBasicMaterial).userData.isSelected = isSelected;
+            (orbit.material as THREE.LineBasicMaterial).userData.isSelected = isSelected;
         });
     }
   }
@@ -829,11 +1023,23 @@ export class CosmosVisualizer extends LitElement {
         positions[i * 3 + 0] = (Math.random() - 0.5) * 4000;
         positions[i * 3 + 1] = (Math.random() - 0.5) * 4000;
         positions[i * 3 + 2] = (Math.random() - 0.5) * 4000;
-        color.setHSL(0.55 + Math.random() * 0.15, 0.2 + Math.random() * 0.4, 0.6 + Math.random() * 0.4);
+        
+        // Generate a more plausible distribution of star colors.
+        const rand = Math.random();
+        if (rand < 0.8) { // 80% are blue/white stars
+            color.setHSL(0.55 + Math.random() * 0.15, 0.5 + Math.random() * 0.5, 0.7 + Math.random() * 0.2);
+        } else if (rand < 0.95) { // 15% are yellow/white stars
+            color.setHSL(0.1 + Math.random() * 0.05, 0.7 + Math.random() * 0.3, 0.8 + Math.random() * 0.1);
+        } else { // 5% are reddish stars
+            color.setHSL(0.0 + Math.random() * 0.05, 0.8 + Math.random() * 0.2, 0.7 + Math.random() * 0.1);
+        }
+        
         colors[i * 3 + 0] = color.r;
         colors[i * 3 + 1] = color.g;
         colors[i * 3 + 2] = color.b;
-        scales[i] = Math.pow(Math.random(), 3.0) * 8.0 + 0.5;
+        
+        // Tweak scale for a more subtle distribution with fewer large stars.
+        scales[i] = Math.pow(Math.random(), 4.0) * 6.0 + 0.5;
     }
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -1015,7 +1221,7 @@ export class CosmosVisualizer extends LitElement {
             uTextureType: { value: textureTypeMap[planet.visualization.surfaceTexture] || 1 },
             uIsSelected: { value: false }, uIsHovered: { value: false },
             uAxialTilt: { value: Math.random() * 0.5 },
-            uLightDirection: { value: new THREE.Vector3(0,0,0) },
+            uLightDirection: { value: new THREE.Vector3(1, 0.5, 1).normalize() },
         }
     });
     const sphereMesh = new THREE.Mesh(new THREE.SphereGeometry(planet.planetRadiusEarths || 1, 64, 64), planetMaterial);
@@ -1029,7 +1235,7 @@ export class CosmosVisualizer extends LitElement {
             uFresnelPower: { value: 4.0 }, uTime: { value: 0.0 },
             uIsSelected: { value: false },
             uHasAuroras: { value: planet.visualization.surfaceTexture === 'ICY' || planet.visualization.iceCoverage > 0.5 },
-            uLightDirection: { value: new THREE.Vector3(0,0,0) },
+            uLightDirection: { value: new THREE.Vector3(1, 0.5, 1).normalize() },
         },
         blending: THREE.AdditiveBlending, side: THREE.BackSide, transparent: true
     });
@@ -1077,125 +1283,91 @@ export class CosmosVisualizer extends LitElement {
     const activeGalaxy = this.galaxies.find(g => g.id === this.activeGalaxyId);
     if (!activeGalaxy) return;
 
+    if (!this.galaxyInteractionPlane) {
+        const planeGeom = new THREE.PlaneGeometry(300, 300);
+        const planeMat = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
+        this.galaxyInteractionPlane = new THREE.Mesh(planeGeom, planeMat);
+        this.galaxyInteractionPlane.rotation.x = -Math.PI / 2;
+        this.galaxyInteractionPlane.userData.isInteractionPlane = true;
+        this.scene.add(this.galaxyInteractionPlane);
+    }
+    this.galaxyInteractionPlane.visible = true;
+
     this.galaxyVisuals = this.createGalaxyPointCloud(activeGalaxy);
     this.galaxyVisuals.userData.isViewObject = true;
     this.scene.add(this.galaxyVisuals);
     this.fadeObject(this.galaxyVisuals, 1, 1000);
   }
-
+  // FIX: Completed the truncated function to ensure it returns a `THREE.Points` object as declared.
   private createGalaxyPointCloud(galaxyData: GalaxyData): THREE.Points {
     const params = {
-        count: 150000, size: 0.8, radius: 150, spin: 1.5,
-        randomness: 0.5, // Reduced for tighter arms
-        randomnessPower: 3.5 // Increased for more central randomness
+        count: 150000, size: 1.5, radius: 150, spin: 1.5,
+        randomness: 0.5,
+        randomnessPower: 3.5
     };
 
     const positions = new Float32Array(params.count * 3);
     const colors = new Float32Array(params.count * 3);
-    const distances = new Float32Array(params.count);
+    const branchAngles = new Float32Array(params.count);
     const colorInside = new THREE.Color(galaxyData.visualization.color1);
     const colorOutside = new THREE.Color(galaxyData.visualization.color2);
-    // New hot color for star-forming regions
-    const hotColor = new THREE.Color(0xff61c3); 
 
-    let branches = 5;
-    if (galaxyData.galaxyType.toLowerCase().includes('barred')) branches = 2;
-    if (galaxyData.galaxyType.toLowerCase().includes('elliptical')) branches = 0;
+    const numBranches = this.galaxyDataCache.numBranches;
 
     for (let i = 0; i < params.count; i++) {
         const i3 = i * 3;
-        // Concentrate stars towards the center for a brighter core and varying density
-        const radius = Math.pow(Math.random(), 2.5) * params.radius; 
-        const spinAngle = radius * params.spin;
-        const branchAngle = ((i % branches) / branches) * Math.PI * 2;
-        
-        // Add some perturbation to the arm angle to make them less perfect
-        const angleRandomness = (Math.random() - 0.5) * 0.2;
-        const effectiveBranchAngle = branchAngle + angleRandomness;
+        const r = Math.pow(Math.random(), 2) * params.radius;
+        const spinAngle = r * params.spin;
+        const branchAngle = ((i % numBranches) / numBranches) * Math.PI * 2;
+        branchAngles[i] = branchAngle;
 
-        const randomX = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * radius;
+        const randomX = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * r * 0.5;
         const randomY = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * 0.2;
-        const randomZ = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * radius;
-        
-        positions[i3 + 0] = Math.cos(effectiveBranchAngle + spinAngle) * radius + randomX;
+        const randomZ = Math.pow(Math.random(), params.randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * params.randomness * r * 0.5;
+
+        positions[i3 + 0] = Math.cos(branchAngle + spinAngle) * r + randomX;
         positions[i3 + 1] = randomY;
-        positions[i3 + 2] = Math.sin(effectiveBranchAngle + spinAngle) * radius + randomZ;
+        positions[i3 + 2] = Math.sin(branchAngle + spinAngle) * r + randomZ;
 
-        // --- Color Variation ---
-        const mixedColor = colorInside.clone().lerp(colorOutside, radius / params.radius);
-        
-        // Create clumpy, dense regions of "hot" stars
-        const clumpFactor = Math.sin(branchAngle * 8.0 - radius * 0.1 + 5.0) * 0.5 + 0.5;
-        const starFormationChance = Math.pow(clumpFactor, 4.0) * (1.0 - radius / params.radius);
-
-        if (Math.random() < starFormationChance * 0.3) {
-            mixedColor.lerp(hotColor, 0.6);
-        }
+        const mixedColor = colorInside.clone();
+        mixedColor.lerp(colorOutside, r / params.radius);
 
         colors[i3 + 0] = mixedColor.r;
         colors[i3 + 1] = mixedColor.g;
         colors[i3 + 2] = mixedColor.b;
-        
-        distances[i] = radius;
     }
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geometry.setAttribute('aDistance', new THREE.BufferAttribute(distances, 1));
+    geometry.setAttribute('aBranchAngle', new THREE.BufferAttribute(branchAngles, 1));
 
-    const material = new THREE.PointsMaterial({
-        size: params.size,
-        sizeAttenuation: true,
+    const material = new THREE.ShaderMaterial({
+        vertexShader: galaxyVs,
+        fragmentShader: galaxyFs,
+        uniforms: {
+            uSize: { value: params.size * window.devicePixelRatio },
+            uTime: { value: 0.0 },
+            uHoveredSectorIndex: { value: -1 },
+            uNumBranches: { value: numBranches },
+        },
         depthWrite: false,
         blending: THREE.AdditiveBlending,
         vertexColors: true,
+        transparent: true,
     });
-    
+
     return new THREE.Points(geometry, material);
   }
 
   render() {
-    const tooltipStyles = {
-      left: `${this.tooltip.x + 15}px`,
-      top: `${this.tooltip.y + 15}px`,
-      opacity: this.tooltip.visible ? 1 : 0,
-    };
     return html`
       <canvas id="canvas"></canvas>
-      <div class="tooltip" style=${styleMap(tooltipStyles)}>${this.tooltip.content}</div>
+      <div class="tooltip" style=${styleMap({
+        display: this.tooltip.visible ? 'block' : 'none',
+        left: `${this.tooltip.x}px`,
+        top: `${this.tooltip.y}px`,
+      })}>${this.tooltip.content}</div>
     `;
   }
-
-  static styles = css`
-    :host {
-      display: block;
-      width: 100%;
-      height: 100%;
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 1;
-    }
-    canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-      cursor: grab;
-    }
-    canvas:active {
-      cursor: grabbing;
-    }
-    .tooltip {
-        position: fixed;
-        background: rgba(1, 2, 6, 0.8);
-        border: 1px solid rgba(97, 250, 255, 0.4);
-        color: #c0f0ff;
-        padding: 4px 8px;
-        border-radius: 4px;
-        pointer-events: none;
-        transition: opacity 0.2s;
-        font-size: 0.8rem;
-    }
-  `;
 }

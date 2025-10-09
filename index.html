@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#010206" />
+    <meta name="theme-color" content="#0a0014" />
     <meta
       name="description"
       content="AURELION CORE. A living AI for celestial discovery."
@@ -14,7 +15,7 @@
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;700&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -23,9 +24,11 @@
           extend: {
             fontFamily: {
               sans: ['Exo 2', 'sans-serif'],
+              display: ['Rajdhani', 'sans-serif'],
             },
             colors: {
               'accent': 'var(--accent-color)',
+              'accent-secondary': 'var(--accent-secondary-color)',
               'glow': 'var(--glow-color)',
               'bg': 'var(--bg-color)',
               'panel-bg': 'var(--panel-bg)',
@@ -33,105 +36,106 @@
               'text': 'var(--text-color)',
               'text-dark': 'var(--text-color-dark)',
               'error': 'var(--error-color)',
-              'warning': 'var(--warning-color)',
               'success': 'var(--success-color)',
-              'mat-1': 'var(--mat-color-1)',
-              'mat-2': 'var(--mat-color-2)',
-              'mat-3': 'var(--mat-color-3)',
-              'mat-4': 'var(--mat-color-4)',
-              'exo-mat-1': 'var(--exo-mat-color-1)',
-              'exo-mat-2': 'var(--exo-mat-color-2)',
-              'exo-mat-3': 'var(--exo-mat-color-3)',
             },
             keyframes: {
               'ripple-animation': {
                 'to': { transform: 'scale(4)', opacity: '0' },
               },
-              'fadeIn': { 
-                'from': { opacity: '0', transform: 'translateY(10px)' }, 
-                'to': { opacity: '1', transform: 'translateY(0)' } 
-              },
-              'fadeInOnboarding': { 'from': { opacity: '0' }, 'to': { opacity: '1' } },
-              'pulse-live': {
-                '0%': { boxShadow: '0 0 0 0 rgba(97, 255, 202, 0.7)' },
-                '70%': { boxShadow: '0 0 0 5px rgba(97, 255, 202, 0)' },
-                '100%': { boxShadow: '0 0 0 0 rgba(97, 255, 202, 0)' },
-              },
-              'pulse-idle': {
-                '0%': { boxShadow: '0 0 0 0 rgba(97, 250, 255, 0.4)' },
-                '70%': { boxShadow: '0 0 0 6px rgba(97, 250, 255, 0)' },
-                '100%': { boxShadow: '0 0 0 0 rgba(97, 250, 255, 0)' },
-              },
-              'pulse-active': {
-                '0%': { transform: 'scale(0.95)', boxShadow: '0 0 0 0 rgba(255, 250, 97, 0.7)' },
-                '50%': { transform: 'scale(1.1)', boxShadow: '0 0 0 8px rgba(255, 250, 97, 0)' },
-                '100%': { transform: 'scale(0.95)', boxShadow: '0 0 0 0 rgba(255, 250, 97, 0)' },
-              },
-              'spin': { 'to': { transform: 'rotate(360deg)' } },
-              'pulse-voice': {
-                '0%': { transform: 'scale(1)', filter: 'drop-shadow(0 0 2px var(--glow-color))' },
-                '50%': { transform: 'scale(1.1)', filter: 'drop-shadow(0 0 8px var(--glow-color))' },
-                '100%': { transform: 'scale(1)', filter: 'drop-shadow(0 0 2px var(--glow-color))' },
-              },
+              'fadeIn': { 'from': { opacity: '0' }, 'to': { opacity: '1' } },
+              'aurora': {
+                '0%': { 'background-position': '0% 50%' },
+                '50%': { 'background-position': '100% 50%' },
+                '100%': { 'background-position': '0% 50%' },
+              }
             },
             animation: {
               'ripple': 'ripple-animation 0.6s linear',
               'fade-in': 'fadeIn 0.5s ease forwards',
-              'fade-in-onboarding': 'fadeInOnboarding 1s ease',
-              'pulse-live': 'pulse-live 1.5s ease-in-out infinite',
-              'pulse-idle': 'pulse-idle 3s ease-in-out infinite',
-              'pulse-active': 'pulse-active 1.5s ease-in-out infinite',
-              'spin': 'spin 1s linear infinite',
-              'pulse-voice': 'pulse-voice 1.5s infinite',
-            },
-            dropShadow: {
-              'glow': '0 0 10px var(--glow-color)',
+              'fade-in-onboarding': 'fadeIn 1s ease forwards',
             },
           },
         },
-        plugins: [],
       }
     </script>
     <style type="text/tailwindcss">
-        @layer base {
-          :root {
-            --accent-color: #2b6cb0;
-            --glow-color: rgba(49, 130, 206, 0.4);
-            --mat-color-1: #9b7653; 
-            --mat-color-2: #e08d51;
-            --mat-color-3: #ffdd33;
-            --mat-color-4: #ffffff;
-            --exo-mat-color-1: #c0c0c0;
-            --exo-mat-color-2: #f0e68c;
-            --exo-mat-color-3: #ffb6c1;
-          }
+      @layer base {
+        :root, .dark {
+          --accent-color: #9333ea; /* Purple */
+          --accent-secondary-color: #0891b2; /* Cyan */
+          --glow-color: rgba(147, 51, 234, 0.6);
+          --bg-color: #0a0014;
+          --panel-bg: rgba(10, 0, 20, 0.7);
+          --border-color: rgba(147, 51, 234, 0.4);
+          --text-color: #e9d5ff;
+          --text-color-dark: #0a0014;
+          --error-color: #e53e3e;
+          --success-color: #48bb78;
         }
-        @layer components {
-            .thinking-button::before {
-                content: '';
-                @apply absolute left-1/2 top-1/2 w-5 h-5 -ml-[10px] -mt-[10px] border-2 border-border rounded-full animate-spin;
-                border-top-color: var(--accent-color);
-            }
-            .cluster-button.thinking-button::before {
-                border-top-color: #ffc261;
-            }
-            .ripple {
-              @apply absolute rounded-full scale-0 animate-ripple bg-glow;
-            }
-            /* Typing animation requires dynamic properties not easily done in Tailwind config */
-            .typing-text {
-              white-space: nowrap; 
-              overflow: hidden; 
-              display: inline-block; 
-              vertical-align: bottom;
-              animation: typing var(--animation-duration) steps(var(--line-length), end) forwards, blink-caret 0.75s step-end infinite;
-              border-right: 0.15em solid var(--accent-color);
-            }
-            @keyframes typing { from { width: 0; opacity: 1; } to { width: 100%; opacity: 1; } }
-            @keyframes blink-caret { from, to { border-color: transparent; } 50% { border-color: var(--accent-color); } }
+        body {
+          background-image: radial-gradient(circle at 10% 10%, rgba(147, 51, 234, 0.1) 0%, transparent 30%),
+                            radial-gradient(circle at 90% 80%, rgba(8, 145, 178, 0.1) 0%, transparent 30%);
+          @apply bg-bg text-text font-display overflow-hidden;
         }
+        button {
+          @apply relative overflow-hidden;
+        }
+        .panel {
+            @apply fixed top-0 h-full w-[380px] max-w-[90vw] bg-panel-bg backdrop-blur-xl transition-transform duration-500 ease-in-out;
+            border-style: solid;
+            border-image-slice: 1;
+            border-image-source: linear-gradient(to bottom, var(--border-color), transparent);
+            will-change: transform;
+        }
+        #left-panel {
+            @apply left-0 -translate-x-full border-r-2;
+        }
+        #right-panel {
+            @apply right-0 translate-x-full border-l-2;
+        }
+        .panel.open {
+            @apply translate-x-0;
+        }
+        @media (max-width: 768px) {
+            .panel {
+                @apply w-full max-w-full;
+            }
+        }
+      }
+      @layer components {
+        .ripple {
+          @apply absolute rounded-full scale-0 bg-accent/50;
+          animation: ripple-animation 0.6s ease-out;
+        }
+        .panel-section {
+          @apply mb-4 border-b border-border/50 pb-4;
+        }
+        .panel-subheader {
+          @apply text-sm font-bold tracking-widest uppercase text-accent/80 mb-2;
+        }
+        .scroll-container {
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-color) transparent;
+        }
+        .scroll-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        .scroll-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .scroll-container::-webkit-scrollbar-thumb {
+            background-color: var(--border-color);
+            border-radius: 3px;
+        }
+        .thinking-button::after {
+            content: '';
+            @apply absolute top-1/2 left-1/2 -ml-3 -mt-3 w-6 h-6 border-2 border-accent rounded-full;
+            border-top-color: transparent;
+            border-left-color: transparent;
+            animation: spin 0.8s linear infinite;
+        }
+      }
     </style>
-
     <script type="importmap">
 {
   "imports": {
@@ -143,24 +147,24 @@
     "three/examples/jsm/postprocessing/RenderPass.js": "https://esm.sh/three@0.164.1/examples/jsm/postprocessing/RenderPass.js",
     "three/examples/jsm/postprocessing/UnrealBloomPass.js": "https://esm.sh/three@0.164.1/examples/jsm/postprocessing/UnrealBloomPass.js",
     "three/examples/jsm/controls/OrbitControls.js": "https://esm.sh/three@0.164.1/examples/jsm/controls/OrbitControls.js",
-    "react-chartjs-2": "https://aistudiocdn.com/react-chartjs-2@^5.3.0",
-    "antd": "https://aistudiocdn.com/antd@^5.27.4",
-    "chart.js/": "https://aistudiocdn.com/chart.js@^4.5.0/",
-    "react/": "https://aistudiocdn.com/react@^19.1.1/",
-    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "chart.js": "https://esm.sh/chart.js@4.4.2",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
     "@react-three/fiber": "https://aistudiocdn.com/@react-three/fiber@^9.3.0",
-    "three/": "https://aistudiocdn.com/three@^0.180.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "clsx": "https://aistudiocdn.com/clsx@^2.1.1",
     "tailwind-merge": "https://aistudiocdn.com/tailwind-merge@^3.3.1",
-    "typescript-eslint": "https://aistudiocdn.com/typescript-eslint@^8.44.0",
+    "three/": "https://aistudiocdn.com/three@^0.180.0/",
+    "@eslint/js": "https://aistudiocdn.com/@eslint/js@^9.37.0",
     "globals": "https://aistudiocdn.com/globals@^16.4.0",
-    "@eslint/js": "https://aistudiocdn.com/@eslint/js@^9.36.0",
-    "chart.js": "https://aistudiocdn.com/chart.js@^4.5.0"
+    "typescript-eslint": "https://aistudiocdn.com/typescript-eslint@^8.45.0",
+    "react-chartjs-2": "https://aistudiocdn.com/react-chartjs-2@^5.3.0",
+    "antd": "https://aistudiocdn.com/antd@^5.27.4",
+    "chart.js/": "https://aistudiocdn.com/chart.js@^4.5.0/"
   }
 }
 </script>
   </head>
-  <body class="h-full w-full m-0 bg-bg text-text font-sans overflow-hidden">
+  <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <axee-interface></axee-interface>
     <script type="module" src="index.tsx"></script>

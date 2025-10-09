@@ -158,10 +158,15 @@ export class PlanetVisualizer extends LitElement {
     if (this.planetGroup) {
       this.scene.remove(this.planetGroup);
       this.planetGroup.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-              child.geometry.dispose();
-              (child.material as THREE.Material).dispose();
-          }
+        if (child instanceof THREE.Mesh) {
+            child.geometry.dispose();
+            const material = child.material as THREE.Material | THREE.Material[];
+            if (Array.isArray(material)) {
+                material.forEach(m => m.dispose());
+            } else {
+                material.dispose();
+            }
+        }
       });
     }
 

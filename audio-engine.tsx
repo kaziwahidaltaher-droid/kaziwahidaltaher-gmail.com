@@ -21,6 +21,7 @@ export class AxeeAudioEngine extends LitElement {
   private musicGain: GainNode | null = null; // New node specifically for music
   private activeSound: ActiveSound | null = null;
   private currentMood: MusicMood = 'off';
+  private constellationBuffer: AudioBuffer | null = null;
 
   private initializeAudio() {
     if (this.audioContext) return;
@@ -34,9 +35,25 @@ export class AxeeAudioEngine extends LitElement {
       this.masterGain.connect(this.audioContext.destination);
 
       this.updateMasterGain();
+      this.loadConstellationSound();
       console.log('Audio Engine Initialized.');
     } catch (e) {
       console.error('Web Audio API is not supported in this browser.', e);
+    }
+  }
+
+  private async loadConstellationSound() {
+    if (!this.audioContext) return;
+    try {
+        const response = await fetch('constellation-creation.mp3');
+        if (!response.ok) {
+            throw new Error(`File not found or HTTP error: ${response.status}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        this.constellationBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+        console.log('Custom sound "constellation-creation.mp3" loaded successfully.');
+    } catch (e) {
+        console.warn('Could not load "constellation-creation.mp3". Using synthesized fallback sound. Error:', e);
     }
   }
 
@@ -246,6 +263,58 @@ export class AxeeAudioEngine extends LitElement {
     osc.start(now);
     osc.stop(now + duration);
   }
+  
+  public playConstellationCreationSound() {
+    if (!this.audioContext || !this.masterGain) {
+        if (!this.audioContext) this.initializeAudio();
+        if (!this.audioContext || !this.masterGain) return;
+    }
+
+    if (this.constellationBuffer) {
+        // Play the loaded file
+        const source = this.audioContext.createBufferSource();
+        source.buffer = this.constellationBuffer;
+        source.connect(this.masterGain);
+        source.start(0);
+    } else {
+        // Play the fallback synthesized sound
+        const actx = this.audioContext;
+        const now = actx.currentTime;
+        const volume = 0.2;
+
+        // A rising arpeggio to signify creation
+        const freqs = [261.63, 329.63, 392.00, 523.25, 659.26, 783.99, 1046.50]; // C4 to C6 major arpeggio
+
+        const delay = actx.createDelay(1.0);
+        delay.delayTime.value = 0.3;
+        const feedback = actx.createGain();
+        feedback.gain.value = 0.4;
+        
+        delay.connect(feedback);
+        feedback.connect(delay);
+        delay.connect(this.masterGain);
+
+        freqs.forEach((freq, i) => {
+            const osc = actx.createOscillator();
+            const gain = actx.createGain();
+            const startTime = now + i * 0.1;
+
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, startTime);
+
+            gain.gain.setValueAtTime(0, startTime);
+            gain.gain.linearRampToValueAtTime(volume, startTime + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.8);
+
+            osc.connect(gain);
+            gain.connect(this.masterGain!);
+            gain.connect(delay); // Also connect to the delay for an echo effect
+
+            osc.start(startTime);
+            osc.stop(startTime + 0.8);
+        });
+    }
+  }
 
   // Fix: Add all the missing sound effect methods.
   public playInteractionSound() {
@@ -253,7 +322,34 @@ export class AxeeAudioEngine extends LitElement {
   }
 
   public playSuccessSound() {
-    this.playSfx('sine', 523.25, 1046.5, 0.2, 0.3);
+    if (!this.audioContext || !this.masterGain) {
+      if (!this.audioContext) this.initializeAudio();
+      if (!this.audioContext || !this.masterGain) return;
+    }
+    const actx = this.audioContext;
+    const now = actx.currentTime;
+    const volume = 0.25;
+
+    // A simple major chord (C5-E5-G5)
+    const freqs = [523.25, 659.25, 783.99];
+    freqs.forEach((freq, i) => {
+      const osc = actx.createOscillator();
+      const gain = actx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.05); // Stagger the notes slightly
+
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(volume, now + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+
+      osc.connect(gain);
+      // SFX connect to masterGain directly to bypass music ducking
+      gain.connect(this.masterGain!);
+
+      osc.start(now + i * 0.05);
+      osc.stop(now + 0.5);
+    });
   }
 
   public playErrorSound() {
