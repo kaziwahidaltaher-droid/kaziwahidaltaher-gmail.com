@@ -64,21 +64,40 @@
     </script>
     <style type="text/tailwindcss">
       @layer base {
-        :root, .dark {
+        :root {
+          /* Light Mode Defaults */
+          --accent-color: #0052cc;
+          --glow-color: rgba(0, 82, 204, 0.3);
+          --bg-color: #f0f2f5;
+          --panel-bg: rgba(255, 255, 255, 0.85);
+          --border-color: rgba(0, 0, 0, 0.15);
+          --text-color: #1a1a1a;
+          --text-color-dark: #f0f4f8;
+          --error-color: #c53030;
+          --success-color: #2f855a;
+          --item-hover-bg: rgba(0, 82, 204, 0.1);
+          --item-selected-bg: rgba(0, 82, 204, 0.2);
+        }
+        .dark {
+          /* Dark Mode Overrides */
           --accent-color: #61faff;
           --glow-color: rgba(97, 250, 255, 0.5);
           --bg-color: #0a0014;
-          --panel-bg: rgba(10, 0, 20, 0.7);
+          --panel-bg: rgba(10, 0, 20, 0.85);
           --border-color: rgba(97, 250, 255, 0.3);
           --text-color: #e0f8ff;
           --text-color-dark: #0a0014;
           --error-color: #e53e3e;
           --success-color: #48bb78;
+          --item-hover-bg: rgba(97, 250, 255, 0.1);
+          --item-selected-bg: rgba(97, 250, 255, 0.2);
         }
         body {
-          background-image: radial-gradient(circle at 10% 10%, rgba(97, 250, 255, 0.05) 0%, transparent 30%),
+          background-image: radial-gradient(circle at 10% 10%, var(--glow-color) 0%, transparent 30%),
                             radial-gradient(circle at 90% 80%, rgba(216, 97, 255, 0.05) 0%, transparent 30%);
-          @apply bg-bg text-text font-display overflow-hidden;
+          background-color: var(--bg-color);
+          color: var(--text-color);
+          @apply font-display overflow-hidden transition-colors duration-500;
         }
         button {
           @apply relative overflow-hidden;

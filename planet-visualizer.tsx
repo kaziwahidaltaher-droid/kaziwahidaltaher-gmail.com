@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -200,6 +201,9 @@ export class PlanetVisualizer extends LitElement {
             uAxialTilt: { value: axialTilt },
             uAtmosphereColor: { value: new THREE.Color(visualization.atmosphereColor) },
             uLightDirection: { value: new THREE.Vector3(1, 0.5, 1).normalize() },
+            // New scale and distortion controls
+            uSurfaceScale: { value: 3.0 },
+            uSurfaceDistortion: { value: 0.5 },
         }
     });
     const sphereMesh = new THREE.Mesh(new THREE.SphereGeometry(2, 128, 128), planetMaterial);

@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -56,6 +57,8 @@ export class QubitVisualizer extends LitElement {
   private animationFrameId = 0;
   private qubitGroup: THREE.Group | null = null;
   private stateVectorArrow: THREE.ArrowHelper | null = null;
+  private stateSphere: THREE.Mesh | null = null;
+  private measureRing: THREE.Mesh | null = null;
   
   private resizeObserver: ResizeObserver;
 
@@ -207,11 +210,18 @@ export class QubitVisualizer extends LitElement {
     if (this.stateVectorArrow) {
       this.qubitGroup.remove(this.stateVectorArrow);
     }
+    if (this.stateSphere) {
+        this.qubitGroup.remove(this.stateSphere);
+    }
+    if (this.measureRing) {
+        this.qubitGroup.remove(this.measureRing);
+    }
     
     const { theta, phi } = this.analysisData.stateVector;
     const radius = 1;
 
-    // Convert spherical (physics convention) to Cartesian (Y-up)
+    // Convert spherical (physics convention) to Cartesian (Y-up for this visualizer's |0>/|1> axis)
+    // Here, theta is angle from Y axis (up).
     const x = radius * Math.sin(theta) * Math.cos(phi);
     const y = radius * Math.cos(theta);
     const z = radius * Math.sin(theta) * Math.sin(phi);
@@ -227,11 +237,52 @@ export class QubitVisualizer extends LitElement {
         0.08
     );
     this.qubitGroup.add(this.stateVectorArrow);
+
+    // Create a sphere at the tip to highlight the state
+    const tipGeometry = new THREE.SphereGeometry(0.08, 16, 16);
+    const tipMaterial = new THREE.MeshBasicMaterial({ color: 0xffe082 });
+    this.stateSphere = new THREE.Mesh(tipGeometry, tipMaterial);
+    this.stateSphere.position.copy(direction);
+    this.qubitGroup.add(this.stateSphere);
+
+    // Create a measurement ring effect active around the state vector
+    const ringGeometry = new THREE.RingGeometry(0.12, 0.15, 32);
+    const ringMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0x61faff, 
+        side: THREE.DoubleSide, 
+        transparent: true, 
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending
+    });
+    this.measureRing = new THREE.Mesh(ringGeometry, ringMaterial);
+    this.measureRing.position.copy(direction);
+    this.measureRing.lookAt(new THREE.Vector3(0, 0, 0));
+    this.qubitGroup.add(this.measureRing);
   }
   
   private runAnimationLoop = () => {
     this.animationFrameId = requestAnimationFrame(this.runAnimationLoop);
     this.controls.update();
+    const time = this.clock.getElapsedTime();
+
+    if (this.stateSphere) {
+        // Pulse the tip sphere
+        const scale = 1.0 + Math.sin(time * 4.0) * 0.3;
+        this.stateSphere.scale.set(scale, scale, scale);
+        
+        // Pulse color
+        const material = this.stateSphere.material as THREE.MeshBasicMaterial;
+        material.color.setHSL(0.1, 0.8, 0.5 + Math.sin(time * 3.0) * 0.2);
+    }
+
+    if (this.measureRing) {
+        // Rotate and pulse the measurement ring
+        this.measureRing.rotation.z -= 0.05;
+        const scale = 1.0 + Math.cos(time * 5.0) * 0.2;
+        this.measureRing.scale.set(scale, scale, 1);
+        (this.measureRing.material as THREE.MeshBasicMaterial).opacity = 0.4 + Math.sin(time * 8.0) * 0.3;
+    }
+
     this.composer.render();
   };
 

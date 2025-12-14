@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -298,11 +299,15 @@ export class AxeeVisuals3D extends LitElement {
     }
   }
 
-  // FIX: Added missing method to handle canvas clicks for planet selection.
   private onCanvasClick = (event: MouseEvent) => {
-    // This method is added to resolve an error. It handles clicks on the canvas.
-    this.pointer.x = (event.clientX / this.canvas.clientWidth) * 2 - 1;
-    this.pointer.y = -(event.clientY / this.canvas.clientHeight) * 2 + 1;
+    if (!this.canvas) return;
+    
+    // Calculate mouse position in normalized device coordinates
+    // (-1 to +1) for both components
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
     const planetMeshes = Array.from(this.planetGroups.values()).map(
@@ -312,11 +317,12 @@ export class AxeeVisuals3D extends LitElement {
 
     let selectedId = null;
     if (intersects.length > 0) {
+      // Get the celestial_body_id from userData
       selectedId = intersects[0].object.userData.id;
     }
     
     // Dispatch event to notify parent of selection change (including deselection)
-    (this as unknown as EventTarget).dispatchEvent(
+    (this as unknown as HTMLElement).dispatchEvent(
         new CustomEvent('planet-selected', {
         detail: { planetId: selectedId },
         bubbles: true,
@@ -802,6 +808,9 @@ export class AxeeVisuals3D extends LitElement {
               value: new THREE.Color(planet.visualization.atmosphereColor),
             },
             uLightDirection: {value: new THREE.Vector3(1, 1, 1).normalize()},
+            // New uniforms for scale and distortion
+            uSurfaceScale: {value: 3.0},
+            uSurfaceDistortion: {value: 0.5},
           },
         });
         const sphereMesh = new THREE.Mesh(geometry, material);

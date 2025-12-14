@@ -90,6 +90,7 @@ import './weather-visualizer';
 import './energy-signature-visualizer';
 import './shader-lab-visualizer';
 import './qubit-visualizer';
+import './planet-predictor'; // Import the new predictor
 import {SolarSystem} from './solar-system-data';
 import { VolumeMeter } from './volume-meter';
 
@@ -126,6 +127,7 @@ export interface PlanetData {
   gravity: string;
   surfacePressure: string;
   magnetosphereStrength: string;
+  mass: string;
   geologicalActivity: string;
   discoveryNarrative: string;
   discoveryMethodology: string;
@@ -346,6 +348,7 @@ const MOCK_PLANET: PlanetData = {
   gravity: '1.5 g',
   surfacePressure: '1.2 atm',
   magnetosphereStrength: 'Strong',
+  mass: '4.5 Earths',
   geologicalActivity: 'Active',
   discoveryNarrative:
     'A faint, periodic dip in the light curve of Cygni-B7 hinted at a transiting world. Follow-up observations confirmed a super-earth with a significant atmosphere, a prime candidate in the search for life.',
@@ -396,6 +399,11 @@ const MOCK_PLANET: PlanetData = {
       { time: 2454366.0, flux: 1.0003, error: 0.0001 },
     ]
   },
+  qubitStateData: {
+    summary: 'Superposition state detected. Coherence time: 450ms. High fidelity entanglement with local moon.',
+    stateVector: { theta: Math.PI / 3, phi: Math.PI / 4 },
+    measurementBasis: 'Z-basis'
+  }
 };
 
 const VERIDIA_PLANET: PlanetData = {
@@ -422,6 +430,7 @@ const VERIDIA_PLANET: PlanetData = {
   gravity: '1.8 g',
   surfacePressure: '5 atm',
   magnetosphereStrength: 'Moderate',
+  mass: '6.5 Earths',
   geologicalActivity: 'Cryovolcanic',
   discoveryNarrative:
     'A candidate world identified through atmospheric spectroscopy, revealing a composition unlike anything in the Sol system. Veridia challenges our understanding of where life can exist.',
@@ -478,6 +487,7 @@ const KAIROS_PLANET: PlanetData = {
   gravity: '1.1 g',
   surfacePressure: 'Varies',
   magnetosphereStrength: 'Anomalous (Pulsing)',
+  mass: '2.8 Earths',
   geologicalActivity: 'Bio-tectonic',
   discoveryNarrative:
     'Detected as a faint, rhythmic pulse of light around a distant pulsar, Kairos was initially mistaken for a stellar anomaly. Closer analysis revealed a world shrouded in a living, glowing web.',
@@ -539,6 +549,7 @@ const SOL_SYSTEM_DETAILS: Record<string, Partial<PlanetData>> = {
     gravity: '0.38 g',
     surfacePressure: 'Trace',
     magnetosphereStrength: 'Weak (Dynamic)',
+    mass: '0.055 Earths',
     geologicalActivity: 'Dormant',
     discoveryNarrative: 'The swift messenger, a scorched and cratered world dancing closest to the Sun\'s fiery breath. Its silence is a testament to raw cosmic power.',
     discoveryMethodology: 'Direct observation.',
@@ -566,6 +577,7 @@ const SOL_SYSTEM_DETAILS: Record<string, Partial<PlanetData>> = {
     gravity: '0.9 g',
     surfacePressure: '92 atm',
     magnetosphereStrength: 'Very Weak (Induced)',
+    mass: '0.815 Earths',
     geologicalActivity: 'Active',
     discoveryNarrative: 'The veiled morning star, a world of immense pressure and heat, hidden beneath a perpetual cloak of sulfuric acid clouds. A cautionary tale of planetary evolution.',
     discoveryMethodology: 'Direct observation.',
@@ -593,6 +605,7 @@ const SOL_SYSTEM_DETAILS: Record<string, Partial<PlanetData>> = {
     gravity: '1 g',
     surfacePressure: '1 atm',
     magnetosphereStrength: 'Strong',
+    mass: '1.000 Earths',
     geologicalActivity: 'Active',
     discoveryNarrative: 'The cradle of humanity, a vibrant blue marble whose existence is self-evident. Its discovery was the discovery of consciousness itself.',
     discoveryMethodology: 'Direct observation.',
@@ -620,6 +633,7 @@ const SOL_SYSTEM_DETAILS: Record<string, Partial<PlanetData>> = {
     gravity: '0.38 g',
     surfacePressure: '0.006 atm',
     magnetosphereStrength: 'Very Weak (Remnant)',
+    mass: '0.107 Earths',
     geologicalActivity: 'Low',
     discoveryNarrative: 'The red wanderer, a world of grand canyons and towering volcanoes, now a cold desert. It whispers of a warmer, wetter past and holds the promise of future human exploration.',
     discoveryMethodology: 'Direct observation.',
@@ -647,6 +661,7 @@ const SOL_SYSTEM_DETAILS: Record<string, Partial<PlanetData>> = {
     gravity: '2.53 g (cloud tops)',
     surfacePressure: 'N/A',
     magnetosphereStrength: 'Very Strong',
+    mass: '317.8 Earths',
     geologicalActivity: 'Extreme Atmospheric Dynamics',
     discoveryNarrative: 'The colossal king of worlds, a swirling behemoth of gas and storms, whose immense gravity shapes the solar system around it. Its Great Red Spot is an ancient, raging tempest.',
     discoveryMethodology: 'Direct observation.',
@@ -674,6 +689,7 @@ const SOL_SYSTEM_DETAILS: Record<string, Partial<PlanetData>> = {
     gravity: '1.06 g (cloud tops)',
     surfacePressure: 'N/A',
     magnetosphereStrength: 'Strong',
+    mass: '95.2 Earths',
     geologicalActivity: 'Extreme Atmospheric Dynamics',
     discoveryNarrative: 'The jeweled wonder of the solar system, defined by its breathtaking system of icy rings. A world of subtle beauty and profound mystery.',
     discoveryMethodology: 'Direct observation.',
@@ -701,6 +717,7 @@ const SOL_SYSTEM_DETAILS: Record<string, Partial<PlanetData>> = {
     gravity: '0.9 g (cloud tops)',
     surfacePressure: 'N/A',
     magnetosphereStrength: 'Moderate',
+    mass: '14.5 Earths',
     geologicalActivity: 'Icy Mantle Convection',
     discoveryNarrative: 'The sideways planet, a pale cyan orb that rotates on its side. Its serene exterior belies a cold, turbulent interior.',
     discoveryMethodology: 'Direct observation.',
@@ -728,6 +745,7 @@ const SOL_SYSTEM_DETAILS: Record<string, Partial<PlanetData>> = {
     gravity: '1.14 g (cloud tops)',
     surfacePressure: 'N/A',
     magnetosphereStrength: 'Moderate',
+    mass: '17.1 Earths',
     geologicalActivity: 'Extreme Atmospheric Dynamics',
     discoveryNarrative: 'The deep blue phantom, a world of furious winds and dark storms, discovered by the pull of its gravity on Uranus before it was ever seen.',
     discoveryMethodology: 'Mathematical prediction and subsequent observation.',
@@ -755,6 +773,7 @@ const SOL_SYSTEM_DETAILS: Record<string, Partial<PlanetData>> = {
     gravity: '0.06 g',
     surfacePressure: 'Trace',
     magnetosphereStrength: 'None',
+    mass: '0.002 Earths',
     geologicalActivity: 'Active (Cryovolcanism)',
     discoveryNarrative: 'The distant heart, a complex and active dwarf planet revealed to have mountains of water ice and vast nitrogen glaciers. A world of surprising character at the edge of the sun\'s influence.',
     discoveryMethodology: 'Systematic sky survey and observation.',
@@ -783,7 +802,7 @@ const ANALYSIS_TABS = [
   { id: 'weather', label: 'Weather' },
   { id: 'energy', label: 'Energy' },
   { id: 'atmosphere', label: 'Atmosphere' },
-  { id: 'qubit', label: 'Qubit' },
+  { id: 'qubit', label: 'Qubit State' },
 ];
 
 @customElement('axee-interface')
@@ -793,7 +812,15 @@ export class AxeeInterface extends LitElement {
   @state() selectedPlanetId: string | null = null;
   @state() activeGalaxyId: string | null = null;
   @state() isScanning = false;
+  @state() isGeneratingImage = false;
   @state() analysisType: string = 'light-curve'; // Default analysis type
+  @state() isDarkMode = true;
+  @state() isLeftPanelOpen = false;
+  
+  // New States for Predictor
+  @state() leftPanelView: 'list' | 'predictor' = 'list';
+  @state() predictionResult: any = null;
+  @state() isPredicting = false;
 
   constructor() {
     super();
@@ -803,6 +830,163 @@ export class AxeeInterface extends LitElement {
         VERIDIA_PLANET,
         KAIROS_PLANET
     ];
+  }
+
+  firstUpdated() {
+    if (localStorage.getItem('theme') === 'light') {
+      this.isDarkMode = false;
+      document.documentElement.classList.remove('dark');
+    } else {
+      this.isDarkMode = true;
+      document.documentElement.classList.add('dark');
+    }
+  }
+
+  toggleTheme() {
+    this.isDarkMode = !this.isDarkMode;
+    if (this.isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }
+
+  toggleLeftPanel() {
+    this.isLeftPanelOpen = !this.isLeftPanelOpen;
+  }
+  
+  toggleLeftView() {
+    this.leftPanelView = this.leftPanelView === 'list' ? 'predictor' : 'list';
+  }
+
+  revealHiddenGalaxies() {
+    if (this.galaxies.length > 5) return; // Limit number of galaxies
+
+    this.isScanning = true;
+    
+    // Simulate Scan delay
+    setTimeout(() => {
+        const newGalaxies: GalaxyData[] = [
+            {
+                id: `galaxy-hidden-${Date.now()}-1`,
+                created_at: new Date().toISOString(),
+                galaxyName: 'Nebula of Lost Echoes',
+                galaxyType: 'Spiral',
+                description: 'A swirling vortex of violet and neon blue gas, hiding ancient star systems.',
+                visualization: { color1: '#aa00ff', color2: '#00ddff', nebulaSeed: 99 },
+                planets: []
+            },
+            {
+                id: `galaxy-hidden-${Date.now()}-2`,
+                created_at: new Date().toISOString(),
+                galaxyName: 'Crimson Expanse',
+                galaxyType: 'Elliptical',
+                description: 'A dense region of old, red giant stars.',
+                visualization: { color1: '#ff0000', color2: '#ff8800', nebulaSeed: 101 },
+                planets: []
+            },
+            {
+                id: `galaxy-hidden-${Date.now()}-3`,
+                created_at: new Date().toISOString(),
+                galaxyName: 'The Void Rift',
+                galaxyType: 'Irregular',
+                description: 'A dark, mysterious sector with sparse but bright blue stars.',
+                visualization: { color1: '#00ffaa', color2: '#ffffff', nebulaSeed: 202 },
+                planets: []
+            }
+        ];
+        
+        this.galaxies = [...this.galaxies, ...newGalaxies];
+        this.isScanning = false;
+    }, 2500);
+  }
+
+  async generatePlanetImage() {
+    if (!this.selectedPlanetId) return;
+    const planetIndex = this.planets.findIndex(p => p.celestial_body_id === this.selectedPlanetId);
+    if (planetIndex === -1) return;
+    
+    const planet = this.planets[planetIndex];
+    this.isGeneratingImage = true;
+
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const prompt = `A cinematic, photorealistic view of the exoplanet ${planet.planetName} from space. 
+        It is a ${planet.planetType}. 
+        Surface features: ${planet.surfaceFeatures}. 
+        Atmosphere: ${planet.atmosphericComposition}. 
+        The mood is described as: ${planet.aiWhisper}. 
+        High quality, 8k resolution, sci-fi concept art style.`;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: {
+                parts: [{ text: prompt }]
+            },
+        });
+
+        // Loop to find image part
+        let imageUrl = '';
+        if (response.candidates && response.candidates[0].content.parts) {
+            for (const part of response.candidates[0].content.parts) {
+                if (part.inlineData) {
+                    imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                    break;
+                }
+            }
+        }
+
+        if (imageUrl) {
+            // Update planet data immutable style
+            const updatedPlanet = { ...planet, generatedImageData: { url: imageUrl, prompt: prompt } };
+            const newPlanets = [...this.planets];
+            newPlanets[planetIndex] = updatedPlanet;
+            this.planets = newPlanets;
+        } else {
+            console.warn("No image data returned from API.");
+        }
+
+    } catch (error) {
+        console.error("Failed to generate image:", error);
+    } finally {
+        this.isGeneratingImage = false;
+    }
+  }
+  
+  async handlePredictionRequest(e: CustomEvent) {
+    this.isPredicting = true;
+    const { starType, distance, mass } = e.detail;
+    
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const prompt = `
+        Given a star of type "${starType}", a planet mass of ${mass} Earths, and an orbital distance of ${distance} AU:
+        Predict the likely:
+        1. Planet Type (e.g. Super-Earth, Gas Giant)
+        2. Atmospheric Composition
+        3. Habitability Assessment
+        4. A short evocative description (2 sentences)
+
+        Return valid JSON with keys: planetType, atmosphere, habitability, description.
+        Do not include markdown code blocks.
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { responseMimeType: 'application/json' }
+        });
+        
+        if (response.text) {
+            this.predictionResult = JSON.parse(response.text);
+        }
+    } catch (err) {
+        console.error("Prediction failed:", err);
+    } finally {
+        this.isPredicting = false;
+    }
   }
 
   private generateSolSystemPlanets(): PlanetData[] {
@@ -840,6 +1024,7 @@ export class AxeeInterface extends LitElement {
             gravity: details?.gravity || 'Unknown',
             surfacePressure: details?.surfacePressure || 'Unknown',
             magnetosphereStrength: details?.magnetosphereStrength || 'Unknown',
+            mass: details?.mass || 'Unknown',
             geologicalActivity: details?.geologicalActivity || 'Unknown',
             discoveryNarrative: details?.discoveryNarrative || 'Observed in the Solar System.',
             discoveryMethodology: details?.discoveryMethodology || 'Direct Observation',
@@ -862,9 +1047,10 @@ export class AxeeInterface extends LitElement {
       width: 100vw;
       height: 100vh;
       overflow: hidden;
-      background: #0a0014;
-      color: #e0f8ff;
+      background: var(--bg-color);
+      color: var(--text-color);
       font-family: 'Exo 2', sans-serif;
+      transition: background 0.5s ease, color 0.5s ease;
     }
     .main-container {
       position: relative;
@@ -893,24 +1079,29 @@ export class AxeeInterface extends LitElement {
     }
     .panel {
       pointer-events: auto;
-      background: rgba(10, 0, 20, 0.85);
+      background: var(--panel-bg);
       backdrop-filter: blur(12px);
-      border: 1px solid rgba(97, 250, 255, 0.2);
+      border: 1px solid var(--border-color);
       display: flex;
       flex-direction: column;
       padding: 1.5rem;
-      transition: transform 0.4s ease-in-out, opacity 0.4s ease-in-out;
+      transition: transform 0.4s ease-in-out, opacity 0.4s ease-in-out, background 0.5s ease, border-color 0.5s ease;
     }
     .left-panel {
       width: 350px;
       height: 100%;
-      border-right: 1px solid rgba(97, 250, 255, 0.2);
+      border-right: 1px solid var(--border-color);
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 20;
+    }
+    .left-panel.open {
       transform: translateX(0);
     }
     .right-panel {
       width: 400px;
       height: 100%;
-      border-left: 1px solid rgba(97, 250, 255, 0.2);
+      border-left: 1px solid var(--border-color);
       transform: translateX(100%);
       opacity: 0;
     }
@@ -918,29 +1109,79 @@ export class AxeeInterface extends LitElement {
       transform: translateX(0);
       opacity: 1;
     }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
     h1 {
       font-family: 'Rajdhani', sans-serif;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.15em;
-      color: #61faff;
-      margin-bottom: 1.5rem;
+      color: var(--accent-color);
+      margin: 0;
       font-size: 1.8rem;
-      text-shadow: 0 0 10px rgba(97, 250, 255, 0.5);
+      text-shadow: 0 0 10px var(--glow-color);
+    }
+    .theme-toggle {
+        background: none;
+        border: 1px solid var(--border-color);
+        color: var(--accent-color);
+        cursor: pointer;
+        padding: 0.4rem 0.6rem;
+        font-size: 1rem;
+        border-radius: 4px;
+        transition: all 0.3s ease;
+    }
+    .theme-toggle:hover {
+        background: var(--item-hover-bg);
+    }
+    .panel-toggle {
+        pointer-events: auto;
+        position: absolute;
+        top: 1.5rem;
+        left: 1.5rem;
+        z-index: 30;
+        background: transparent;
+        border: 1px solid var(--accent-color);
+        color: var(--accent-color);
+        padding: 0.5rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        backdrop-filter: blur(4px);
+    }
+    .panel-toggle:hover {
+        background: var(--accent-color);
+        color: var(--bg-color);
+        box-shadow: 0 0 10px var(--glow-color);
+    }
+    .panel-toggle svg {
+        width: 24px;
+        height: 24px;
+        fill: currentColor;
     }
     h2 {
       font-size: 1.4rem;
       margin-bottom: 0.5rem;
-      color: #c0e0ff;
+      color: var(--accent-color);
     }
     h3 {
       font-size: 1rem;
       text-transform: uppercase;
       letter-spacing: 0.1em;
-      color: rgba(97, 250, 255, 0.7);
+      color: var(--accent-color);
+      opacity: 0.8;
       margin-top: 1.5rem;
       margin-bottom: 0.5rem;
-      border-bottom: 1px solid rgba(97, 250, 255, 0.2);
+      border-bottom: 1px solid var(--border-color);
       padding-bottom: 0.2rem;
     }
     ul {
@@ -952,18 +1193,18 @@ export class AxeeInterface extends LitElement {
     }
     li {
       padding: 0.8rem;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid var(--border-color);
       cursor: pointer;
       transition: background 0.2s, color 0.2s;
     }
     li:hover {
-      background: rgba(97, 250, 255, 0.1);
-      color: #ffffff;
+      background: var(--item-hover-bg);
+      color: var(--text-color);
     }
     li.selected {
-      background: rgba(97, 250, 255, 0.2);
-      color: #61faff;
-      border-left: 3px solid #61faff;
+      background: var(--item-selected-bg);
+      color: var(--accent-color);
+      border-left: 3px solid var(--accent-color);
     }
     .detail-content {
       overflow-y: auto;
@@ -987,8 +1228,9 @@ export class AxeeInterface extends LitElement {
     }
     .analysis-tab {
       background: rgba(0, 0, 0, 0.3);
-      border: 1px solid rgba(97, 250, 255, 0.3);
-      color: rgba(97, 250, 255, 0.8);
+      border: 1px solid var(--border-color);
+      color: var(--text-color);
+      opacity: 0.8;
       padding: 0.5rem;
       font-size: 0.75rem;
       cursor: pointer;
@@ -997,20 +1239,23 @@ export class AxeeInterface extends LitElement {
       transition: all 0.2s;
     }
     .analysis-tab:hover {
-      background: rgba(97, 250, 255, 0.1);
-      color: #ffffff;
+      background: var(--item-hover-bg);
+      color: var(--text-color);
+      opacity: 1;
     }
     .analysis-tab.active {
-      background: rgba(97, 250, 255, 0.2);
-      border-color: #61faff;
-      color: #61faff;
-      box-shadow: 0 0 10px rgba(97, 250, 255, 0.2);
+      background: var(--item-selected-bg);
+      border-color: var(--accent-color);
+      color: var(--accent-color);
+      box-shadow: 0 0 10px var(--glow-color);
+      opacity: 1;
     }
     .visualizer-container {
       width: 100%;
       min-height: 250px;
-      background: rgba(0, 0, 0, 0.5);
-      border: 1px solid rgba(97, 250, 255, 0.2);
+      /* Visualizers render charts that need dark background */
+      background: rgba(0, 0, 0, 0.85); 
+      border: 1px solid var(--border-color);
       margin-bottom: 1rem;
       position: relative;
       display: flex;
@@ -1033,8 +1278,89 @@ export class AxeeInterface extends LitElement {
         font-size: 0.9rem;
         margin-bottom: 1rem;
         padding: 0.8rem;
-        background: rgba(255,255,255,0.05);
-        border-left: 2px solid #61faff;
+        background: var(--item-selected-bg);
+        border-left: 2px solid var(--accent-color);
+    }
+    .analysis-summary {
+        margin-bottom: 1rem;
+        padding: 0.8rem;
+        background: var(--item-selected-bg);
+        border-left: 2px solid var(--border-color);
+        font-size: 0.9rem;
+        line-height: 1.4;
+    }
+    .analysis-summary strong {
+        display: block;
+        margin-bottom: 0.3rem;
+        color: var(--accent-color);
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+    }
+    .scanning-overlay {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 2rem;
+        color: var(--accent-color);
+        text-shadow: 0 0 20px var(--accent-color);
+        letter-spacing: 0.5em;
+        animation: pulse 1s infinite alternate;
+        pointer-events: none;
+        z-index: 100;
+        text-align: center;
+        width: 100%;
+        background: rgba(0,0,0,0.7);
+        padding: 2rem 0;
+    }
+    @keyframes pulse {
+        from { opacity: 0.5; }
+        to { opacity: 1; }
+    }
+    .image-gen-section {
+        margin-bottom: 1.5rem;
+        text-align: center;
+        border: 1px solid var(--border-color);
+        background: rgba(0,0,0,0.2);
+        padding: 0.5rem;
+        min-height: 150px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+    }
+    .image-gen-section img {
+        max-width: 100%;
+        max-height: 300px;
+        border: 1px solid var(--accent-color);
+        box-shadow: 0 0 15px var(--glow-color);
+    }
+    .gen-btn {
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid var(--accent-color);
+        color: var(--accent-color);
+        padding: 0.8rem 1.5rem;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        cursor: pointer;
+        transition: all 0.3s;
+        backdrop-filter: blur(4px);
+    }
+    .gen-btn:hover {
+        background: var(--accent-color);
+        color: var(--bg-color);
+        box-shadow: 0 0 10px var(--glow-color);
+    }
+    .gen-btn:disabled {
+        opacity: 0.5;
+        cursor: wait;
+    }
+    .gen-loading {
+        color: var(--accent-color);
+        animation: pulse 1s infinite;
+        letter-spacing: 0.2em;
     }
   `;
 
@@ -1093,8 +1419,8 @@ export class AxeeInterface extends LitElement {
       if (!summary) return nothing;
       
       return html`
-        <div style="margin-bottom: 1rem; padding: 0.8rem; background: rgba(97, 250, 255, 0.05); border-left: 2px solid rgba(97, 250, 255, 0.3); font-size: 0.9rem; line-height: 1.4;">
-            <strong style="display:block; margin-bottom:0.3rem; color: #61faff; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em;">Analysis Summary</strong>
+        <div class="analysis-summary">
+            <strong>Analysis Summary</strong>
             ${summary}
         </div>
       `;
@@ -1124,21 +1450,51 @@ export class AxeeInterface extends LitElement {
             @planet-selected=${this.handlePlanetSelect}
           ></cosmos-visualizer>
         </div>
+        ${this.isScanning ? html`<div class="scanning-overlay">INITIALIZING DEEP FIELD SCAN...</div>` : nothing}
 
         <div class="ui-layer">
-          <div class="panel left-panel">
-            <h1>AURELION</h1>
-            <h3>Discovered Echoes</h3>
-            <ul>
-              ${this.planets.map(p => html`
-                <li 
-                  class=${p.celestial_body_id === this.selectedPlanetId ? 'selected' : ''}
-                  @click=${() => this.handleListSelect(p.celestial_body_id)}
-                >
-                  ${p.planetName} <span style="opacity: 0.5; font-size: 0.8em">(${p.planetType})</span>
-                </li>
-              `)}
-            </ul>
+          <button class="panel-toggle" @click=${this.toggleLeftPanel} title="Toggle Planet List">
+            <svg viewBox="0 0 24 24">
+                <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+            </svg>
+          </button>
+          
+          <div class="panel left-panel ${this.isLeftPanelOpen ? 'open' : ''}">
+            <div class="panel-header">
+                <h1>AURELION</h1>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="theme-toggle" @click=${this.revealHiddenGalaxies} title="Deep Field Scan">
+                        📡
+                    </button>
+                    <button class="theme-toggle" @click=${this.toggleLeftView} title="${this.leftPanelView === 'list' ? 'Switch to Predictor' : 'Switch to List'}">
+                        ${this.leftPanelView === 'list' ? '🧪' : '📋'}
+                    </button>
+                    <button class="theme-toggle" @click=${this.toggleTheme} title="${this.isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}">
+                        ${this.isDarkMode ? '☀' : '☾'}
+                    </button>
+                </div>
+            </div>
+            
+            ${this.leftPanelView === 'list' ? html`
+                <h3>Discovered Echoes</h3>
+                <ul>
+                  ${this.planets.map(p => html`
+                    <li 
+                      class=${p.celestial_body_id === this.selectedPlanetId ? 'selected' : ''}
+                      @click=${() => this.handleListSelect(p.celestial_body_id)}
+                    >
+                      ${p.planetName} <span style="opacity: 0.5; font-size: 0.8em">(${p.planetType})</span>
+                    </li>
+                  `)}
+                </ul>
+            ` : html`
+                <h3>Probability Synthesis</h3>
+                <planet-predictor 
+                    .isPredicting=${this.isPredicting}
+                    .predictionResult=${this.predictionResult}
+                    @predict-request=${this.handlePredictionRequest}
+                ></planet-predictor>
+            `}
           </div>
 
           <div class="panel right-panel ${selectedPlanet ? 'open' : ''}">
@@ -1147,10 +1503,21 @@ export class AxeeInterface extends LitElement {
               <div class="detail-content">
                 <div class="planet-fact">${selectedPlanet.aiWhisper}</div>
                 
+                <div class="image-gen-section">
+                    ${selectedPlanet.generatedImageData 
+                        ? html`<img src="${selectedPlanet.generatedImageData.url}" alt="Generated view of ${selectedPlanet.planetName}" />`
+                        : (this.isGeneratingImage 
+                            ? html`<div class="gen-loading">IMPRINTING VISUAL...</div>`
+                            : html`<button class="gen-btn" @click=${this.generatePlanetImage} ?disabled=${this.isGeneratingImage}>Generate Visual Echo</button>`)
+                    }
+                </div>
+
                 <div class="stat-row"><span class="stat-label">Type</span> <span>${selectedPlanet.planetType}</span></div>
                 <div class="stat-row"><span class="stat-label">Distance</span> <span>${selectedPlanet.distanceLightYears} ly</span></div>
                 <div class="stat-row"><span class="stat-label">Gravity</span> <span>${selectedPlanet.gravity}</span></div>
+                <div class="stat-row"><span class="stat-label">Mass</span> <span>${selectedPlanet.mass}</span></div>
                 <div class="stat-row"><span class="stat-label">Life Potential</span> <span>${selectedPlanet.potentialForLife.assessment}</span></div>
+                <div class="stat-row"><span class="stat-label">Source</span> <span style="text-transform: capitalize;">${selectedPlanet.discoverySource || 'Unknown'}</span></div>
 
                 <h3>Analysis Data</h3>
                 <div class="analysis-tabs">
@@ -1168,9 +1535,7 @@ export class AxeeInterface extends LitElement {
                   ${this.renderAnalysisVisualizer(selectedPlanet)}
                 </div>
                 
-                <div class="analysis-summary">
-                    ${this.renderAnalysisSummary(selectedPlanet)}
-                </div>
+                ${this.renderAnalysisSummary(selectedPlanet)}
 
                 <h3>Discovery Narrative</h3>
                 <p style="font-size: 0.9rem; line-height: 1.5; opacity: 0.8;">

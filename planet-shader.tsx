@@ -55,20 +55,39 @@ export const fs = glsl_noise_utils + `
   uniform bool uIsSelected;
   uniform bool uIsHovered;
   uniform vec3 uLightDirection;
+  
+  // Scale and Distortion controls
+  uniform float uSurfaceScale;
+  uniform float uSurfaceDistortion;
 
   varying vec2 vUv;
   varying vec3 vNormal;
   varying vec3 vPosition;
   varying vec3 vViewPosition;
 
+  // Apply scaling and domain warping to coordinates
+  vec3 getDistortedCoord(vec3 p) {
+      vec3 q = p * uSurfaceScale;
+      float d = snoise(q * 0.4); 
+      return q + d * uSurfaceDistortion;
+  }
+
   vec3 getGasGiantColor(vec3 p) {
-    float noise = fbm(p * 2.0 + vec3(uTime * 0.1, 0.0, 0.0), 4);
-    float bands = sin(p.y * 10.0 + noise * 2.0 + uTime * 0.2);
+    // Gas giants have their own specific banding logic
+    vec3 coord = p * uSurfaceScale;
+    
+    // Warp the domain for turbulence
+    float warp = fbm(coord * 0.5, 2);
+    vec3 q = coord + vec3(warp * uSurfaceDistortion);
+    
+    float noise = fbm(q * 2.0 + vec3(uTime * 0.1, 0.0, 0.0), 4);
+    float bands = sin(q.y * 10.0 + noise * 2.0 + uTime * 0.2);
     return mix(uColor1, uColor2, smoothstep(-1.0, 1.0, bands));
   }
 
   vec3 getTerrainColor(vec3 p) {
-    float n = fbm(p * 3.0, 5);
+    vec3 q = getDistortedCoord(p);
+    float n = fbm(q, 6);
     vec3 color = mix(uColor1, uColor2, pow(n, 1.5));
     if (n < 0.35) {
         color = uOceanColor;
@@ -77,22 +96,25 @@ export const fs = glsl_noise_utils + `
   }
 
   vec3 getVolcanicColor(vec3 p) {
-    float n = fbm(p * 4.0, 6);
+    vec3 q = getDistortedCoord(p);
+    float n = fbm(q, 6);
     vec3 color = mix(uColor1, uColor2, n);
-    float cracks = fbm(p * 8.0 + vec3(uTime * 0.05, 0.0, 0.0), 3);
+    float cracks = fbm(q * 2.0 + vec3(uTime * 0.05, 0.0, 0.0), 4);
     color = mix(color, vec3(1.0, 0.3, 0.0), smoothstep(0.6, 0.7, cracks));
     return color;
   }
   
   vec3 getOrganicColor(vec3 p) {
-    float n = fbm(p * 5.0 + uTime * 0.2, 6);
+    vec3 q = getDistortedCoord(p);
+    float n = fbm(q + uTime * 0.2, 6);
     n = pow(n, 1.2);
     vec3 veinColor = uColor2 * (0.8 + sin(n * 20.0 + uTime) * 0.2);
     return mix(uColor1, veinColor, smoothstep(0.5, 0.8, n));
   }
 
   vec3 getIcyColor(vec3 p) {
-      float n = fbm(p * 5.0, 6);
+      vec3 q = getDistortedCoord(p);
+      float n = fbm(q, 6);
       return mix(uColor1, uColor2, n);
   }
   
@@ -114,7 +136,7 @@ export const fs = glsl_noise_utils + `
     float iceFactor = pow(smoothstep(0.6, 0.8, abs(vPosition.y)), 2.0) * uIceCoverage;
     baseColor = mix(baseColor, vec3(0.9, 0.9, 1.0), iceFactor);
 
-    float cloudNoise = fbm(vPosition * 4.0 + vec3(uTime * 0.1, 0.0, 0.0), 5);
+    float cloudNoise = fbm(vPosition * 4.0 * (uSurfaceScale * 0.3) + vec3(uTime * 0.1, 0.0, 0.0), 5);
     float cloudMask = smoothstep(0.4, 0.6, cloudNoise) * uCloudiness;
     baseColor = mix(baseColor, vec3(1.0), cloudMask);
 

@@ -317,6 +317,35 @@ export class CosmosVisualizer extends LitElement {
     const elapsedTime = this.clock.getElapsedTime();
     const deltaTime = this.clock.getDelta();
 
+    // Dynamic Camera Tracking for System View
+    if (this.viewMode === 'system' && this.selectedPlanetId && !this.isManualControl) {
+        const selectedMesh = this.systemPlanetMeshes.get(this.selectedPlanetId);
+        const selectedPlanet = this.activePlanets.find(p => p.celestial_body_id === this.selectedPlanetId);
+        
+        if (selectedMesh && selectedPlanet) {
+            const worldPos = new THREE.Vector3();
+            selectedMesh.getWorldPosition(worldPos); // Get current position of the orbiting planet
+            
+            this.targetLookAt.copy(worldPos); // Look at planet
+            
+            // Calculate orbital camera position
+            // Proportional distance
+            const r = selectedPlanet.planetRadiusEarths || 1;
+            const orbitDist = r * 6.0 + 8.0; 
+            const height = orbitDist * 0.4;
+            
+            // Slow rotation around the planet
+            const rotSpeed = 0.2;
+            const angle = elapsedTime * rotSpeed;
+            
+            this.targetPosition.set(
+                worldPos.x + Math.sin(angle) * orbitDist,
+                worldPos.y + height,
+                worldPos.z + Math.cos(angle) * orbitDist
+            );
+        }
+    }
+
     // Update camera and controls
     if (!this.isManualControl) {
         this.camera.position.lerp(this.targetPosition, 0.04);
@@ -338,9 +367,13 @@ export class CosmosVisualizer extends LitElement {
     // Slowly rotate the starfield grid for drift
     this.starfield.rotation.y += 0.00002;
 
-    this.backgroundNebulae.forEach(nebula => {
+    this.backgroundNebulae.forEach((nebula, index) => {
         (nebula.material as THREE.ShaderMaterial).uniforms.uTime.value = elapsedTime;
         (nebula.material as THREE.ShaderMaterial).uniforms.uCameraDistance.value = this.camera.position.length();
+        
+        // Add subtle rotation
+        const direction = index % 2 === 0 ? 1 : -1;
+        nebula.rotation.z += 0.0002 * direction;
     });
 
     if (this.galaxyVisuals) {
@@ -391,15 +424,27 @@ export class CosmosVisualizer extends LitElement {
     }
 
     if (this.viewMode === 'intergalactic') {
-        this.galaxyMarkers.forEach(group => {
+        this.galaxyMarkers.forEach((group, id) => {
             group.lookAt(this.camera.position);
+            
+            // Add variation based on ID for rotation speed and direction
+            let seed = 0;
+            for(let i=0; i<id.length; i++) seed += id.charCodeAt(i);
+            const speed = 0.0005 + (seed % 5) * 0.0001;
+            const dir = seed % 2 === 0 ? 1 : -1;
+
             group.traverse(child => {
-                if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
-                    child.material.uniforms.uTime.value = elapsedTime;
-                    // Update camera distance for nebula shader
-                    if (child.material.uniforms.uCameraDistance) {
-                        child.material.uniforms.uCameraDistance.value = this.camera.position.distanceTo(group.position);
+                if (child instanceof THREE.Mesh) {
+                    // Update uniforms
+                    if (child.material instanceof THREE.ShaderMaterial) {
+                        child.material.uniforms.uTime.value = elapsedTime;
+                        // Update camera distance for nebula shader
+                        if (child.material.uniforms.uCameraDistance) {
+                            child.material.uniforms.uCameraDistance.value = this.camera.position.distanceTo(group.position);
+                        }
                     }
+                    // Rotate for visual interest
+                    child.rotation.z -= speed * dir;
                 }
             });
         });
@@ -679,7 +724,7 @@ export class CosmosVisualizer extends LitElement {
         }
     });
 
-    // Sort galaxies by ID for a stable grid layout
+    // Sort galaxies by ID for a stable layout
     const sortedGalaxies = [...this.galaxies].sort((a, b) => a.id.localeCompare(b.id));
 
     sortedGalaxies.forEach((galaxy, i) => {
@@ -733,8 +778,14 @@ export class CosmosVisualizer extends LitElement {
             this.scene.add(group);
             this.fadeObject(group, 1, 1000);
         }
+        
+        // Update Position: Use a spiral distribution for organic look as more are discovered
         const marker = this.galaxyMarkers.get(galaxy.id)!;
-        marker.position.set((i % 10 - 4.5) * 200, Math.floor(i / 10) * -200 + 200, 0);
+        const angle = i * 2.5; // Spiral spread
+        const radius = i * 180; // Distance increases with index
+        
+        // The first one stays at center if i=0
+        marker.position.set(Math.cos(angle) * radius, Math.sin(angle) * radius * 0.6, 0);
     });
   }
 
@@ -754,7 +805,8 @@ export class CosmosVisualizer extends LitElement {
             const marker2 = this.galaxyMarkers.get(this.galaxies[j].id);
             if(marker1 && marker2) {
                 const dist = marker1.position.distanceTo(marker2.position);
-                if (dist < 450) {
+                // Connect if within a reasonable distance to form a network
+                if (dist < 600) {
                     points.push(marker1.position);
                     points.push(marker2.position);
                 }
@@ -1020,15 +1072,9 @@ export class CosmosVisualizer extends LitElement {
   private updateSystemCameraTarget() {
     if (this.viewMode !== 'system') return;
     this.isManualControl = false;
-    const selectedMesh = this.systemPlanetMeshes.get(this.selectedPlanetId!);
-    const selectedPlanet = this.activePlanets.find(p => p.celestial_body_id === this.selectedPlanetId);
-    if (selectedMesh && selectedPlanet) {
-        const worldPos = new THREE.Vector3();
-        selectedMesh.getWorldPosition(worldPos);
-        this.targetLookAt.copy(worldPos);
-        const offset = new THREE.Vector3(0, 3, (selectedPlanet.planetRadiusEarths || 1) * 5);
-        this.targetPosition.copy(worldPos).add(offset);
-    } else {
+    // Initial camera placement logic. 
+    // Continuous tracking is now handled in runAnimationLoop.
+    if (!this.selectedPlanetId) {
         // Look at the star if no planet selected
         this.targetPosition.set(0, 20, 80);
         this.targetLookAt.set(0, 0, 0);
@@ -1278,7 +1324,8 @@ export class CosmosVisualizer extends LitElement {
             uHasAuroras: { value: planet.visualization.surfaceTexture === 'ICY' || planet.visualization.iceCoverage > 0.5 },
             uLightDirection: { value: new THREE.Vector3(1, 0.5, 1).normalize() },
         },
-        blending: THREE.AdditiveBlending, side: THREE.BackSide, transparent: true
+        blending: THREE.AdditiveBlending,
+        side: THREE.BackSide, transparent: true
     });
     const atmosphereMesh = new THREE.Mesh(new THREE.SphereGeometry((planet.planetRadiusEarths || 1) * 1.05, 64, 64), atmosphereMaterial);
     group.add(atmosphereMesh);
