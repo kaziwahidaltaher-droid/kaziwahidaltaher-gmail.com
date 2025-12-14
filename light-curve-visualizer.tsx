@@ -5,12 +5,7 @@
 
 import {LitElement, css, html} from 'lit';
 import {customElement, property, query} from 'lit/decorators.js';
-import { LightCurvePoint } from './index';
-
-export interface LightCurveAnalysis {
-    summary: string;
-    points: LightCurvePoint[];
-}
+import type { LightCurvePoint, LightCurveAnalysis } from './index';
 
 @customElement('light-curve-visualizer')
 export class LightCurveVisualizer extends LitElement {
@@ -64,6 +59,7 @@ export class LightCurveVisualizer extends LitElement {
   }
 
   resizeCanvas = () => {
+    if (!this.canvas) return;
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = this.canvas.clientWidth * dpr;
     this.canvas.height = this.canvas.clientHeight * dpr;
@@ -73,9 +69,13 @@ export class LightCurveVisualizer extends LitElement {
 
   drawChart = () => {
     if (!this.ctx || !this.analysisData || this.analysisData.points.length === 0) {
-      this.ctx?.clearRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
+      if (this.canvas) {
+        this.ctx?.clearRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
+      }
       return;
     };
+
+    if (!this.canvas) return;
 
     const { points } = this.analysisData;
     const { clientWidth: width, clientHeight: height } = this.canvas;

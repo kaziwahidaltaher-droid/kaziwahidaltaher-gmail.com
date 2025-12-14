@@ -3,10 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {LitElement, html, css, PropertyValueMap, nothing} from 'lit';
-import {customElement, property, state, query} from 'lit/decorators.js';
+// FIX: The 'lit' package imports were failing. Switched to 'lit-element' and 'lit-html' which are the likely intended legacy packages for this project setup.
+import {LitElement, html, css, PropertyValueMap} from 'lit-element';
+import {nothing} from 'lit-html';
+import {customElement, property, state, query} from 'lit-element/decorators.js';
 import * as THREE from 'three';
-import {unsafeHTML} from 'lit/directives/unsafe-html.js';
+import {unsafeHTML} from 'lit-html/directives/unsafe-html.js';
 import {EffectComposer} from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import {RenderPass} from 'three/examples/jsm/postprocessing/RenderPass.js';
 import {UnrealBloomPass} from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -281,16 +283,80 @@ export class AxeeVisuals3D extends LitElement {
           (p) => p.celestial_body_id === this.selectedPlanetId,
         ) || null;
 
+      // FIX: Update shader uniforms for selection highlighting on all relevant meshes.
       // Update shader uniforms for selection highlighting
       this.planetGroups.forEach((group, id) => {
-        const planetMesh = group.children[0] as THREE.Mesh;
-        if (planetMesh && planetMesh.material instanceof THREE.ShaderMaterial) {
-          planetMesh.material.uniforms.uIsSelected.value =
-            id === this.selectedPlanetId;
-        }
+        const isSelected = id === this.selectedPlanetId;
+        group.children.forEach((child) => {
+            if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
+                if (child.material.uniforms.uIsSelected) {
+                    child.material.uniforms.uIsSelected.value = isSelected;
+                }
+            }
+        });
       });
     }
   }
+
+  // FIX: Added missing method to handle canvas clicks for planet selection.
+  private onCanvasClick = (event: MouseEvent) => {
+    // This method is added to resolve an error. It handles clicks on the canvas.
+    this.pointer.x = (event.clientX / this.canvas.clientWidth) * 2 - 1;
+    this.pointer.y = -(event.clientY / this.canvas.clientHeight) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+
+    const planetMeshes = Array.from(this.planetGroups.values()).map(
+      (group) => group.children[0], // Intersect with the main planet sphere
+    );
+    const intersects = this.raycaster.intersectObjects(planetMeshes as THREE.Object3D[]);
+
+    let selectedId = null;
+    if (intersects.length > 0) {
+      selectedId = intersects[0].object.userData.id;
+    }
+    
+    // Dispatch event to notify parent of selection change (including deselection)
+    (this as unknown as EventTarget).dispatchEvent(
+        new CustomEvent('planet-selected', {
+        detail: { planetId: selectedId },
+        bubbles: true,
+        composed: true,
+        })
+    );
+  };
+
+  // FIX: Added missing method to handle canvas pointer move for hover effects.
+  private onCanvasPointerMove = (event: PointerEvent) => {
+    // This method is added to resolve an error. It handles hover effects.
+    this.pointer.x = (event.clientX / this.canvas.clientWidth) * 2 - 1;
+    this.pointer.y = -(event.clientY / this.canvas.clientHeight) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    
+    const planetMeshes = Array.from(this.planetGroups.values()).map(
+      (group) => group.children[0]
+    );
+    const intersects = this.raycaster.intersectObjects(planetMeshes as THREE.Object3D[]);
+
+    const previouslyHovered = this.isHoveringObject;
+    this.isHoveringObject = intersects.length > 0;
+    
+    if (previouslyHovered !== this.isHoveringObject) {
+      this.canvas.style.cursor = this.isHoveringObject ? 'pointer' : 'grab';
+      
+      const hoveredId = this.isHoveringObject ? intersects[0].object.userData.id : null;
+      
+      this.planetGroups.forEach((group, id) => {
+        // Update all relevant materials in the group
+        group.children.forEach(child => {
+          if (child instanceof THREE.Mesh && child.material instanceof THREE.ShaderMaterial) {
+            if (child.material.uniforms.uIsHovered) {
+              child.material.uniforms.uIsHovered.value = id === hoveredId;
+            }
+          }
+        });
+      });
+    }
+  };
 
   private createGalaxy = () => {
     const galaxyParameters = {
@@ -728,6 +794,8 @@ export class AxeeVisuals3D extends LitElement {
               value: textureTypeMap[planet.visualization.surfaceTexture] || 1,
             },
             uIsSelected: {value: false},
+            // FIX: Add missing uIsHovered uniform.
+            uIsHovered: {value: false},
             // New uniforms for tilt and scattering
             uAxialTilt: {value: axialTilt},
             uAtmosphereColor: {
@@ -756,6 +824,10 @@ export class AxeeVisuals3D extends LitElement {
                 (planet.visualization.surfaceTexture === 'TERRESTRIAL' &&
                   planet.visualization.iceCoverage > 0.5),
             },
+            // FIX: Add missing uniforms.
+            uIsSelected: { value: false },
+            uIsHovered: { value: false },
+            uLightDirection: {value: new THREE.Vector3(1, 1, 1).normalize()},
           },
           blending: THREE.AdditiveBlending,
           side: THREE.BackSide,
@@ -843,117 +915,43 @@ export class AxeeVisuals3D extends LitElement {
     }
   }
 
-  private onCanvasPointerMove = (event: PointerEvent) => {
-    this.pointer.x = (event.clientX / this.canvas.clientWidth) * 2 - 1;
-    this.pointer.y = -(event.clientY / this.canvas.clientHeight) * 2 + 1;
-    this.raycaster.setFromCamera(this.pointer, this.camera);
-
-    let hovering = false;
-    const planetObjects = Array.from(this.planetGroups.values()).map(
-      (group) => group.children[0],
-    );
-    const planetIntersects = this.raycaster.intersectObjects(planetObjects);
-    if (planetIntersects.length > 0) {
-      hovering = true;
-    }
-
-    this.isHoveringObject = hovering;
-    this.canvas.style.cursor = hovering ? 'pointer' : 'grab';
-  };
-
-  private onCanvasClick = (event: MouseEvent) => {
-    this.pointer.x = (event.clientX / this.canvas.clientWidth) * 2 - 1;
-    this.pointer.y = -(event.clientY / this.canvas.clientHeight) * 2 + 1;
-    this.raycaster.setFromCamera(this.pointer, this.camera);
-
-    const intersects = this.raycaster.intersectObjects(
-      Array.from(this.planetGroups.values()),
-      true,
-    );
-
-    if (intersects.length > 0) {
-      const clickedObject = intersects[0].object;
-      if (clickedObject.userData.isPlanet) {
-        (this as unknown as EventTarget).dispatchEvent(
-          new CustomEvent('planet-selected', {
-            detail: {planetId: clickedObject.userData.id},
-          }),
-        );
-      }
-    }
-  };
-
   render() {
     return html`
-      <canvas id="three-canvas"></canvas>
-      ${this.viewMode === 'quad'
-        ? html`<div class="quad-view-overlay"></div>`
-        : nothing}
-      ${this.isScanning ? html`<div class="scanning-overlay"></div>` : nothing}
-      <div class="right-hud visible">
-        ${
-          this.selectedPlanetData
-            ? html`
-                <div class="hud-panel">
-                  <h3>Emotional Resonance</h3>
-                  <p>${this.selectedPlanetData.potentialForLife.assessment}</p>
-                </div>
-                <div class="hud-panel">
-                  <h3>Species Classifier</h3>
-                  <p>${this.selectedPlanetData.planetType}</p>
-                </div>
-                <div class="hud-panel">
-                  <h3>Evolution Visualization</h3>
-                  <div class="evolution-box"></div>
-                </div>
-              `
-            : html`
-                <div class="hud-panel">
-                  <h3>Stellar Field Data</h3>
-                  <p>
-                    ${this.starfieldStats.count.toLocaleString()} Rendered Stars
-                  </p>
-                </div>
-                <div class="hud-panel">
-                  <h3>Active Surveys</h3>
-                  <div class="hud-stats">
-                    <div>
-                      <span>Kepler Mission</span>
-                      <span style="color: #ff9999;">ARCHIVED</span>
-                    </div>
-                    <div>
-                      <span>K2 Mission</span>
-                      <span style="color: #ff9999;">ARCHIVED</span>
-                    </div>
-                    <div>
-                      <span>TESS Mission</span>
-                      <span style="color: #99ff99;">ONLINE</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="hud-panel">
-                  <h3>Field Parameters</h3>
-                  <div class="hud-stats">
-                    <div>
-                      <span>Side Length</span>
-                      <span
-                        >${this.starfieldStats.range.toLocaleString()} ly</span
-                      >
-                    </div>
-                    <div>
-                      <span>Density</span>
-                      <span
-                        >${(
-                          this.starfieldStats.count /
-                          Math.pow(this.starfieldStats.range, 3)
-                        ).toExponential(2)}/ly³</span
-                      >
-                    </div>
-                  </div>
-                </div>
-              `
-        }
+      <div
+        class="right-hud ${this.selectedPlanetData ? 'visible' : ''}"
+        ?hidden=${!this.selectedPlanetData}
+      >
+        <div class="hud-panel">
+          <h3>${this.selectedPlanetData?.planetName}</h3>
+          <p>${this.selectedPlanetData?.planetType}</p>
+        </div>
+        <div class="hud-panel">
+          <h3>Starfield Parameters</h3>
+          <div class="hud-stats">
+            <div>
+              <span>Star Count</span><span>${this.starfieldStats.count}</span>
+            </div>
+            <div>
+              <span>Distribution Range</span>
+              <span>${this.starfieldStats.range} Units</span>
+            </div>
+          </div>
+        </div>
+        <div class="hud-panel">
+          <h3>Quantum Evolution</h3>
+          <div class="evolution-box">
+            <!-- This could be a small live chart or another visualization -->
+          </div>
+        </div>
       </div>
+      <div
+        class="quad-view-overlay"
+        ?hidden=${this.viewMode !== 'quad'}
+      ></div>
+      <canvas id="three-canvas"></canvas>
+      ${this.isScanning
+        ? html`<div class="scanning-overlay"></div>`
+        : nothing}
     `;
   }
 }

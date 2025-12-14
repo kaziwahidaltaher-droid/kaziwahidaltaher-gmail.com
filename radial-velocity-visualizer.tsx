@@ -5,7 +5,7 @@
 
 import {LitElement, css, html} from 'lit';
 import {customElement, property, query} from 'lit/decorators.js';
-import { RadialVelocityPoint, RadialVelocityAnalysis } from './index';
+import type { RadialVelocityAnalysis } from './index';
 
 @customElement('radial-velocity-visualizer')
 export class RadialVelocityVisualizer extends LitElement {
@@ -59,6 +59,7 @@ export class RadialVelocityVisualizer extends LitElement {
   }
 
   resizeCanvas = () => {
+    if (!this.canvas) return;
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = this.canvas.clientWidth * dpr;
     this.canvas.height = this.canvas.clientHeight * dpr;
@@ -68,11 +69,13 @@ export class RadialVelocityVisualizer extends LitElement {
 
   drawChart = () => {
     if (!this.ctx || !this.analysisData || this.analysisData.points.length === 0) {
-      if (this.ctx) {
-        this.ctx.clearRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
+      if (this.canvas) {
+        this.ctx?.clearRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
       }
       return;
     };
+
+    if (!this.canvas) return;
 
     const { points } = this.analysisData;
     const { clientWidth: width, clientHeight: height } = this.canvas;
@@ -83,39 +86,32 @@ export class RadialVelocityVisualizer extends LitElement {
     this.ctx.strokeStyle = 'rgba(192, 240, 255, 0.7)';
     this.ctx.font = '10px Exo 2';
 
-    // Find data range
-    const xMin = Math.min(...points.map(p => p.time));
-    const xMax = Math.max(...points.map(p => p.time));
+    // Find data range (Radial Velocity fits a sine wave usually)
+    const xMin = 0; // Phase is usually 0 to 1
+    const xMax = 1;
     let yMin = Math.min(...points.map(p => p.velocity));
     let yMax = Math.max(...points.map(p => p.velocity));
     
-    const absMax = Math.max(Math.abs(yMin), Math.abs(yMax));
-    yMin = -absMax;
-    yMax = absMax;
-    
-    const yBuffer = Math.abs(yMax) * 0.1;
+    // Add buffer
+    const yRange = yMax - yMin;
+    const yBuffer = yRange * 0.2;
     yMin -= yBuffer;
     yMax += yBuffer;
 
     const scaleX = (val: number) => padding.left + ((val - xMin) / (xMax - xMin)) * (width - padding.left - padding.right);
     const scaleY = (val: number) => (height - padding.bottom) - ((val - yMin) / (yMax - yMin)) * (height - padding.top - padding.bottom);
 
-    // Draw grid and zero line
+    // Draw grid
     this.ctx.strokeStyle = 'rgba(97, 250, 255, 0.1)';
     this.ctx.lineWidth = 1;
     this.ctx.beginPath();
-    const zeroY = scaleY(0);
-    if (zeroY > padding.top && zeroY < height - padding.bottom) {
-        this.ctx.moveTo(padding.left, zeroY);
-        this.ctx.lineTo(width - padding.right, zeroY);
-    }
-    for (let i = 0; i <= 4; i++) { // Y-axis grid
-        const y = padding.top + i * ((height - padding.top - padding.bottom) / 4);
+    for (let i = 0; i <= 5; i++) { // Y-axis grid
+        const y = padding.top + i * ((height - padding.top - padding.bottom) / 5);
         this.ctx.moveTo(padding.left, y);
         this.ctx.lineTo(width - padding.right, y);
     }
-    for (let i = 0; i <= 5; i++) { // X-axis grid
-        const x = padding.left + i * ((width - padding.left - padding.right) / 5);
+    for (let i = 0; i <= 10; i++) { // X-axis grid
+        const x = padding.left + i * ((width - padding.left - padding.right) / 10);
         this.ctx.moveTo(x, padding.top);
         this.ctx.lineTo(x, height - padding.bottom);
     }
@@ -128,17 +124,20 @@ export class RadialVelocityVisualizer extends LitElement {
     this.ctx.rotate(-Math.PI / 2);
     this.ctx.fillText('Velocity (m/s)', -height / 2, 15);
     this.ctx.restore();
-    
+
     // Y-axis ticks
     this.ctx.textAlign = 'right';
     this.ctx.textBaseline = 'middle';
-    for (let i = 0; i <= 4; i++) {
-        const yVal = yMin + (yMax - yMin) * (i / 4);
+    for (let i = 0; i <= 5; i++) {
+        const yVal = yMin + (yMax - yMin) * (i / 5);
         const y = scaleY(yVal);
         this.ctx.fillText(yVal.toFixed(1), padding.left - 8, y);
     }
 
-    // Draw data line
+    // Sort points by time/phase to draw the curve correctly
+    const sortedPoints = [...points].sort((a, b) => a.time - b.time);
+
+    // Draw sinusoidal fit curve (approximated by connecting points smoothly)
     this.ctx.lineWidth = 1.5;
     this.ctx.strokeStyle = '#ffc261'; 
     this.ctx.shadowColor = 'rgba(255, 194, 97, 0.7)';
@@ -147,27 +146,29 @@ export class RadialVelocityVisualizer extends LitElement {
     this.ctx.lineCap = 'round';
 
     this.ctx.beginPath();
-    const sortedPoints = [...points].sort((a,b) => a.time - b.time);
     this.ctx.moveTo(scaleX(sortedPoints[0].time), scaleY(sortedPoints[0].velocity));
+    // Simple line connect for now, or catmull-rom if we had a library
     sortedPoints.forEach(p => {
         this.ctx.lineTo(scaleX(p.time), scaleY(p.velocity));
     });
     this.ctx.stroke();
-
+    
     // Draw data points with error bars
     this.ctx.shadowBlur = 0;
     this.ctx.strokeStyle = 'rgba(255, 194, 97, 0.5)';
     this.ctx.fillStyle = '#010206';
     this.ctx.lineWidth = 1;
-    points.forEach(p => {
+    
+    sortedPoints.forEach(p => {
         const x = scaleX(p.time);
         const y = scaleY(p.velocity);
-        const yErr = scaleY(p.velocity - p.error) - y;
+        // Error bars often fixed size for demo or p.error if available
+        const errorPixels = p.error ? (scaleY(p.velocity - p.error) - y) : 5; 
 
         // error bar
         this.ctx.beginPath();
-        this.ctx.moveTo(x, y - yErr);
-        this.ctx.lineTo(x, y + yErr);
+        this.ctx.moveTo(x, y - errorPixels);
+        this.ctx.lineTo(x, y + errorPixels);
         this.ctx.stroke();
 
         // point
@@ -180,7 +181,7 @@ export class RadialVelocityVisualizer extends LitElement {
 
   render() {
     return html`
-      <div class="title">Radial Velocity Curve</div>
+      <div class="title">Radial Velocity</div>
       <canvas></canvas>
     `;
   }

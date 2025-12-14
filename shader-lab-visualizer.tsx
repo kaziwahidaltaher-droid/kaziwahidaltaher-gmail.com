@@ -99,6 +99,7 @@ export class ShaderLabVisualizer extends LitElement {
         uTime: {value: 0.0},
         uHasAuroras: { value: true },
         uIsSelected: { value: false },
+        uIsHovered: { value: false },
         uLightDirection: { value: new THREE.Vector3(1, 1, 1).normalize() },
       },
       blending: THREE.AdditiveBlending,
@@ -114,9 +115,13 @@ export class ShaderLabVisualizer extends LitElement {
 
   private handleResize = () => {
     if (!this.renderer || !this.camera) return;
-    this.camera.aspect = this.canvas.clientWidth / this.canvas.clientHeight;
+    if (!this.canvas) return; // FIX: Add check for canvas
+    const { clientWidth, clientHeight } = this.canvas;
+    if (clientWidth === 0 || clientHeight === 0) return;
+
+    this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
+    this.renderer.setSize(clientWidth, clientHeight);
   };
 
   private runAnimationLoop = () => {

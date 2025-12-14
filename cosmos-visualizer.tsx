@@ -21,9 +21,9 @@ import {vs as atmosphereVs, fs as atmosphereFs} from './atmosphere-shader.tsx';
 import { vs as starVs, fs as starFs } from './star-shader.tsx';
 import { vs as creatureVs, fs as creatureFs } from './space-creature-shader.tsx';
 import { vs as routeVs, fs as routeFs } from './route-shader.tsx';
-// FIX: Corrected import names to match exports from galaxy-point-shaders.tsx
 import { galaxyVertexShader as galaxyVs, galaxyFragmentShader as galaxyFs } from './galaxy-point-shaders.tsx';
 import { vs as oltarisVs, fs as oltarisFs } from './oltaris-shader.tsx';
+import { vs as skyboxVs, fs as skyboxFs } from './skybox-shader.tsx';
 
 
 export interface Waypoint {
@@ -70,6 +70,7 @@ export class CosmosVisualizer extends LitElement {
 
   // --- SCENE OBJECTS ---
   private starfield!: THREE.Points;
+  private skybox!: THREE.Mesh; // New Skybox
   private backgroundNebulae: THREE.Mesh[] = [];
 
   // Intergalactic View
@@ -103,7 +104,6 @@ export class CosmosVisualizer extends LitElement {
   private isManualControl = false;
   private lastCameraPosition = new THREE.Vector3();
 
-  // FIX: Added missing property.
   private colors = ['#ff61c3', '#61ffca', '#ffc261', '#61faff', '#d861ff'];
   private armNames = ["Orion-Cygnus Arm", "Sagittarius Arm", "Perseus Arm", "Norma Arm", "Scutum-Centaurus Arm"];
   
@@ -163,7 +163,6 @@ export class CosmosVisualizer extends LitElement {
     this.canvas?.removeEventListener('click', this.onCanvasClick);
     cancelAnimationFrame(this.animationFrameId);
     this.renderer?.dispose();
-    // TODO: Add full scene cleanup
   }
 
   firstUpdated() {
@@ -227,6 +226,7 @@ export class CosmosVisualizer extends LitElement {
     this.composer.addPass(renderScene);
     this.composer.addPass(bloomPass);
 
+    this.createSkybox();
     this.createStarfield();
     this.createWarpStarfield();
     this.createBackgroundNebulae();
@@ -312,7 +312,6 @@ export class CosmosVisualizer extends LitElement {
     });
   }
 
-  // FIX: Implement missing methods.
   private runAnimationLoop = () => {
     this.animationFrameId = requestAnimationFrame(this.runAnimationLoop);
     const elapsedTime = this.clock.getElapsedTime();
@@ -325,8 +324,20 @@ export class CosmosVisualizer extends LitElement {
     }
     this.controls.update();
 
+    // Update Starfield Shader Uniforms
+    if (this.starfield && this.starfield.material instanceof THREE.ShaderMaterial) {
+        this.starfield.material.uniforms.uTime.value = elapsedTime;
+        // Pass camera position for infinite scrolling/wrapping effect
+        this.starfield.material.uniforms.uCameraPosition.value.copy(this.camera.position);
+    }
+
     // Animate scene objects
-    this.starfield.rotation.y += 0.00005;
+    if (this.skybox) {
+        (this.skybox.material as THREE.ShaderMaterial).uniforms.uTime.value = elapsedTime;
+    }
+    // Slowly rotate the starfield grid for drift
+    this.starfield.rotation.y += 0.00002;
+
     this.backgroundNebulae.forEach(nebula => {
         (nebula.material as THREE.ShaderMaterial).uniforms.uTime.value = elapsedTime;
         (nebula.material as THREE.ShaderMaterial).uniforms.uCameraDistance.value = this.camera.position.length();
@@ -521,6 +532,7 @@ export class CosmosVisualizer extends LitElement {
 
   private handleResize = () => {
     if (!this.renderer || !this.camera) return;
+    if (!this.canvas) return;
     const { clientWidth, clientHeight } = this.canvas;
     if (clientWidth === 0 || clientHeight === 0) return;
     this.camera.aspect = clientWidth / clientHeight;
@@ -534,6 +546,7 @@ export class CosmosVisualizer extends LitElement {
   };
   
   private onPointerMove = (event: PointerEvent) => {
+    if (!this.canvas) return;
     const rect = this.canvas.getBoundingClientRect();
     this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -572,15 +585,18 @@ export class CosmosVisualizer extends LitElement {
     if (intersects.length > 0) {
         const intersectedObject = intersects[0].object;
         const id = intersectedObject.userData.id;
-        if (id !== this.hoveredObjectId) {
-            // FIX: Cast `this` to EventTarget to dispatch event.
+        if (id && id !== this.hoveredObjectId) {
             (this as unknown as EventTarget).dispatchEvent(new CustomEvent('object-hovered', { bubbles: true, composed: true }));
             this.hoveredObjectId = id;
             
             let name = '';
             if (this.viewMode === 'intergalactic') {
-                const { galaxyName, galaxyType } = intersectedObject.userData;
-                name = galaxyName && galaxyType ? `${galaxyName} - ${galaxyType}` : 'Unknown Galaxy';
+                // Access userData from the group if intersected object child data is missing or incomplete
+                const group = this.galaxyMarkers.get(id);
+                if (group) {
+                    const { galaxyName, galaxyType } = group.children[1].userData; // Assuming nebula stores the data
+                    name = galaxyName && galaxyType ? `${galaxyName} - ${galaxyType}` : 'Unknown Galaxy';
+                }
             } else {
                 const planet = this.activePlanets.find(p => p.celestial_body_id === id);
                 name = planet?.planetName || 'Unknown Planet';
@@ -607,6 +623,7 @@ export class CosmosVisualizer extends LitElement {
   };
 
   private onCanvasClick = (event: MouseEvent) => {
+    if (!this.canvas) return;
     const rect = this.canvas.getBoundingClientRect();
     this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -627,15 +644,20 @@ export class CosmosVisualizer extends LitElement {
 
     if (intersects.length > 0) {
         const id = intersects[0].object.userData.id;
-        if (this.viewMode === 'intergalactic') {
-            if (this.activeGalaxyId !== id) {
-                (this as unknown as EventTarget).dispatchEvent(new CustomEvent('galaxy-selected', { detail: { galaxyId: id }, bubbles: true, composed: true }));
-                this.createShockwave(this.galaxyMarkers.get(id)!.position);
+        if (id) {
+            if (this.viewMode === 'intergalactic') {
+                if (this.activeGalaxyId !== id) {
+                    (this as unknown as EventTarget).dispatchEvent(new CustomEvent('galaxy-selected', { detail: { galaxyId: id }, bubbles: true, composed: true }));
+                    const marker = this.galaxyMarkers.get(id);
+                    if (marker) {
+                        this.createShockwave(marker.position);
+                    }
+                }
+            } else {
+                 if (this.selectedPlanetId !== id) {
+                     (this as unknown as EventTarget).dispatchEvent(new CustomEvent('planet-selected', { detail: { planetId: id }, bubbles: true, composed: true }));
+                 }
             }
-        } else {
-             if (this.selectedPlanetId !== id) {
-                 (this as unknown as EventTarget).dispatchEvent(new CustomEvent('planet-selected', { detail: { planetId: id }, bubbles: true, composed: true }));
-             }
         }
     } else {
         // Clicked on empty space
@@ -680,6 +702,8 @@ export class CosmosVisualizer extends LitElement {
             });
             const auraMesh = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), auraMaterial);
             auraMesh.position.z = -1;
+            // FIX: Assign userData.id to the auraMesh so raycasting in 'intergalactic' mode works
+            auraMesh.userData.id = galaxy.id;
             group.add(auraMesh);
 
             const nebula = new THREE.Mesh(
@@ -848,7 +872,6 @@ export class CosmosVisualizer extends LitElement {
         this.scene.remove(this.routeLine);
         if (this.routeLine instanceof THREE.Points || this.routeLine instanceof THREE.Mesh) {
             (this.routeLine.geometry as THREE.BufferGeometry).dispose();
-            // FIX: Properly dispose of material(s), handling both single material and array of materials.
             const material = this.routeLine.material;
             if (Array.isArray(material)) {
                 material.forEach(m => m.dispose());
@@ -1012,6 +1035,20 @@ export class CosmosVisualizer extends LitElement {
     }
   }
 
+  private createSkybox() {
+    const geometry = new THREE.BoxGeometry(4000, 4000, 4000);
+    const material = new THREE.ShaderMaterial({
+        uniforms: {
+            uTime: { value: 0.0 }
+        },
+        vertexShader: skyboxVs,
+        fragmentShader: skyboxFs,
+        side: THREE.BackSide
+    });
+    this.skybox = new THREE.Mesh(geometry, material);
+    this.scene.add(this.skybox);
+  }
+
   private createStarfield() {
     const geometry = new THREE.BufferGeometry();
     const count = 200000;
@@ -1045,7 +1082,11 @@ export class CosmosVisualizer extends LitElement {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geometry.setAttribute('aScale', new THREE.BufferAttribute(scales, 1));
     const material = new THREE.ShaderMaterial({
-        uniforms: { uTime: { value: 0.0 }, uPixelRatio: { value: window.devicePixelRatio } },
+        uniforms: { 
+            uTime: { value: 0.0 }, 
+            uPixelRatio: { value: window.devicePixelRatio },
+            uCameraPosition: { value: new THREE.Vector3() } 
+        },
         vertexShader: starfieldVs,
         fragmentShader: starfieldFs,
         blending: THREE.AdditiveBlending,
@@ -1298,7 +1339,7 @@ export class CosmosVisualizer extends LitElement {
     this.scene.add(this.galaxyVisuals);
     this.fadeObject(this.galaxyVisuals, 1, 1000);
   }
-  // FIX: Completed the truncated function to ensure it returns a `THREE.Points` object as declared.
+
   private createGalaxyPointCloud(galaxyData: GalaxyData): THREE.Points {
     const params = {
         count: 150000, size: 1.5, radius: 150, spin: 1.5,

@@ -4,7 +4,7 @@ import { useFrame } from '@react-three/fiber';
 
 interface BasicFaceProps {
   mood?: 'neutral' | 'happy' | 'sad' | 'curious' | 'sleepy';
-  color?: string;
+  color?: THREE.ColorRepresentation;
 }
 
 const BasicFace: React.FC<BasicFaceProps> = ({ mood = 'neutral', color = '#ffffff' }) => {

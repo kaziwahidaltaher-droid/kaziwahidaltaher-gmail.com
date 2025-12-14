@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {LitElement} from 'lit';
+import {LitElement, PropertyValueMap} from 'lit';
 import {customElement, property} from 'lit/decorators.js';
 import type {MusicMood} from './index';
 
@@ -66,7 +66,7 @@ export class AxeeAudioEngine extends LitElement {
     );
   }
 
-  protected updated(changedProperties: Map<PropertyKey, unknown>) {
+  protected updated(changedProperties: PropertyValueMap<this>) {
     if (changedProperties.has('muted')) {
       this.updateMasterGain();
     }

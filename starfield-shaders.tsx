@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -6,82 +7,109 @@
 // Vertex Shader for the starfield
 export const vs = `
   attribute float aScale;
+  // attribute vec3 color; // Removed to prevent redefinition error (provided by Three.js)
+  
   uniform float uTime;
   uniform float uPixelRatio;
+  uniform vec3 uCameraPosition; // Provided by Three.js or passed manually
 
   varying vec3 vColor;
-  varying vec3 vPosition;
-
-  // 2D Simplex noise for shimmering effect
-  vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-  vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-  vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
-  float snoise(vec2 v) {
-      const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
-      vec2 i  = floor(v + dot(v, C.yy));
-      vec2 x0 = v - i + dot(i, C.xx);
-      vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-      vec4 x12 = x0.xyxy + C.xxzz;
-      x12.xy -= i1;
-      i = mod289(i);
-      vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
-      vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
-      m = m*m;
-      m = m*m;
-      vec3 x = 2.0 * fract(p * C.www) - 1.0;
-      vec3 h = abs(x) - 0.5;
-      vec3 ox = floor(x + 0.5);
-      vec3 a0 = x - ox;
-      m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
-      vec3 g;
-      g.x  = a0.x  * x0.x  + h.x  * x0.y;
-      g.yz = a0.yz * x12.xz + h.yz * x12.yw;
-      return 130.0 * dot(m, g);
-  }
+  varying float vAlpha;
+  varying float vDist;
 
   void main() {
-    vColor = color; // Pass vertex color to fragment shader
-    vPosition = position; // Pass position to fragment shader
-    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    vColor = color;
     
-    // Add a subtle positional shimmer based on simplex noise
-    float shimmerX = snoise(position.xy * 0.5 + uTime * 0.1) * 0.02 * aScale;
-    float shimmerY = snoise(position.yz * 0.5 + uTime * 0.1) * 0.02 * aScale;
-    mvPosition.xy += vec2(shimmerX, shimmerY);
+    // --- Infinite Scrolling / Wrapping Logic ---
+    // Define the bounding box of the starfield. 
+    // This must match the range used in the JS generation (e.g., 4000 units wide).
+    float range = 2000.0; 
+    float size = range * 2.0;
+
+    // Calculate the position relative to the camera
+    vec3 relativePos = position - uCameraPosition;
     
-    // Make stars scale with distance and pixel ratio
-    gl_PointSize = aScale * uPixelRatio * (300.0 / -mvPosition.z);
+    // Wrap the stars around the camera using modulo arithmetic.
+    // This ensures that as the camera moves, stars that fall behind wrap to the front.
+    // 'mod' in GLSL handles negatives differently than JS, so we adjust.
+    vec3 wrappedPos = mod(relativePos + range, size) - range;
     
+    // The final world position of the star is the camera pos + wrapped offset
+    vec3 finalWorldPos = uCameraPosition + wrappedPos;
+
+    vec4 mvPosition = viewMatrix * vec4(finalWorldPos, 1.0);
+    vDist = -mvPosition.z; // Depth for fading
+
+    // --- Parallax & Size ---
+    // Standard perspective divide provides the primary parallax.
+    // We enhance the size calculation to make stars distinct.
+    gl_PointSize = aScale * uPixelRatio * (400.0 / vDist);
+    
+    // Fade out stars as they reach the edge of the "box" to prevent popping artifacts
+    float distFromCamera = length(wrappedPos);
+    vAlpha = 1.0 - smoothstep(range * 0.8, range * 0.95, distFromCamera);
+
     gl_Position = projectionMatrix * mvPosition;
   }
 `;
 
-// Fragment Shader for the starfield, with an enhanced twinkling effect
+// Fragment Shader for the starfield
 export const fs = `
   uniform float uTime;
   varying vec3 vColor;
-  varying vec3 vPosition;
+  varying float vAlpha;
+  varying float vDist;
+
+  // Pseudo-random function
+  float random(vec2 st) {
+      return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+  }
+
+  // Noise function
+  float noise(vec2 st) {
+      vec2 i = floor(st);
+      vec2 f = fract(st);
+      float a = random(i);
+      float b = random(i + vec2(1.0, 0.0));
+      float c = random(i + vec2(0.0, 1.0));
+      float d = random(i + vec2(1.0, 1.0));
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(a, b, u.x) + (c - a)* u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+  }
 
   void main() {
-    // --- Twinkle Calculation (Less Frequent, More Gradual) ---
-    float freq1 = 0.6 + vPosition.x * 0.001;
-    float freq2 = 0.7 + vPosition.y * 0.001;
-    
-    float twinkle1 = (sin(uTime * freq1 + vPosition.z * 0.1) + 1.0) * 0.5;
-    float twinkle2 = (cos(uTime * freq2 + vPosition.x * 0.1) + 1.0) * 0.5;
-    
-    float twinkleValue = pow(twinkle1 * twinkle2, 8.0);
-    float coreBrightness = smoothstep(0.1, 0.8, twinkleValue);
-    
-    // --- Final Color Composition ---
-    float d = distance(gl_PointCoord, vec2(0.5, 0.5));
-    if (d > 0.5) discard;
+    // Round point shape
+    vec2 coord = gl_PointCoord - vec2(0.5);
+    float distFromCenter = length(coord);
+    if (distFromCenter > 0.5) discard;
 
-    vec3 baseColor = vColor; // Use passed color attribute
-    baseColor = mix(baseColor, vec3(1.0), smoothstep(0.8, 1.0, coreBrightness));
-
-    float alpha = (1.0 - d * 2.0) * (coreBrightness * 0.5 + 0.5);
+    // --- Realistic Twinkling ---
+    // Twinkle speed depends on time
+    float t = uTime * 2.0;
     
-    gl_FragColor = vec4(baseColor, alpha);
+    // Use screen coordinates + time for a scintillation effect that changes as you look around
+    // This simulates atmospheric turbulence (or quantum fluctuations in this context)
+    float sparkle = noise(gl_FragCoord.xy * 0.05 + t);
+    
+    // Distance modulation: 
+    // In reality, atmosphere affects all stars, but visually, keeping close stars steadier looks better.
+    // Far stars (high vDist) will twinkle more vigorously.
+    float distanceFactor = smoothstep(0.0, 1000.0, vDist); 
+    float twinkleIntensity = mix(0.2, 0.8, distanceFactor); // 0.2 min twinkle for close, 0.8 for far
+    
+    // Calculate final brightness multiplier
+    float brightness = 1.0 - (twinkleIntensity * (0.5 + 0.5 * sin(t * 3.0 + sparkle * 6.0)));
+    
+    // Soft core glow
+    float core = 1.0 - distFromCenter * 2.0;
+    core = pow(core, 1.5); // Soften edge
+
+    // Combine
+    vec3 finalColor = vColor * brightness;
+    
+    // Subtle color shift during dimming (blue-shift)
+    finalColor = mix(finalColor, vec3(0.5, 0.7, 1.0), (1.0 - brightness) * 0.3);
+
+    gl_FragColor = vec4(finalColor, vAlpha * core);
   }
 `;

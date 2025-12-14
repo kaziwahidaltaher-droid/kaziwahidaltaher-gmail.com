@@ -28,12 +28,10 @@ export class DeepScanVisualizer extends LitElement {
   
   // Define material colors in a way that CSS can also access them
   private materialColors = [
-// FIX: Cast `this` to Element for getComputedStyle.
-// FIX: Cast `this` to `unknown as Element` to satisfy TypeScript's strict type checking.
-    new THREE.Color(getComputedStyle(this as unknown as Element).getPropertyValue('--mat-color-1').trim() || '#9b7653'),
-    new THREE.Color(getComputedStyle(this as unknown as Element).getPropertyValue('--mat-color-2').trim() || '#e08d51'),
-    new THREE.Color(getComputedStyle(this as unknown as Element).getPropertyValue('--mat-color-3').trim() || '#ffdd33'),
-    new THREE.Color(getComputedStyle(this as unknown as Element).getPropertyValue('--mat-color-4').trim() || '#ffffff'),
+    new THREE.Color('#9b7653'),
+    new THREE.Color('#e08d51'),
+    new THREE.Color('#ffdd33'),
+    new THREE.Color('#ffffff'),
   ];
 
   static styles = css`
@@ -53,18 +51,13 @@ export class DeepScanVisualizer extends LitElement {
     super.connectedCallback();
   }
 
-  // FIX: Move initialization to firstUpdated to ensure canvas is available.
   firstUpdated() {
     this.initThree();
-    // FIX: Cast `this` to Element for ResizeObserver.
-    // FIX: Cast `this` to `unknown as Element` to satisfy TypeScript's strict type checking.
     this.resizeObserver.observe(this as unknown as Element);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    // FIX: Cast `this` to Element for ResizeObserver.
-    // FIX: Cast `this` to `unknown as Element` to satisfy TypeScript's strict type checking.
     this.resizeObserver.unobserve(this as unknown as Element);
     cancelAnimationFrame(this.animationFrameId);
     this.renderer?.dispose();
@@ -82,8 +75,7 @@ export class DeepScanVisualizer extends LitElement {
 
   private initThree() {
     this.scene = new THREE.Scene();
-    // FIX: Use this.canvas properties for dimensions.
-    this.camera = new THREE.PerspectiveCamera(75, this.canvas.clientWidth / this.canvas.clientHeight, 0.1, 1000);
+    this.camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
     this.camera.position.set(0, 500, 700);
 
     this.renderer = new THREE.WebGLRenderer({
@@ -101,8 +93,7 @@ export class DeepScanVisualizer extends LitElement {
     this.controls.autoRotateSpeed = 0.3;
 
     const renderScene = new RenderPass(this.scene, this.camera);
-    // FIX: Use this.canvas properties for dimensions.
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(this.canvas.clientWidth, this.canvas.clientHeight), 0.5, 0.4, 0.1);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(100, 100), 0.5, 0.4, 0.1);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(renderScene);
     this.composer.addPass(bloomPass);
@@ -119,9 +110,10 @@ export class DeepScanVisualizer extends LitElement {
 
   private handleResize = () => {
     if (!this.renderer || !this.camera) return;
-    // FIX: Use this.canvas properties for dimensions.
+    if (!this.canvas) return; // FIX: Add check for canvas
     const { clientWidth, clientHeight } = this.canvas;
     if (clientWidth === 0 || clientHeight === 0) return;
+    
     this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(clientWidth, clientHeight);

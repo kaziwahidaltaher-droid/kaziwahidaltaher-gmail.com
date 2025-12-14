@@ -101,13 +101,16 @@ export class GalaxyMapVisualizer extends LitElement {
     }
   }
 
-  // FIX: Added missing method definitions.
   private handleResize = () => {
     if (!this.renderer || !this.camera) return;
-    this.camera.aspect = this.canvas.clientWidth / this.canvas.clientHeight;
+    if (!this.canvas) return; // FIX: Add check for canvas
+    const { clientWidth, clientHeight } = this.canvas;
+    if (clientWidth === 0 || clientHeight === 0) return;
+
+    this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
-    this.composer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
+    this.renderer.setSize(clientWidth, clientHeight);
+    this.composer.setSize(clientWidth, clientHeight);
   };
 
   private onPointerDown = () => {
@@ -115,6 +118,7 @@ export class GalaxyMapVisualizer extends LitElement {
   };
 
   private onCanvasClick = (event: MouseEvent) => {
+    if (!this.canvas) return; // FIX: Add check for canvas
     const pointer = new THREE.Vector2(
       (event.clientX / this.canvas.clientWidth) * 2 - 1,
       -(event.clientY / this.canvas.clientHeight) * 2 + 1,

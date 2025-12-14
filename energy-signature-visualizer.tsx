@@ -4,9 +4,8 @@
  */
 
 import {LitElement, css, html} from 'lit';
-// FIX: Import `state` decorator to make class properties reactive.
 import {customElement, property, query, state} from 'lit/decorators.js';
-import { EnergySignatureAnalysis } from './index';
+import type { EnergySignatureAnalysis } from './index';
 
 @customElement('energy-signature-visualizer')
 export class EnergySignatureVisualizer extends LitElement {
@@ -17,8 +16,6 @@ export class EnergySignatureVisualizer extends LitElement {
   private animationFrameId = 0;
   private rotation = 0;
 
-  // Define a color map for different signature types
-  // FIX: Use `@state` decorator to make `colorMap` a reactive property.
   @state() private colorMap: {[key: string]: string} = {};
   private colors = ['#ff61c3', '#61ffca', '#ffc261', '#61faff', '#d861ff'];
   private colorIndex = 0;
@@ -88,7 +85,6 @@ export class EnergySignatureVisualizer extends LitElement {
     }
   }
 
-  // FIX: Update `colorMap` immutably to trigger a re-render, removing the need for `requestUpdate`.
   assignColors() {
     if (!this.analysisData) return;
     const newColorMap: {[key: string]: string} = {};
@@ -103,6 +99,7 @@ export class EnergySignatureVisualizer extends LitElement {
   }
 
   resizeCanvas = () => {
+    if (!this.canvas) return;
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = this.canvas.clientWidth * dpr;
     this.canvas.height = this.canvas.clientHeight * dpr;
@@ -116,9 +113,13 @@ export class EnergySignatureVisualizer extends LitElement {
 
   drawChart = () => {
     if (!this.ctx || !this.analysisData || this.analysisData.points.length === 0) {
-      this.ctx?.clearRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
+      if (this.canvas) {
+        this.ctx?.clearRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
+      }
       return;
     };
+
+    if (!this.canvas) return;
 
     const { points } = this.analysisData;
     const { clientWidth: width, clientHeight: height } = this.canvas;

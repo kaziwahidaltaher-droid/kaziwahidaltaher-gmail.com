@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {LitElement, css, html, nothing} from 'lit';
+import {LitElement, css, html, nothing, PropertyValueMap} from 'lit';
 import {customElement, property, state} from 'lit/decorators.js';
 import {styleMap} from 'lit/directives/style-map.js';
 
@@ -119,7 +119,7 @@ export class TutorialOverlay extends LitElement {
     }
   `;
 
-  protected updated(changedProperties: Map<string | number | symbol, unknown>): void {
+  protected updated(changedProperties: PropertyValueMap<this>): void {
       if (changedProperties.has('step')) {
           this.updateHighlight();
       }
@@ -148,18 +148,15 @@ export class TutorialOverlay extends LitElement {
 
   private _onNext() {
     const isLastStep = this.step >= this.steps.length - 1;
-    // FIX: Cast `this` to `EventTarget` to dispatch the event.
-    (this as unknown as EventTarget).dispatchEvent(new CustomEvent(isLastStep ? 'skip' : 'next'));
+    (this as unknown as HTMLElement).dispatchEvent(new CustomEvent(isLastStep ? 'skip' : 'next'));
   }
 
   private _onSkip() {
-    // FIX: Cast `this` to `EventTarget` to dispatch the event.
-    (this as unknown as EventTarget).dispatchEvent(new CustomEvent('skip'));
+    (this as unknown as HTMLElement).dispatchEvent(new CustomEvent('skip'));
   }
 
   private _onUseSample() {
-    // FIX: Cast `this` to `EventTarget` to dispatch the event.
-    (this as unknown as EventTarget).dispatchEvent(new CustomEvent('use-sample-prompt'));
+    (this as unknown as HTMLElement).dispatchEvent(new CustomEvent('use-sample-prompt'));
   }
 
   render() {

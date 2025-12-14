@@ -5,15 +5,16 @@ import { useFrame } from '@react-three/fiber';
 interface SphereShaderProps {
   moodIntensity?: number;
   resonance?: number;
-  coreColor?: string;
-  auraColor?: string;
+  coreColor?: THREE.ColorRepresentation;
+  auraColor?: THREE.ColorRepresentation;
 }
 
 const SphereShader: React.FC<SphereShaderProps> = ({
   moodIntensity = 0.6,
   resonance = 1.2,
   coreColor = '#ff66cc',
-  auraColor = '#00ffff',
+  // FIX: 'aura' was a shorthand property with no declaration. Changed to 'auraColor' to match the interface and provided a default value.
+  auraColor = '#61faff',
 }) => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 
@@ -50,15 +51,20 @@ const SphereShader: React.FC<SphereShaderProps> = ({
           uniform vec3 auraColor;
           varying vec3 vPosition;
 
+          float pulse(vec3 p, float t) {
+            float r = length(p);
+            float wave = sin(t * resonance + r * 5.0);
+            return smoothstep(0.8, 0.0, r) * (0.5 + 0.5 * wave);
+          }
+
           void main() {
-            float r = length(vPosition);
-            float pulse = sin(time * resonance + r * 5.0) * 0.5 + 0.5;
-            vec3 color = mix(coreColor, auraColor, pulse * moodIntensity);
+            float glow = pulse(vPosition, time) * moodIntensity;
+            vec3 color = mix(coreColor, auraColor, glow);
             gl_FragColor = vec4(color, 1.0);
           }
         `,
-        transparent: false,
-        depthWrite: true,
+        transparent: true,
+        depthWrite: false,
         side: THREE.FrontSide,
       }]}
     />

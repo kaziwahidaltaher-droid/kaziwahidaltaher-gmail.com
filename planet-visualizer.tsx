@@ -112,6 +112,7 @@ export class PlanetVisualizer extends LitElement {
 
   private handleResize = () => {
     if (!this.renderer || !this.camera || !this.composer) return;
+    if (!this.canvas) return; // Add check for canvas
     // FIX: Use `this.canvas.clientWidth` and `this.canvas.clientHeight` for sizing.
     const { clientWidth: width, clientHeight: height } = this.canvas;
     if (width === 0 || height === 0) return;
@@ -122,6 +123,7 @@ export class PlanetVisualizer extends LitElement {
   };
   
   private onPointerMove = (event: PointerEvent) => {
+    if (!this.canvas) return; // Add check for canvas
     const rect = this.canvas.getBoundingClientRect();
     this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;

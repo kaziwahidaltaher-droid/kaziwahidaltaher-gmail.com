@@ -123,6 +123,7 @@ export class ConversationVisualizer extends LitElement {
 
   private handleResize() {
     if (!this.renderer || !this.camera) return;
+    if (!this.canvas) return; // Add check for canvas
     const { clientWidth, clientHeight } = this.canvas;
     if (clientWidth === 0 || clientHeight === 0) return;
     this.camera.aspect = clientWidth / clientHeight;

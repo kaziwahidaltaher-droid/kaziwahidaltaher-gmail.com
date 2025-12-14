@@ -6,7 +6,7 @@
 import {LitElement, css, html} from 'lit';
 import {customElement, property} from 'lit/decorators.js';
 import {styleMap} from 'lit/directives/style-map.js';
-import { WeatherAnalysis } from './index';
+import type { WeatherAnalysis } from './index';
 
 @customElement('weather-visualizer')
 export class WeatherVisualizer extends LitElement {

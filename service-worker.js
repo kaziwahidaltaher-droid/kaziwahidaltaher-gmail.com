@@ -34,6 +34,7 @@ const urlsToCache = [
   'weather-visualizer.tsx',
   'energy-signature-visualizer.tsx',
   'shader-lab-visualizer.tsx',
+  'qubit-visualizer.tsx',
   'live-motion-shader.tsx',
   'planet-shader.tsx',
   'atmosphere-shader.tsx',
